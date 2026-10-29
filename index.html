@@ -6,14 +6,13 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="mobile-web-app-capable" content="yes" />
-  <meta name="theme-color" content="#121318" />
-  <title>RETRO-GO // ESP32-S3 N16R8 Handheld Console</title>
+  <meta name="theme-color" content="#181a22" />
+  <title>RETRO-GO // ESP32-S3 N16R8 Handheld Console v8</title>
   <style>
     :root {
-      --case-main: #252730;
-      --case-dark: #181a20;
-      --case-highlight: #383b47;
-      --bezel-black: #0a0b0e;
+      --case-main: #222530;
+      --case-dark: #15171e;
+      --bezel-black: #08090c;
       --rg-red: #e53935;
       --rg-gold: #ffb300;
       --rg-cyan: #00e5ff;
@@ -37,66 +36,63 @@
     }
 
     html, body {
-      width: 100%;
-      height: 100%;
+      width: 100vw;
+      height: 100dvh;
       overflow: hidden;
       position: fixed;
       inset: 0;
-      background: #090a0d;
+      background: var(--case-dark);
       color: var(--text);
       font-family: 'JetBrains Mono', 'Consolas', monospace;
       touch-action: none;
-      display: flex;
-      justify-content: center;
-      align-items: center;
     }
 
-    /* Classic Retro Handheld Vertical Shell (ODROID-GO / GameBoy / Anbernic Style) */
+    /* Fullscreen Edge-to-Edge Console Shell on Mobile */
     .retrogo-shell {
       width: 100%;
-      max-width: 430px;
-      height: 100dvh;
-      max-height: 920px;
-      background: linear-gradient(175deg, #2d303b 0%, #20222a 65%, #17181f 100%);
-      border: 3px solid #3c404f;
-      border-radius: 22px 22px 38px 38px;
-      padding: env(safe-area-inset-top, 8px) 12px env(safe-area-inset-bottom, 10px);
+      height: 100%;
+      background: linear-gradient(180deg, #2b2f3d 0%, #1e212b 55%, #15171f 100%);
+      padding: env(safe-area-inset-top, 6px) 10px env(safe-area-inset-bottom, 8px);
       display: flex;
       flex-direction: column;
       justify-content: space-between;
       gap: 6px;
-      box-shadow:
-        0 20px 60px rgba(0, 0, 0, 0.9),
-        inset 0 2px 3px rgba(255, 255, 255, 0.15),
-        inset 0 -6px 14px rgba(0, 0, 0, 0.6);
-      position: relative;
     }
 
-    @media (max-width: 450px) {
+    /* Only constrain width on large desktop monitors */
+    @media (min-width: 700px) and (pointer: fine) {
+      body {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        background: #090a0e;
+      }
       .retrogo-shell {
-        border-radius: 0;
-        border: none;
-        max-height: 100dvh;
+        max-width: 440px;
+        max-height: 900px;
+        border: 3px solid #3c4254;
+        border-radius: 28px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.9);
       }
     }
 
-    /* Molded Top Groove & Power/SD Indicators */
-    .shell-top-groove {
+    /* 1. Top Status Bar */
+    .shell-top-bar {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 3px 8px;
-      background: #16181f;
-      border: 1px solid #323644;
-      border-radius: 6px;
-      font-size: 0.58rem;
+      padding: 4px 8px;
+      background: #14161d;
+      border: 1px solid #313646;
+      border-radius: 8px;
+      font-size: 0.62rem;
       flex-shrink: 0;
     }
 
     .led-cluster {
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 5px;
     }
 
     .led {
@@ -110,7 +106,7 @@
     .led.sd-act {
       background: var(--rg-gold);
       box-shadow: 0 0 6px var(--rg-gold);
-      opacity: 0.35;
+      opacity: 0.3;
       transition: opacity 0.08s;
     }
 
@@ -124,13 +120,13 @@
     }
 
     .pill-btn {
-      background: #232631;
+      background: #232734;
       color: var(--text);
-      border: 1px solid #3e4354;
-      border-radius: 4px;
-      padding: 2px 6px;
+      border: 1px solid #404659;
+      border-radius: 5px;
+      padding: 3px 7px;
       font-family: inherit;
-      font-size: 0.58rem;
+      font-size: 0.60rem;
       font-weight: 700;
       cursor: pointer;
     }
@@ -140,15 +136,15 @@
       color: var(--rg-gold);
     }
 
-    /* Retro-Go Screen Lens & Bezel */
+    /* 2. Retro-Go Screen Lens (128x64 Native 1-Bit OLED) */
     .screen-lens {
       background: var(--bezel-black);
-      border: 4px solid #14161c;
-      border-radius: 10px 10px 18px 10px;
-      padding: 7px 10px 8px;
+      border: 3px solid #141720;
+      border-radius: 12px 12px 20px 12px;
+      padding: 6px 8px 7px;
       box-shadow:
-        inset 0 0 20px rgba(0, 0, 0, 1),
-        0 3px 0 rgba(255, 255, 255, 0.07);
+        inset 0 0 18px rgba(0, 0, 0, 1),
+        0 2px 0 rgba(255, 255, 255, 0.08);
       display: flex;
       flex-direction: column;
       gap: 4px;
@@ -159,9 +155,9 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      font-size: 0.54rem;
-      color: #7c8594;
-      letter-spacing: 0.8px;
+      font-size: 0.56rem;
+      color: #828c9e;
+      letter-spacing: 0.6px;
     }
 
     .rg-stripe {
@@ -171,7 +167,7 @@
     }
 
     .rg-stripe i {
-      width: 10px;
+      width: 9px;
       height: 3px;
       display: inline-block;
       border-radius: 1px;
@@ -199,8 +195,8 @@
       position: absolute;
       inset: 0;
       background-image:
-        linear-gradient(to right, rgba(0, 0, 0, 0.26) 1px, transparent 1px),
-        linear-gradient(to bottom, rgba(0, 0, 0, 0.26) 1px, transparent 1px);
+        linear-gradient(to right, rgba(0, 0, 0, 0.25) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(0, 0, 0, 0.25) 1px, transparent 1px);
       background-size: calc(100% / 128) calc(100% / 64);
       pointer-events: none;
     }
@@ -209,14 +205,14 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding-top: 2px;
+      padding-top: 1px;
     }
 
     .rg-logo-text {
-      font-size: 0.68rem;
+      font-size: 0.70rem;
       font-weight: 900;
       font-style: italic;
-      letter-spacing: 1.2px;
+      letter-spacing: 1px;
       color: #d8dee9;
     }
 
@@ -229,20 +225,90 @@
       color: var(--rg-gold);
     }
 
-    /* Controls Deck: System Pills + 4 Retro Buttons + Dual Sticks with L3/R3 */
-    .controls-deck {
-      display: flex;
-      flex-direction: column;
-      gap: 7px;
-      flex-shrink: 0;
+    /* 3. UPPER CONTROLS: DUAL ANALOG JOYSTICKS (WITH L3 / R3 INTEGRATED) */
+    .upper-joysticks-section {
+      flex: 1.1;
+      min-height: 135px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      align-items: center;
+      justify-items: center;
+      padding: 2px 4px;
     }
 
-    /* Retro-Go System Row: L3, SELECT, START/MENU (In-Game OSD), R3 */
-    .sys-row {
-      display: grid;
-      grid-template-columns: 1fr auto auto 1fr;
-      gap: 6px;
+    .stick-unit {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
       align-items: center;
+      justify-content: center;
+      gap: 4px;
+      position: relative;
+    }
+
+    .stick-top-row {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 6px;
+    }
+
+    .stick-adc-label {
+      font-size: 0.54rem;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .btn-stick-click {
+      background: #1b1f2a;
+      border: 1.5px solid #3f475c;
+      color: var(--rg-cyan);
+      border-radius: 6px;
+      padding: 2px 7px;
+      font-family: inherit;
+      font-size: 0.56rem;
+      font-weight: 800;
+      box-shadow: 0 2px 0 #0c0e13;
+    }
+
+    .btn-stick-click.pressed {
+      transform: translateY(1px);
+      background: var(--rg-cyan);
+      color: #000;
+    }
+
+    .stick-canvas {
+      width: min(100%, 168px, 24dvh);
+      aspect-ratio: 1 / 1;
+      background: radial-gradient(circle at center, #181c26 0%, #0c0e14 100%);
+      border: 2px solid #383f52;
+      border-radius: 50%;
+      touch-action: none;
+      display: block;
+      box-shadow: inset 0 4px 16px rgba(0, 0, 0, 0.95), 0 2px 5px rgba(255, 255, 255, 0.06);
+    }
+
+    .stick-canvas.engaged {
+      border-color: var(--rg-gold);
+      box-shadow: inset 0 4px 16px rgba(0,0,0,0.95), 0 0 12px rgba(255, 179, 0, 0.35);
+    }
+
+    /* 4. LOWER CONTROLS: [D-PAD LEFT] — [SELECT / MENU CENTER] — [4 DIAMOND BUTTONS RIGHT] */
+    .lower-controls-deck {
+      flex: 1;
+      min-height: 145px;
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      justify-items: center;
+      gap: 4px;
+      padding: 4px 2px 6px;
+      background: rgba(12, 14, 20, 0.35);
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 16px;
     }
 
     .hw-btn {
@@ -258,130 +324,157 @@
 
     .hw-btn.pressed {
       transform: translateY(2px);
-      filter: brightness(1.25);
+      filter: brightness(1.3);
     }
 
-    .btn-l3r3 {
-      height: 34px;
-      background: #1c1f28;
-      border: 2px solid #3c4254;
-      border-radius: 8px;
-      color: var(--rg-cyan);
-      font-size: 0.60rem;
-      box-shadow: 0 3px 0 #0e1015;
+    /* Classic Cross D-Pad (Left Side) */
+    .dpad-cross {
+      width: 126px;
+      height: 126px;
+      position: relative;
     }
 
-    .btn-pill-sys {
-      height: 28px;
-      padding: 0 11px;
-      background: #181a22;
-      border: 2px solid #454b5e;
-      border-radius: 14px;
-      color: #cfd6e2;
+    .dpad-arm {
+      position: absolute;
+      background: linear-gradient(180deg, #2e3342 0%, #1c1f29 100%);
+      border: 2px solid #434a5e;
+      color: #aeb8c9;
+      font-size: 0.72rem;
+      box-shadow: 0 3px 0 #0b0d12, 0 4px 8px rgba(0,0,0,0.5);
+    }
+
+    .dpad-arm.pressed {
+      background: #3b4256;
+      color: var(--rg-gold);
+      border-color: var(--rg-gold);
+    }
+
+    .dpad-up {
+      top: 0; left: 42px; width: 42px; height: 44px;
+      border-radius: 8px 8px 0 0;
+      border-bottom: none;
+    }
+    .dpad-down {
+      bottom: 0; left: 42px; width: 42px; height: 44px;
+      border-radius: 0 0 8px 8px;
+      border-top: none;
+    }
+    .dpad-left {
+      top: 42px; left: 0; width: 44px; height: 42px;
+      border-radius: 8px 0 0 8px;
+      border-right: none;
+    }
+    .dpad-right {
+      top: 42px; right: 0; width: 44px; height: 42px;
+      border-radius: 0 8px 8px 0;
+      border-left: none;
+    }
+    .dpad-center {
+      position: absolute;
+      top: 42px; left: 42px; width: 42px; height: 42px;
+      background: #232733;
+      pointer-events: none;
+    }
+    .dpad-center::after {
+      content: "";
+      position: absolute;
+      inset: 9px;
+      border-radius: 50%;
+      background: radial-gradient(circle, #161922 20%, #262b38 100%);
+    }
+
+    /* Center 2 System Buttons (SELECT + START/MENU) */
+    .center-sys-cluster {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      align-items: center;
+      justify-content: center;
+      padding: 0 4px;
+    }
+
+    .btn-sys-pill {
+      width: 68px;
+      height: 30px;
+      background: #181b24;
+      border: 2px solid #464d63;
+      border-radius: 15px;
+      color: #d0d7e3;
       font-size: 0.56rem;
       letter-spacing: 0.5px;
-      box-shadow: 0 2px 0 #0c0d12;
+      box-shadow: 0 3px 0 #0a0c10;
     }
 
-    .btn-pill-sys.menu-btn {
+    .btn-sys-pill.menu-pill {
       border-color: var(--rg-red);
       color: var(--rg-gold);
     }
 
-    /* 4 Face Buttons (Y, X, B, A) with Retro-Go Color Coding */
-    .face-buttons-row {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 8px;
-      padding: 0 2px;
+    /* 4 Action Buttons in Classic Diamond (X Top, Y Left, A Right, B Bottom) */
+    .diamond-cluster {
+      width: 132px;
+      height: 132px;
+      position: relative;
     }
 
-    .btn-face {
-      height: 44px;
-      border-radius: 22px;
-      background: radial-gradient(circle at 35% 30%, #373b49, #1d2029);
-      border: 2px solid #484e61;
-      color: #fff;
-      font-size: 0.80rem;
-      box-shadow: 0 4px 0 #0e1015, 0 5px 10px rgba(0,0,0,0.5);
-    }
-
-    .btn-face small {
-      font-size: 0.48rem;
-      color: #b0b8c8;
-      font-weight: 600;
-      margin-top: -1px;
-    }
-
-    .btn-face.btn-y { border-color: var(--btn-y); }
-    .btn-face.btn-x { border-color: var(--btn-x); }
-    .btn-face.btn-b { border-color: var(--btn-b); }
-    .btn-face.btn-a { border-color: var(--btn-a); }
-
-    /* Dual Analog Thumbsticks Zone */
-    .dual-sticks-zone {
-      flex: 1;
-      min-height: 150px;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-      align-items: center;
-      justify-items: center;
-      padding: 2px 0;
-    }
-
-    .stick-well {
-      width: 100%;
-      height: 100%;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 3px;
-    }
-
-    .stick-canvas {
-      width: min(100%, 172px, 28dvh);
-      aspect-ratio: 1 / 1;
-      background: radial-gradient(circle at center, #181b24 0%, #0d0f14 100%);
-      border: 2px solid #353a4a;
+    .btn-diamond {
+      position: absolute;
+      width: 46px;
+      height: 46px;
       border-radius: 50%;
-      touch-action: none;
-      display: block;
-      box-shadow: inset 0 4px 16px rgba(0, 0, 0, 0.95), 0 2px 6px rgba(255, 255, 255, 0.05);
+      background: radial-gradient(circle at 35% 30%, #393e4f, #1d202a);
+      border: 2.5px solid #4c5369;
+      color: #fff;
+      font-size: 0.82rem;
+      box-shadow: 0 4px 0 #0b0d12, 0 5px 10px rgba(0,0,0,0.55);
     }
 
-    .stick-canvas.engaged {
-      border-color: var(--rg-gold);
-      box-shadow: inset 0 4px 16px rgba(0,0,0,0.95), 0 0 12px rgba(255, 179, 0, 0.35);
+    .btn-diamond small {
+      font-size: 0.42rem;
+      color: #cbd2df;
+      font-weight: 600;
+      margin-top: -2px;
     }
 
-    .stick-telemetry {
-      font-size: 0.54rem;
-      color: var(--muted);
-      font-variant-numeric: tabular-nums;
+    /* Posiciones del Diamante: X arriba, Y izquierda, A derecha, B abajo */
+    .btn-diamond.pos-top {
+      top: 0; left: 43px;
+      border-color: var(--btn-x);
+    }
+    .btn-diamond.pos-left {
+      top: 43px; left: 0;
+      border-color: var(--btn-y);
+    }
+    .btn-diamond.pos-right {
+      top: 43px; right: 0;
+      border-color: var(--btn-a);
+    }
+    .btn-diamond.pos-bottom {
+      bottom: 0; left: 43px;
+      border-color: var(--btn-b);
     }
   </style>
 </head>
 <body>
   <div class="retrogo-shell">
-    <!-- 1. Top Hardware Bar (PWR, SD Activity LED, Display & Sound toggles) -->
-    <header class="shell-top-groove">
+    <!-- 1. Top Hardware Bar -->
+    <header class="shell-top-bar">
       <div class="led-cluster">
         <span class="led" title="Power ON"></span>
         <span>PWR</span>
-        <span id="sdLed" class="led sd-act" title="SPI Flash / SD Activity"></span>
-        <span>SD/ROM</span>
-        <span style="color:#7c8594;margin-left:4px;">ESP32-S3 N16R8</span>
+        <span id="sdLed" class="led sd-act" title="Flash / SD Activity"></span>
+        <span>ROM</span>
+        <span style="color:#828c9e;margin-left:3px;">ESP32-S3 N16R8 (v8)</span>
       </div>
       <div class="top-hw-pills">
         <button id="btnPalette" class="pill-btn">🎨 PAL</button>
         <button id="btnAudio" class="pill-btn">🔇 SND</button>
         <button id="btnGrid" class="pill-btn active">GRID</button>
+        <button id="btnFull" class="pill-btn">⛶</button>
       </div>
     </header>
 
-    <!-- 2. Retro-Go Screen Lens (128x64 Native 1-Bit OLED) -->
+    <!-- 2. Retro-Go 128x64 Native OLED Screen Lens -->
     <section class="screen-lens">
       <div class="lens-header">
         <div class="rg-stripe">
@@ -400,50 +493,64 @@
 
       <div class="lens-branding">
         <div class="rg-logo-text">RETRO<span>-GO</span> <small style="font-size:0.50rem;color:#8b9bb4;font-style:normal;">FW v1.42-S3</small></div>
-        <div id="uiHintBar" class="rg-sub-status">STICK:NAV | A:RUN | MENU:OSD</div>
+        <div id="uiHintBar" class="rg-sub-status">D-PAD/STICK:NAV | A:RUN | MENU:OSD</div>
       </div>
     </section>
 
-    <!-- 3. Retro-Go Controls Deck -->
-    <section class="controls-deck">
-      <!-- Row 1: L3 Click, SELECT (Tab/Filter), MENU (Retro-Go In-Game OSD), R3 Click -->
-      <div class="sys-row">
-        <button class="hw-btn btn-l3r3" data-btn="L3">L3 CLICK</button>
-        <button class="hw-btn btn-pill-sys" data-btn="SELECT">SELECT</button>
-        <button class="hw-btn btn-pill-sys menu-btn" data-btn="MENU">★ MENU</button>
-        <button class="hw-btn btn-l3r3" data-btn="R3">R3 CLICK</button>
-      </div>
-
-      <!-- Row 2: 4 Colored Retro Action Buttons (Y, X, B, A) -->
-      <div class="face-buttons-row">
-        <button class="hw-btn btn-face btn-y" data-btn="Y">
-          <span>Y</span>
-          <small id="lblY">FAV/MOD</small>
-        </button>
-        <button class="hw-btn btn-face btn-x" data-btn="X">
-          <span>X</span>
-          <small id="lblX">INFO/RST</small>
-        </button>
-        <button class="hw-btn btn-face btn-b" data-btn="B">
-          <span>B</span>
-          <small id="lblB">BACK/DRFT</small>
-        </button>
-        <button class="hw-btn btn-face btn-a" data-btn="A">
-          <span>A</span>
-          <small id="lblA">BOOT/GAS</small>
-        </button>
-      </div>
-    </section>
-
-    <!-- 4. Dual Analog Joysticks (Circular Molded Wells) -->
-    <section class="dual-sticks-zone">
-      <div class="stick-well">
+    <!-- 3. Upper Controls: 2 Analog Joysticks with L3 / R3 Click -->
+    <section class="upper-joysticks-section">
+      <div class="stick-unit">
+        <div class="stick-top-row">
+          <span id="readoutLeft" class="stick-adc-label">L:2048,2048</span>
+          <button class="hw-btn btn-stick-click" data-btn="L3">L3 CLICK</button>
+        </div>
         <canvas id="stickLeft" class="stick-canvas" width="200" height="200"></canvas>
-        <span id="readoutLeft" class="stick-telemetry">ADC-L: 2048,2048 [L3:0]</span>
       </div>
-      <div class="stick-well">
+
+      <div class="stick-unit">
+        <div class="stick-top-row">
+          <span id="readoutRight" class="stick-adc-label">R:2048,2048</span>
+          <button class="hw-btn btn-stick-click" data-btn="R3">R3 CLICK</button>
+        </div>
         <canvas id="stickRight" class="stick-canvas" width="200" height="200"></canvas>
-        <span id="readoutRight" class="stick-telemetry">ADC-R: 2048,2048 [R3:0]</span>
+      </div>
+    </section>
+
+    <!-- 4. Lower Controls: [Cruceta D-Pad Izquierda] + [2 Botones Centro] + [4 Botones Diamante Derecha] -->
+    <section class="lower-controls-deck">
+      <!-- Left: Cross D-Pad -->
+      <div class="dpad-cross">
+        <button class="hw-btn dpad-arm dpad-up" data-btn="UP">▲</button>
+        <button class="hw-btn dpad-arm dpad-down" data-btn="DOWN">▼</button>
+        <button class="hw-btn dpad-arm dpad-left" data-btn="LEFT">◀</button>
+        <button class="hw-btn dpad-arm dpad-right" data-btn="RIGHT">▶</button>
+        <div class="dpad-center"></div>
+      </div>
+
+      <!-- Center: 2 System Buttons (SELECT & MENU/START) -->
+      <div class="center-sys-cluster">
+        <button class="hw-btn btn-sys-pill" data-btn="SELECT">SELECT</button>
+        <button class="hw-btn btn-sys-pill menu-pill" data-btn="MENU">★ MENU</button>
+      </div>
+
+      <!-- Right: 4 Action Buttons in Diamond Layout (X Top, Y Left, A Right, B Bottom) -->
+      <div class="diamond-cluster">
+        <button class="hw-btn btn-diamond pos-top" data-btn="X">
+          <span>X</span>
+          <small id="lblX">RST</small>
+        </button>
+        <button class="hw-btn btn-diamond pos-left" data-btn="Y">
+          <span>Y</span>
+          <small id="lblY">MOD</small>
+        </button>
+        <button class="hw-btn btn-diamond pos-right" data-btn="A">
+          <span>A</span>
+          <small id="lblA">GAS</small>
+        </button>
+        <button class="hw-btn btn-diamond pos-bottom" data-btn="B">
+          <span>B</span>
+          <small id="lblB">BRK</small>
+        </button>
       </div>
     </section>
   </div>
@@ -451,6 +558,8 @@
   <script>
     /***************************************************************************
      * 1. HARDWARE ABSTRACTION LAYER (HAL) — 128x64 1-BIT (1024 BYTES VRAM)
+     *    - Con protección anti-bucle infinito en Bresenham y Cohen-Sutherland
+     *      para que el simulador JAMÁS se congele aunque haya proyecciones extremas.
      ***************************************************************************/
     const SCREEN_W = 128;
     const SCREEN_H = 64;
@@ -489,23 +598,29 @@
     }
 
     function fbRect(x, y, w, h, fill = false, color = 1) {
-      const x0 = x | 0, y0 = y | 0, rw = w | 0, rh = h | 0;
+      const x0 = Math.max(0, x | 0), y0 = Math.max(0, y | 0);
+      const x1 = Math.min(SCREEN_W - 1, ((x + w) | 0) - 1);
+      const y1 = Math.min(SCREEN_H - 1, ((y + h) | 0) - 1);
+      if (x1 < x0 || y1 < y0) return;
+
       if (fill) {
-        for (let py = y0; py < y0 + rh; py++) {
-          for (let px = x0; px < x0 + rw; px++) fbSetPixel(px, py, color);
+        for (let py = y0; py <= y1; py++) {
+          for (let px = x0; px <= x1; px++) fbSetPixel(px, py, color);
         }
       } else {
-        fbDrawLine(x0, y0, x0 + rw - 1, y0, 0, color);
-        fbDrawLine(x0, y0 + rh - 1, x0 + rw - 1, y0 + rh - 1, 0, color);
-        fbDrawLine(x0, y0, x0, y0 + rh - 1, 0, color);
-        fbDrawLine(x0 + rw - 1, y0, x0 + rw - 1, y0 + rh - 1, 0, color);
+        fbDrawLine(x0, y0, x1, y0, 0, color);
+        fbDrawLine(x0, y1, x1, y1, 0, color);
+        fbDrawLine(x0, y0, x0, y1, 0, color);
+        fbDrawLine(x1, y0, x1, y1, 0, color);
       }
     }
 
     function fbCircle(cx, cy, r, color = 1) {
-      let x = r | 0, y = 0, err = 0;
+      if (!Number.isFinite(cx) || !Number.isFinite(cy) || !Number.isFinite(r)) return;
+      let x = Math.min(128, Math.max(0, r | 0)), y = 0, err = 0;
       const x0 = cx | 0, y0 = cy | 0;
-      while (x >= y) {
+      let guard = 0;
+      while (x >= y && ++guard < 256) {
         fbSetPixel(x0 + x, y0 + y, color); fbSetPixel(x0 + y, y0 + x, color);
         fbSetPixel(x0 - y, y0 + x, color); fbSetPixel(x0 - x, y0 + y, color);
         fbSetPixel(x0 - x, y0 - y, color); fbSetPixel(x0 - y, y0 - x, color);
@@ -524,29 +639,55 @@
       return c;
     }
 
+    // Bresenham blindado contra NaN, Infinity o divisiones por cero (causa del congelamiento anterior)
     function fbDrawLine(x0, y0, x1, y1, dashedMask = 0, color = 1) {
+      if (!Number.isFinite(x0) || !Number.isFinite(y0) || !Number.isFinite(x1) || !Number.isFinite(y1)) return;
+
       let out0 = computeOutCode(x0, y0), out1 = computeOutCode(x1, y1), accept = false;
-      while (true) {
+      let clipIter = 0;
+
+      while (++clipIter <= 12) {
         if (!(out0 | out1)) { accept = true; break; }
         else if (out0 & out1) break;
         else {
           let x = 0, y = 0;
           const out = out0 ? out0 : out1;
-          if (out & CLIP_BOTTOM) { x = x0 + (x1 - x0) * (SCREEN_H - 1 - y0) / (y1 - y0); y = SCREEN_H - 1; }
-          else if (out & CLIP_TOP) { x = x0 + (x1 - x0) * (0 - y0) / (y1 - y0); y = 0; }
-          else if (out & CLIP_RIGHT) { y = y0 + (y1 - y0) * (SCREEN_W - 1 - x0) / (x1 - x0); x = SCREEN_W - 1; }
-          else if (out & CLIP_LEFT) { y = y0 + (y1 - y0) * (0 - x0) / (x1 - x0); x = 0; }
+          const dx = x1 - x0;
+          const dy = y1 - y0;
+
+          if (out & CLIP_BOTTOM) {
+            x = Math.abs(dy) > 1e-6 ? x0 + dx * (SCREEN_H - 1 - y0) / dy : x0;
+            y = SCREEN_H - 1;
+          } else if (out & CLIP_TOP) {
+            x = Math.abs(dy) > 1e-6 ? x0 + dx * (0 - y0) / dy : x0;
+            y = 0;
+          } else if (out & CLIP_RIGHT) {
+            y = Math.abs(dx) > 1e-6 ? y0 + dy * (SCREEN_W - 1 - x0) / dx : y0;
+            x = SCREEN_W - 1;
+          } else if (out & CLIP_LEFT) {
+            y = Math.abs(dx) > 1e-6 ? y0 + dy * (0 - x0) / dx : y0;
+            x = 0;
+          }
+
+          if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+
           if (out === out0) { x0 = x; y0 = y; out0 = computeOutCode(x0, y0); }
           else { x1 = x; y1 = y; out1 = computeOutCode(x1, y1); }
         }
       }
+
       if (!accept) return;
-      let ix0 = x0 | 0, iy0 = y0 | 0;
-      const ix1 = x1 | 0, iy1 = y1 | 0;
+
+      let ix0 = Math.max(0, Math.min(SCREEN_W - 1, Math.round(x0)));
+      let iy0 = Math.max(0, Math.min(SCREEN_H - 1, Math.round(y0)));
+      const ix1 = Math.max(0, Math.min(SCREEN_W - 1, Math.round(x1)));
+      const iy1 = Math.max(0, Math.min(SCREEN_H - 1, Math.round(y1)));
+
       const dx = Math.abs(ix1 - ix0), sx = ix0 < ix1 ? 1 : -1;
       const dy = -Math.abs(iy1 - iy0), sy = iy0 < iy1 ? 1 : -1;
       let err = dx + dy, step = 0;
-      while (true) {
+
+      while (step < 260) {
         if (!dashedMask || (step & dashedMask) === 0) fbSetPixel(ix0, iy0, color);
         if (ix0 === ix1 && iy0 === iy1) break;
         const e2 = err << 1;
@@ -619,24 +760,30 @@
     let audioCtx = null;
     let soundEnabled = false;
 
-    function playTone(freq = 600, dur = 0.06, type = 'square', vol = 0.04) {
+    function playTone(freq = 600, dur = 0.05, type = 'square', vol = 0.04) {
       if (!soundEnabled) return;
-      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      if (audioCtx.state === 'suspended') audioCtx.resume();
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.type = type;
-      osc.frequency.value = freq;
-      gain.gain.value = vol;
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-      osc.start();
-      gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + dur);
-      osc.stop(audioCtx.currentTime + dur + 0.01);
+      try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.value = freq;
+        gain.gain.value = vol;
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + dur);
+        osc.stop(audioCtx.currentTime + dur + 0.01);
+      } catch (_) {}
     }
 
     /***************************************************************************
-     * 3. ENTRADAS HARDWARE: 2 JOYSTICKS + L3/R3 + Y/X/B/A + SELECT/MENU
+     * 3. ENTRADAS HARDWARE:
+     *    - ARRIBA: 2 Joysticks Analógicos (con L3/R3 Click y doble toque)
+     *    - ABAJO IZQ: Cruceta D-Pad (UP, DOWN, LEFT, RIGHT)
+     *    - ABAJO CENTRO: SELECT y ★ MENU
+     *    - ABAJO DER: 4 Botones en Diamante (X, Y, A, B)
      ***************************************************************************/
     const stickLeftCanvas = document.getElementById('stickLeft');
     const stickRightCanvas = document.getElementById('stickRight');
@@ -648,9 +795,14 @@
       rx: 0.0, ry: 0.0,
       leftActive: false,
       rightActive: false,
-      btn:     { A: false, B: false, X: false, Y: false, L3: false, R3: false, SELECT: false, MENU: false },
-      prevBtn: { A: false, B: false, X: false, Y: false, L3: false, R3: false, SELECT: false, MENU: false },
-      justPressed(k) { return this.btn[k] && !this.prevBtn[k]; }
+      btn: {
+        A: false, B: false, X: false, Y: false,
+        L3: false, R3: false,
+        SELECT: false, MENU: false,
+        UP: false, DOWN: false, LEFT: false, RIGHT: false
+      },
+      prevBtn: {},
+      justPressed(k) { return !!this.btn[k] && !this.prevBtn[k]; }
     };
 
     const touchTrack = { leftId: null, rightId: null, lastTapLeft: 0, lastTapRight: 0 };
@@ -659,98 +811,95 @@
       const rect = canvasEl.getBoundingClientRect();
       const cx = rect.left + rect.width * 0.5;
       const cy = rect.top + rect.height * 0.5;
-      const maxR = Math.max(24, rect.width * 0.40);
+      const maxR = Math.max(22, rect.width * 0.40);
       const dx = clientX - cx, dy = clientY - cy;
       const dist = Math.hypot(dx, dy);
       const scale = dist > maxR ? (maxR / dist) : 1.0;
       return { x: (dx * scale) / maxR, y: (-dy * scale) / maxR };
     }
 
-    function handleStickTouches(e) {
-      if (e.target && (e.target.closest('.shell-top-groove') || e.target.closest('.controls-deck'))) {
-        return;
-      }
-      e.preventDefault();
+    // Eventos Touch dedicados directamente a los 2 Canvases de los Joysticks Superiores
+    function attachStickCanvasEvents(canvasEl, side) {
+      let activeId = null;
 
-      const midX = window.innerWidth * 0.5;
-      let leftFound = false, rightFound = false;
-
-      if (e.type === 'touchstart') {
+      canvasEl.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        const t = e.changedTouches[0];
+        activeId = t.identifier;
         const now = performance.now();
-        for (let i = 0; i < e.changedTouches.length; i++) {
-          const t = e.changedTouches[i];
-          if (t.clientX < midX) {
-            if (now - touchTrack.lastTapLeft < 260) hwInput.btn.L3 = true;
-            touchTrack.lastTapLeft = now;
-          } else {
-            if (now - touchTrack.lastTapRight < 260) hwInput.btn.R3 = true;
-            touchTrack.lastTapRight = now;
-          }
-        }
-      }
-
-      for (let i = 0; i < e.touches.length; i++) {
-        const t = e.touches[i];
-        if (t.target && t.target.closest('.hw-btn')) continue;
-
-        let side = null;
-        if (touchTrack.leftId === t.identifier) side = 'left';
-        else if (touchTrack.rightId === t.identifier) side = 'right';
-        else if (t.clientX < midX && !leftFound) { side = 'left'; touchTrack.leftId = t.identifier; }
-        else if (t.clientX >= midX && !rightFound) { side = 'right'; touchTrack.rightId = t.identifier; }
-
         if (side === 'left') {
-          leftFound = true;
-          const v = computeStickXY(stickLeftCanvas, t.clientX, t.clientY);
+          if (now - touchTrack.lastTapLeft < 260) hwInput.btn.L3 = true;
+          touchTrack.lastTapLeft = now;
+          const v = computeStickXY(canvasEl, t.clientX, t.clientY);
           hwInput.lx = v.x; hwInput.ly = v.y; hwInput.leftActive = true;
-        } else if (side === 'right') {
-          rightFound = true;
-          const v = computeStickXY(stickRightCanvas, t.clientX, t.clientY);
+        } else {
+          if (now - touchTrack.lastTapRight < 260) hwInput.btn.R3 = true;
+          touchTrack.lastTapRight = now;
+          const v = computeStickXY(canvasEl, t.clientX, t.clientY);
           hwInput.rx = v.x; hwInput.ry = v.y; hwInput.rightActive = true;
         }
-      }
+      }, { passive: false });
 
-      if (!leftFound) {
-        hwInput.lx = 0; hwInput.ly = 0; hwInput.leftActive = false; touchTrack.leftId = null;
-        if (!btnTouchCounts.L3) hwInput.btn.L3 = false;
-      }
-      if (!rightFound) {
-        hwInput.rx = 0; hwInput.ry = 0; hwInput.rightActive = false; touchTrack.rightId = null;
-        if (!btnTouchCounts.R3) hwInput.btn.R3 = false;
-      }
+      canvasEl.addEventListener('touchmove', (e) => {
+        e.preventDefault();
+        for (let i = 0; i < e.changedTouches.length; i++) {
+          const t = e.changedTouches[i];
+          if (t.identifier === activeId) {
+            const v = computeStickXY(canvasEl, t.clientX, t.clientY);
+            if (side === 'left') { hwInput.lx = v.x; hwInput.ly = v.y; }
+            else { hwInput.rx = v.x; hwInput.ry = v.y; }
+            break;
+          }
+        }
+      }, { passive: false });
+
+      const endStick = (e) => {
+        e.preventDefault();
+        for (let i = 0; i < e.changedTouches.length; i++) {
+          if (e.changedTouches[i].identifier === activeId) {
+            activeId = null;
+            if (side === 'left') {
+              hwInput.lx = 0; hwInput.ly = 0; hwInput.leftActive = false;
+              if (!btnTouchCounts.L3) hwInput.btn.L3 = false;
+            } else {
+              hwInput.rx = 0; hwInput.ry = 0; hwInput.rightActive = false;
+              if (!btnTouchCounts.R3) hwInput.btn.R3 = false;
+            }
+            break;
+          }
+        }
+      };
+
+      canvasEl.addEventListener('touchend', endStick, { passive: false });
+      canvasEl.addEventListener('touchcancel', endStick, { passive: false });
+
+      // Soporte Mouse en PC
+      let mouseDown = false;
+      canvasEl.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        mouseDown = true;
+        const v = computeStickXY(canvasEl, e.clientX, e.clientY);
+        if (side === 'left') { hwInput.lx = v.x; hwInput.ly = v.y; hwInput.leftActive = true; }
+        else { hwInput.rx = v.x; hwInput.ry = v.y; hwInput.rightActive = true; }
+      });
+      window.addEventListener('mousemove', (e) => {
+        if (!mouseDown) return;
+        const v = computeStickXY(canvasEl, e.clientX, e.clientY);
+        if (side === 'left') { hwInput.lx = v.x; hwInput.ly = v.y; }
+        else { hwInput.rx = v.x; hwInput.ry = v.y; }
+      });
+      window.addEventListener('mouseup', () => {
+        if (!mouseDown) return;
+        mouseDown = false;
+        if (side === 'left') { hwInput.lx = 0; hwInput.ly = 0; hwInput.leftActive = false; }
+        else { hwInput.rx = 0; hwInput.ry = 0; hwInput.rightActive = false; }
+      });
     }
 
-    window.addEventListener('touchstart',  handleStickTouches, { passive: false });
-    window.addEventListener('touchmove',   handleStickTouches, { passive: false });
-    window.addEventListener('touchend',    handleStickTouches, { passive: false });
-    window.addEventListener('touchcancel', handleStickTouches, { passive: false });
+    attachStickCanvasEvents(stickLeftCanvas, 'left');
+    attachStickCanvasEvents(stickRightCanvas, 'right');
 
-    let mouseSide = null;
-    stickLeftCanvas.addEventListener('mousedown', (e) => {
-      mouseSide = 'left';
-      const v = computeStickXY(stickLeftCanvas, e.clientX, e.clientY);
-      hwInput.lx = v.x; hwInput.ly = v.y; hwInput.leftActive = true;
-    });
-    stickRightCanvas.addEventListener('mousedown', (e) => {
-      mouseSide = 'right';
-      const v = computeStickXY(stickRightCanvas, e.clientX, e.clientY);
-      hwInput.rx = v.x; hwInput.ry = v.y; hwInput.rightActive = true;
-    });
-    window.addEventListener('mousemove', (e) => {
-      if (mouseSide === 'left') {
-        const v = computeStickXY(stickLeftCanvas, e.clientX, e.clientY);
-        hwInput.lx = v.x; hwInput.ly = v.y;
-      } else if (mouseSide === 'right') {
-        const v = computeStickXY(stickRightCanvas, e.clientX, e.clientY);
-        hwInput.rx = v.x; hwInput.ry = v.y;
-      }
-    });
-    window.addEventListener('mouseup', () => {
-      if (mouseSide === 'left') { hwInput.lx = 0; hwInput.ly = 0; hwInput.leftActive = false; }
-      if (mouseSide === 'right') { hwInput.rx = 0; hwInput.ry = 0; hwInput.rightActive = false; }
-      mouseSide = null;
-    });
-
+    // Botones físicos (D-Pad UP/DOWN/LEFT/RIGHT, SELECT, MENU, Y, X, B, A, L3, R3)
     const btnTouchCounts = {};
     document.querySelectorAll('.hw-btn').forEach((btnEl) => {
       const key = btnEl.getAttribute('data-btn');
@@ -760,7 +909,7 @@
         btnTouchCounts[key] = 1;
         hwInput.btn[key] = true;
         btnEl.classList.add('pressed');
-        playTone(540, 0.025, 'square', 0.02);
+        playTone(540, 0.02, 'square', 0.02);
       };
       const release = (e) => {
         e.preventDefault(); e.stopPropagation();
@@ -799,8 +948,7 @@
       const cx = w * 0.5, cy = h * 0.5, maxR = w * 0.37;
       ctxG.clearRect(0, 0, w, h);
 
-      // Anillos concéntricos estilo stick analógico de consola portátil
-      ctxG.strokeStyle = active ? 'rgba(255, 179, 0, 0.4)' : 'rgba(154, 165, 180, 0.16)';
+      ctxG.strokeStyle = active ? 'rgba(255, 179, 0, 0.45)' : 'rgba(154, 165, 180, 0.18)';
       ctxG.lineWidth = 1.5;
       ctxG.beginPath(); ctxG.arc(cx, cy, maxR, 0, Math.PI * 2); ctxG.stroke();
       ctxG.beginPath(); ctxG.arc(cx, cy, maxR * 0.5, 0, Math.PI * 2); ctxG.stroke();
@@ -813,33 +961,33 @@
       const kx = cx + x * maxR;
       const ky = cy - y * maxR;
 
-      // Eje metálico del stick
       ctxG.strokeStyle = '#525866';
       ctxG.lineWidth = 6;
       ctxG.beginPath(); ctxG.moveTo(cx, cy); ctxG.lineTo(kx, ky); ctxG.stroke();
 
-      // Capuchón cóncavo de goma del joystick
       ctxG.fillStyle = clicked ? '#e53935' : (active ? '#3a3f4d' : '#282c37');
-      ctxG.beginPath(); ctxG.arc(kx, ky, 27, 0, Math.PI * 2); ctxG.fill();
+      ctxG.beginPath(); ctxG.arc(kx, ky, 26, 0, Math.PI * 2); ctxG.fill();
       ctxG.lineWidth = 2;
       ctxG.strokeStyle = clicked ? '#ffb300' : (active ? '#00e5ff' : '#4d5466');
       ctxG.stroke();
 
-      // Textura interior del capuchón
-      ctxG.beginPath(); ctxG.arc(kx, ky, 17, 0, Math.PI * 2);
+      ctxG.beginPath(); ctxG.arc(kx, ky, 16, 0, Math.PI * 2);
       ctxG.strokeStyle = 'rgba(255,255,255,0.15)';
       ctxG.stroke();
 
       ctxG.fillStyle = '#9aa5b4';
       ctxG.font = 'bold 10px monospace';
-      ctxG.fillText(label, 58, 18);
+      ctxG.fillText(label, 58, 17);
       canvasEl.classList.toggle('engaged', active || clicked);
     }
 
     function updateInputPolling() {
+      // Si no se toca el stick izquierdo, la cruceta D-Pad o WASD también pueden mover el eje izquierdo
       if (!hwInput.leftActive) {
-        hwInput.lx = (rawKeys['KeyD'] ? 0.8 : 0) - (rawKeys['KeyA'] ? 0.8 : 0);
-        hwInput.ly = (rawKeys['KeyW'] ? 0.8 : 0) - (rawKeys['KeyS'] ? 0.8 : 0);
+        const dpadX = (hwInput.btn.RIGHT || rawKeys['KeyD'] ? 0.85 : 0) - (hwInput.btn.LEFT || rawKeys['KeyA'] ? 0.85 : 0);
+        const dpadY = (hwInput.btn.UP    || rawKeys['KeyW'] ? 0.85 : 0) - (hwInput.btn.DOWN || rawKeys['KeyS'] ? 0.85 : 0);
+        hwInput.lx = dpadX;
+        hwInput.ly = dpadY;
       }
       if (!hwInput.rightActive) {
         hwInput.rx = (rawKeys['ArrowRight'] ? 0.8 : 0) - (rawKeys['ArrowLeft'] ? 0.8 : 0);
@@ -862,6 +1010,10 @@
           if (gp.buttons[11]?.pressed) hwInput.btn.R3 = true;
           if (gp.buttons[8]?.pressed) hwInput.btn.SELECT = true;
           if (gp.buttons[9]?.pressed) hwInput.btn.MENU = true;
+          if (gp.buttons[12]?.pressed) hwInput.btn.UP = true;
+          if (gp.buttons[13]?.pressed) hwInput.btn.DOWN = true;
+          if (gp.buttons[14]?.pressed) hwInput.btn.LEFT = true;
+          if (gp.buttons[15]?.pressed) hwInput.btn.RIGHT = true;
           break;
         }
       }
@@ -874,8 +1026,8 @@
       const adcRX = Math.round((hwInput.rx + 1) * 2047.5);
       const adcRY = Math.round((hwInput.ry + 1) * 2047.5);
 
-      document.getElementById('readoutLeft').textContent  = `ADC-L: ${adcLX},${adcLY} [L3:${hwInput.btn.L3 ? 1 : 0}]`;
-      document.getElementById('readoutRight').textContent = `ADC-R: ${adcRX},${adcRY} [R3:${hwInput.btn.R3 ? 1 : 0}]`;
+      document.getElementById('readoutLeft').textContent  = `L:${adcLX},${adcLY}`;
+      document.getElementById('readoutRight').textContent = `R:${adcRX},${adcRY}`;
     }
 
     function snapshotPrevButtons() {
@@ -891,11 +1043,7 @@
     }
 
     /***************************************************************************
-     * 4. SISTEMA OPERATIVO RETRO-GO:
-     *    - Splash de arranque con particiones ESP32-S3 (ota_0 / roms / nvs)
-     *    - pestañas de sistemas ([ROMS], [FAV], [SYS]) + Vista previa animada (BoxArt)
-     *    - Menú In-Game OSD genuino de Retro-Go al pulsar `★ MENU`
-     *      (Continue, Save State, Load State, Reset Game, Quit to Menu)
+     * 4. SISTEMA OPERATIVO RETRO-GO
      ***************************************************************************/
     const ROM_LIST = [
       { id: 'fpv',    sys: 'S3-3D', name: 'FPV DRONE ACRO',  size: '64KB', fav: true  },
@@ -905,15 +1053,14 @@
       { id: 'hwtest', sys: 'TOOLS', name: 'ADC & GPIO DIAG', size: '32KB', fav: false }
     ];
 
-    let osState = 'boot'; // 'boot' | 'launcher' | 'ingame'
-    let bootTimer = 1.35;
+    let osState = 'boot';
+    let bootTimer = 1.0;
     let activeRomId = 'fpv';
-    let rgTabIdx = 0; // 0 = ALL ROMS, 1 = FAVORITES, 2 = SYS INFO
+    let rgTabIdx = 0;
     let rgCursor = 0;
     let navCooldown = 0;
     let previewAnimT = 0;
 
-    // In-Game Retro-Go Overlay Menu ('★ MENU' button)
     let rgOverlayOpen = false;
     let rgOverlayCursor = 0;
     const RG_OVERLAY_ITEMS = [
@@ -941,29 +1088,27 @@
       playTone(820, 0.08);
 
       if (romId === 'fpv') {
-        setFaceLabels('ACRO/STB', 'RESET', 'CAM 3RA', 'BOOST', 'L:THR/YAW R:PIT/ROL MENU:OSD');
+        setFaceLabels('MODO', 'RST', 'CAM', 'BOOST', 'L:THR/YAW R:PIT/ROL MENU:OSD');
         fpvGame.reset();
       } else if (romId === 'rally') {
-        setFaceLabels('CAMARA', 'RESET', 'DRIFT/BRK', 'GAS', 'L:GIRO A:GAS B:DRIFT MENU:OSD');
+        setFaceLabels('CAM', 'RST', 'DRFT', 'GAS', 'L/DPAD:GIRO A:GAS B:DRIFT');
         rallyGame.reset();
       } else if (romId === 'space') {
-        setFaceLabels('RADAR', 'RESET', 'TURBO', 'LASER', 'STICKS:NAVE A/R3:LASER MENU:OSD');
+        setFaceLabels('RDR', 'RST', 'TRBO', 'FIRE', 'STICKS:NAVE A/R3:LASER');
         spaceGame.reset();
       } else if (romId === 'arena') {
-        setFaceLabels('BOMBA', 'RESET', 'EMP', 'FIRE', 'L:MOVER R:APUNTAR 360 MENU:OSD');
+        setFaceLabels('EMP', 'RST', 'BOMB', 'FIRE', 'L/DPAD:MOVER R:APUNTAR 360');
         arenaGame.reset();
       } else if (romId === 'hwtest') {
-        setFaceLabels('TEST Y', 'TEST X', 'TEST B', 'TEST A', 'PULSA ★ MENU PARA SALIR');
+        setFaceLabels('Y', 'X', 'B', 'A', 'PULSA ★ MENU PARA SALIR');
       }
     }
 
-    // Dibuja el icono / BoxArt animado de 38x36 en el panel derecho del Launcher Retro-Go
     function drawRomBoxArt(romId, t) {
       const bx = 86, by = 13, bw = 39, bh = 37;
       fbRect(bx, by, bw, bh, false, 1);
 
       if (romId === 'fpv') {
-        // Icono Dron + Puerta 3D
         fbRect(bx + 11, by + 8, 17, 14, false, 1);
         const dy = Math.round(Math.sin(t * 4) * 3);
         const cx = bx + 19, cy = by + 22 + dy;
@@ -973,13 +1118,11 @@
         fbCircle(cx + 8, cy - 3, 2);
         fbDrawText('ACRO', bx + 11, by + 29);
       } else if (romId === 'rally') {
-        // Icono Carretera en perspectiva + Coche WRC
         fbDrawLine(bx + 19, by + 4, bx + 4, by + 28);
         fbDrawLine(bx + 19, by + 4, bx + 34, by + 28);
         fbRect(bx + 12, by + 20, 15, 7, false);
         fbDrawText('WRC', bx + 14, by + 29);
       } else if (romId === 'space') {
-        // Icono Caza TIE Wireframe
         const cx = bx + 19, cy = by + 16;
         fbCircle(cx, cy, 5);
         fbDrawLine(cx - 10, cy - 8, cx - 10, cy + 8);
@@ -987,19 +1130,13 @@
         fbDrawLine(cx - 10, cy, cx + 10, cy);
         fbDrawText('3D', bx + 16, by + 29);
       } else if (romId === 'arena') {
-        // Icono Twin-Stick 360
         const cx = bx + 19, cy = by + 16;
         fbCircle(cx, cy, 4);
         const ang = t * 3;
         fbDrawLine(cx, cy, cx + Math.cos(ang) * 11, cy + Math.sin(ang) * 11);
         fbDrawText('360', bx + 14, by + 29);
       } else {
-        // Icono Chip ESP32-S3
         fbRect(bx + 11, by + 7, 16, 16, false);
-        for (let i = 0; i < 3; i++) {
-          fbSetPixel(bx + 9, by + 10 + i * 5);
-          fbSetPixel(bx + 28, by + 10 + i * 5);
-        }
         fbDrawText('ADC', bx + 14, by + 29);
       }
     }
@@ -1014,14 +1151,13 @@
       fbDrawText('MEM : 16MB FLASH / 8MB PSRAM', 12, 31);
       fbDrawText('PART: RETRO-GO + 5 ROMS', 12, 39);
 
-      // Barra de progreso de montaje de partición SD/Flash
-      const pct = Math.min(1.0, (1.35 - bootTimer) / 1.1);
+      const pct = Math.min(1.0, (1.0 - bootTimer) / 0.85);
       fbRect(12, 49, 104, 6, false);
       fbRect(14, 51, Math.round(pct * 100), 2, true);
 
       if (bootTimer <= 0 || hwInput.justPressed('A') || hwInput.justPressed('MENU')) {
         osState = 'launcher';
-        setFaceLabels('FAV *', 'PART INFO', 'TAB <<', 'RUN ROM', 'STICK:NAV | A:RUN | SELECT:TAB');
+        setFaceLabels('FAV*', 'INFO', 'TAB', 'RUN', 'DPAD/STICK:NAV | A:RUN | SEL:TAB');
       }
     }
 
@@ -1036,39 +1172,36 @@
       const navX = Math.abs(hwInput.lx) > Math.abs(hwInput.rx) ? hwInput.lx : hwInput.rx;
 
       if (navCooldown <= 0) {
-        if (navY < -0.45) {
+        if (navY < -0.45 || hwInput.justPressed('DOWN')) {
           rgCursor = (rgCursor + 1) % (filteredRoms.length || 1);
           navCooldown = 0.17;
           playTone(480, 0.025);
-        } else if (navY > 0.45) {
+        } else if (navY > 0.45 || hwInput.justPressed('UP')) {
           rgCursor = (rgCursor - 1 + (filteredRoms.length || 1)) % (filteredRoms.length || 1);
           navCooldown = 0.17;
           playTone(480, 0.025);
-        } else if (navX > 0.55 || hwInput.justPressed('SELECT')) {
+        } else if (navX > 0.55 || hwInput.justPressed('RIGHT') || hwInput.justPressed('SELECT')) {
           rgTabIdx = (rgTabIdx + 1) % 3;
           navCooldown = 0.22;
           playTone(620, 0.03);
-        } else if (navX < -0.55 || hwInput.justPressed('B')) {
+        } else if (navX < -0.55 || hwInput.justPressed('LEFT') || hwInput.justPressed('B')) {
           rgTabIdx = (rgTabIdx + 2) % 3;
           navCooldown = 0.22;
           playTone(620, 0.03);
         }
       }
 
-      // Botón Y marca/desmarca favorito en Retro-Go
       if (hwInput.justPressed('Y') && filteredRoms[rgCursor]) {
         filteredRoms[rgCursor].fav = !filteredRoms[rgCursor].fav;
         blinkSdLed();
         playTone(700, 0.04);
       }
 
-      // Botón X cambia a la pestaña de particiones / sistema
       if (hwInput.justPressed('X')) {
         rgTabIdx = rgTabIdx === 2 ? 0 : 2;
         playTone(580, 0.03);
       }
 
-      // Botón A o Click de Stick lanza la ROM seleccionada
       if ((hwInput.justPressed('A') || hwInput.justPressed('L3') || hwInput.justPressed('R3')) && rgTabIdx !== 2) {
         const rom = filteredRoms[rgCursor];
         if (rom) {
@@ -1077,10 +1210,7 @@
         }
       }
 
-      // Renderizar GUI Clásica de Retro-Go en 128x64
       fbClear();
-
-      // 1. Barra de pestañas superior estilo Retro-Go
       fbRect(0, 0, 128, 10, true, 1);
       const tabs = ['[ROMS]', '[FAV]', '[S3-FW]'];
       let tx = 2;
@@ -1096,18 +1226,16 @@
       fbDrawText('98%', 110, 2, 0);
 
       if (rgTabIdx === 2) {
-        // Pestaña de información técnica de particiones Retro-Go en ESP32-S3 N16R8
         fbDrawText('TARGET: ESP32-S3-WROOM-1', 4, 14);
         fbDrawText('FLASH : 16MB QIO 80MHZ', 4, 22);
         fbDrawText('PSRAM : 8MB OPI PSRAM', 4, 30);
         fbDrawText('VRAM  : 1024B STATIC DMA', 4, 38);
-        fbDrawText('STICKS: DUAL ADC1 12-BIT', 4, 46);
+        fbDrawText('INPUT : 2X ADC + DPAD + 6B', 4, 46);
         fbDrawLine(0, 54, 127, 54);
         fbDrawText('SELECT/B: VOLVER A ROMS', 4, 57);
         return;
       }
 
-      // 2. Lista de ROMs a la izquierda (x: 2..83)
       for (let i = 0; i < filteredRoms.length; i++) {
         const rom = filteredRoms[i];
         const y = 13 + i * 8;
@@ -1121,7 +1249,6 @@
         }
       }
 
-      // 3. Recuadro derecho de BoxArt / Preview animado
       const currentRom = filteredRoms[rgCursor];
       if (currentRom) {
         drawRomBoxArt(currentRom.id, previewAnimT);
@@ -1130,17 +1257,16 @@
       }
     }
 
-    // Menú superpuesto In-Game genuino de Retro-Go (al pulsar ★ MENU durante un juego)
     function updateAndRenderRetroGoOverlay(dt) {
       if (navCooldown > 0) navCooldown -= dt;
 
       const navY = Math.abs(hwInput.ly) > Math.abs(hwInput.ry) ? hwInput.ly : hwInput.ry;
       if (navCooldown <= 0) {
-        if (navY < -0.45 || hwInput.justPressed('SELECT')) {
+        if (navY < -0.45 || hwInput.justPressed('DOWN') || hwInput.justPressed('SELECT')) {
           rgOverlayCursor = (rgOverlayCursor + 1) % RG_OVERLAY_ITEMS.length;
           navCooldown = 0.17;
           playTone(500, 0.025);
-        } else if (navY > 0.45) {
+        } else if (navY > 0.45 || hwInput.justPressed('UP')) {
           rgOverlayCursor = (rgOverlayCursor - 1 + RG_OVERLAY_ITEMS.length) % RG_OVERLAY_ITEMS.length;
           navCooldown = 0.17;
           playTone(500, 0.025);
@@ -1157,13 +1283,11 @@
         if (rgOverlayCursor === 0) {
           rgOverlayOpen = false;
         } else if (rgOverlayCursor === 1) {
-          // Save State
           if (activeRomId === 'fpv') savedStates.fpv = JSON.stringify({ px: fpvGame.px, py: fpvGame.py, pz: fpvGame.pz, gate: fpvGame.activeGate });
           if (activeRomId === 'rally') savedStates.rally = JSON.stringify({ z: rallyGame.trackZ, x: rallyGame.playerX, spd: rallyGame.speed });
           showToast('STATE SAVED TO NVS');
           rgOverlayOpen = false;
         } else if (rgOverlayCursor === 2) {
-          // Load State
           if (activeRomId === 'fpv' && savedStates.fpv) {
             const s = JSON.parse(savedStates.fpv);
             fpvGame.px = s.px; fpvGame.py = s.py; fpvGame.pz = s.pz; fpvGame.activeGate = s.gate;
@@ -1180,12 +1304,11 @@
         } else if (rgOverlayCursor === 4) {
           rgOverlayOpen = false;
           osState = 'launcher';
-          setFaceLabels('FAV *', 'PART INFO', 'TAB <<', 'RUN ROM', 'STICK:NAV | A:RUN | SELECT:TAB');
+          setFaceLabels('FAV*', 'INFO', 'TAB', 'RUN', 'DPAD/STICK:NAV | A:RUN | SEL:TAB');
         }
         return;
       }
 
-      // Dibujar ventana modal de Retro-Go sobre el frame actual del juego
       fbRect(16, 6, 96, 52, true, 0);
       fbRect(16, 6, 96, 52, false, 1);
       fbRect(16, 6, 96, 9, true, 1);
@@ -1203,7 +1326,7 @@
     }
 
     /***************************************************************************
-     * 5. LOS 5 CARTUCHOS / JUEGOS (FPV 3D, RALLY WRC 3D, STARFIGHTER, ARENA, ADC)
+     * 5. LOS 5 CARTUCHOS / JUEGOS
      ***************************************************************************/
     const DEG2RAD = Math.PI / 180.0;
 
@@ -1339,10 +1462,10 @@
           const dx1 = x1 - camX, dy1 = y1 - camY, dz1 = z1 - camZ;
           let cx0 = dx0*cRx + dy0*cRy + dz0*cRz, cy0 = dx0*cUx + dy0*cUy + dz0*cUz, cz0 = dx0*cFx + dy0*cFy + dz0*cFz;
           let cx1 = dx1*cRx + dy1*cRy + dz1*cRz, cy1 = dx1*cUx + dy1*cUy + dz1*cUz, cz1 = dx1*cFx + dy1*cFy + dz1*cFz;
-          if (cz0 < 0.15 && cz1 < 0.15) return;
+          if (cz0 < 0.2 && cz1 < 0.2) return;
           if (cz0 > 75 && cz1 > 75) return;
-          if (cz0 < 0.15) { const t = (0.15 - cz0)/(cz1 - cz0); cx0 += t*(cx1 - cx0); cy0 += t*(cy1 - cy0); cz0 = 0.15; }
-          else if (cz1 < 0.15) { const t = (0.15 - cz1)/(cz0 - cz1); cx1 += t*(cx0 - cx1); cy1 += t*(cy0 - cy1); cz1 = 0.15; }
+          if (cz0 < 0.2) { const t = (0.2 - cz0)/(cz1 - cz0); cx0 += t*(cx1 - cx0); cy0 += t*(cy1 - cy0); cz0 = 0.2; }
+          else if (cz1 < 0.2) { const t = (0.2 - cz1)/(cz0 - cz1); cx1 += t*(cx0 - cx1); cy1 += t*(cy0 - cy1); cz1 = 0.2; }
           const f = 68.0;
           fbDrawLine(64 + cx0*f/cz0, 32 - cy0*f/cz0, 64 + cx1*f/cz1, 32 - cy1*f/cz1, dash);
         };
@@ -1564,7 +1687,7 @@
         this.px = Math.max(6, Math.min(121, this.px + hwInput.lx * 52 * dt));
         this.py = Math.max(10, Math.min(59, this.py - hwInput.ly * 52 * dt));
 
-        if ((hwInput.justPressed('B') || hwInput.justPressed('L3')) && this.bombs > 0) {
+        if ((hwInput.justPressed('B') || hwInput.justPressed('Y') || hwInput.justPressed('L3')) && this.bombs > 0) {
           this.bombs--; this.score += this.foes.length * 10; this.foes.length = 0;
           showToast('EMP DETONATED!');
         }
@@ -1647,19 +1770,27 @@
       const btns = ['Y', 'X', 'B', 'A'];
       for (let i = 0; i < 4; i++) {
         const bx = 46 + i * 9, pressed = hwInput.btn[btns[i]];
-        fbRect(bx, 16, 7, 9, pressed, 1);
-        fbDrawText(btns[i], bx + 2, 18, pressed ? 0 : 1);
+        fbRect(bx, 14, 7, 9, pressed, 1);
+        fbDrawText(btns[i], bx + 2, 16, pressed ? 0 : 1);
+      }
+
+      const dpad = ['UP', 'DOWN', 'LEFT', 'RIGHT'];
+      const dLbl = ['U', 'D', 'L', 'R'];
+      for (let i = 0; i < 4; i++) {
+        const bx = 46 + i * 9, pressed = hwInput.btn[dpad[i]];
+        fbRect(bx, 25, 7, 9, pressed, 1);
+        fbDrawText(dLbl[i], bx + 2, 27, pressed ? 0 : 1);
       }
 
       const adcLX = Math.round((hwInput.lx + 1) * 2047.5);
       const adcRX = Math.round((hwInput.rx + 1) * 2047.5);
-      fbDrawText(`ADC L:${adcLX}`, 44, 30);
-      fbDrawText(`ADC R:${adcRX}`, 44, 38);
+      fbDrawText(`ADC L:${adcLX}`, 44, 38);
+      fbDrawText(`ADC R:${adcRX}`, 44, 46);
       fbDrawText('N16R8 PSRAM OK', 36, 57);
     }
 
     /***************************************************************************
-     * 6. BUCLE PRINCIPAL DE SISTEMA RETRO-GO (60 FPS)
+     * 6. BUCLE PRINCIPAL DE SISTEMA RETRO-GO (60 FPS CON WATCHDOG TRY/CATCH)
      ***************************************************************************/
     document.getElementById('btnPalette').addEventListener('click', () => {
       paletteIdx = (paletteIdx + 1) % PALETTES.length;
@@ -1678,6 +1809,13 @@
       e.currentTarget.classList.toggle('active', c.classList.contains('pixel-grid'));
     });
 
+    document.getElementById('btnFull').addEventListener('click', async () => {
+      try {
+        if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
+        else await document.exitFullscreen();
+      } catch (_) {}
+    });
+
     let lastTime = performance.now();
     let fpsFrames = 0;
     let fpsClock = performance.now();
@@ -1685,68 +1823,69 @@
     function retroGoMainLoop(now) {
       requestAnimationFrame(retroGoMainLoop);
 
-      const dt = Math.min(0.05, (now - lastTime) / 1000.0);
-      lastTime = now;
+      try {
+        const dt = Math.min(0.05, Math.max(0.001, (now - lastTime) / 1000.0));
+        lastTime = now;
 
-      updateInputPolling();
+        updateInputPolling();
 
-      if (osState === 'boot') {
-        updateAndRenderRetroGoBoot(dt);
-      } else if (osState === 'launcher') {
-        updateAndRenderRetroGoLauncher(dt);
-      } else if (osState === 'ingame') {
-        // El botón ★ MENU abre/cierra el menú superpuesto In-Game genuino de Retro-Go
-        if (hwInput.justPressed('MENU')) {
-          rgOverlayOpen = !rgOverlayOpen;
-          rgOverlayCursor = 0;
-          playTone(600, 0.04);
-        }
-
-        if (!rgOverlayOpen) {
-          if (activeRomId === 'fpv') {
-            for (let s = 0; s < 4; s++) fpvGame.step(dt / 4);
-            fpvGame.render();
-          } else if (activeRomId === 'rally') {
-            rallyGame.step(dt);
-            rallyGame.render();
-          } else if (activeRomId === 'space') {
-            spaceGame.step(dt);
-            spaceGame.render();
-          } else if (activeRomId === 'arena') {
-            arenaGame.step(dt);
-            arenaGame.render();
-          } else if (activeRomId === 'hwtest') {
-            renderHwDiagnostic();
+        if (osState === 'boot') {
+          updateAndRenderRetroGoBoot(dt);
+        } else if (osState === 'launcher') {
+          updateAndRenderRetroGoLauncher(dt);
+        } else if (osState === 'ingame') {
+          if (hwInput.justPressed('MENU')) {
+            rgOverlayOpen = !rgOverlayOpen;
+            rgOverlayCursor = 0;
+            playTone(600, 0.04);
           }
-        } else {
-          // Dibujar primero el frame congelado del juego y encima el modal de Retro-Go
-          if (activeRomId === 'fpv') fpvGame.render();
-          else if (activeRomId === 'rally') rallyGame.render();
-          else if (activeRomId === 'space') spaceGame.render();
-          else if (activeRomId === 'arena') arenaGame.render();
-          else if (activeRomId === 'hwtest') renderHwDiagnostic();
 
-          updateAndRenderRetroGoOverlay(dt);
+          if (!rgOverlayOpen) {
+            if (activeRomId === 'fpv') {
+              for (let s = 0; s < 4; s++) fpvGame.step(dt / 4);
+              fpvGame.render();
+            } else if (activeRomId === 'rally') {
+              rallyGame.step(dt);
+              rallyGame.render();
+            } else if (activeRomId === 'space') {
+              spaceGame.step(dt);
+              spaceGame.render();
+            } else if (activeRomId === 'arena') {
+              arenaGame.step(dt);
+              arenaGame.render();
+            } else if (activeRomId === 'hwtest') {
+              renderHwDiagnostic();
+            }
+          } else {
+            if (activeRomId === 'fpv') fpvGame.render();
+            else if (activeRomId === 'rally') rallyGame.render();
+            else if (activeRomId === 'space') spaceGame.render();
+            else if (activeRomId === 'arena') arenaGame.render();
+            else if (activeRomId === 'hwtest') renderHwDiagnostic();
+
+            updateAndRenderRetroGoOverlay(dt);
+          }
         }
-      }
 
-      // Notificación Toast estilo Retro-Go en la esquina superior de la pantalla OLED
-      if (toastTimer > 0) {
-        toastTimer -= dt;
-        const tw = toastMsg.length * 4 + 6;
-        fbRect(64 - (tw >> 1), 1, tw, 9, true, 1);
-        fbDrawText(toastMsg, 64 - (tw >> 1) + 3, 3, 0);
-      }
+        if (toastTimer > 0) {
+          toastTimer -= dt;
+          const tw = toastMsg.length * 4 + 6;
+          fbRect(64 - (tw >> 1), 1, tw, 9, true, 1);
+          fbDrawText(toastMsg, 64 - (tw >> 1) + 3, 3, 0);
+        }
 
-      fbPresentToCanvas();
-      snapshotPrevButtons();
+        fbPresentToCanvas();
+        snapshotPrevButtons();
 
-      fpsFrames++;
-      if (now - fpsClock >= 500) {
-        const fps = Math.round((fpsFrames * 1000) / (now - fpsClock));
-        document.getElementById('uiFpsBattery').textContent = `${fps}FPS | BAT 98%`;
-        fpsFrames = 0;
-        fpsClock = now;
+        fpsFrames++;
+        if (now - fpsClock >= 500) {
+          const fps = Math.round((fpsFrames * 1000) / (now - fpsClock));
+          document.getElementById('uiFpsBattery').textContent = `${fps}FPS | BAT 98%`;
+          fpsFrames = 0;
+          fpsClock = now;
+        }
+      } catch (err) {
+        console.error('Frame error recovered:', err);
       }
     }
 
