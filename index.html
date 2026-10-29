@@ -4,24 +4,24 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="mobile-web-app-capable" content="yes" />
-  <meta name="theme-color" content="#0a0e14" />
-  <title>FPVSim 128×64 — ESP32-S3 Wireframe Acro Simulator</title>
+  <meta name="theme-color" content="#070a0f" />
+  <title>FPVSim 128×64 — Consola Portátil ESP32-S3</title>
   <style>
     :root {
-      --bg-dark: #090c10;
-      --bg-panel: #11161f;
-      --bg-card: #171e2b;
-      --border: #263147;
+      --bg-body: #070a0f;
+      --bg-shell: #101622;
+      --bg-panel: #161f30;
+      --border: #28364f;
       --accent: #00e5ff;
-      --accent-dim: rgba(0, 229, 255, 0.18);
+      --accent-glow: rgba(0, 229, 255, 0.25);
       --amber: #ffb300;
       --green: #00e676;
       --red: #ff5252;
-      --text: #e2e8f0;
-      --text-muted: #8492a6;
-      --oled-on: #e8fcff;
-      --oled-off: #05080c;
+      --text: #e6edf3;
+      --text-muted: #8b9bb4;
+      --oled-off: #04070b;
     }
 
     * {
@@ -31,209 +31,282 @@
       user-select: none;
       -webkit-user-select: none;
       -webkit-touch-callout: none;
+      -webkit-tap-highlight-color: transparent;
     }
 
     html, body {
       width: 100%;
       height: 100%;
-      background-color: var(--bg-dark);
+      overflow: hidden;
+      position: fixed;
+      inset: 0;
+      background: var(--bg-body);
       color: var(--text);
-      font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
-      overflow-x: hidden;
-      touch-action: manipulation;
+      font-family: 'JetBrains Mono', 'Consolas', monospace;
+      touch-action: none;
     }
 
-    .app-shell {
-      display: flex;
-      flex-direction: column;
-      min-height: 100dvh;
-      max-width: 1280px;
-      margin: 0 auto;
-      padding: 8px 12px 16px;
-      gap: 10px;
-    }
-
-    /* Header Bar */
-    .topbar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      gap: 8px;
-      padding: 8px 12px;
-      background: var(--bg-panel);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-    }
-
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .brand-badge {
-      background: var(--accent-dim);
-      color: var(--accent);
-      border: 1px solid var(--accent);
-      font-size: 0.7rem;
-      font-weight: 700;
-      padding: 2px 6px;
-      border-radius: 4px;
-      letter-spacing: 0.5px;
-    }
-
-    .brand-title {
-      font-size: 0.95rem;
-      font-weight: 700;
-      letter-spacing: 0.4px;
-    }
-
-    .status-pills {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      flex-wrap: wrap;
-    }
-
-    .pill {
+    /* Portrait Warning Banner for Mobile */
+    .portrait-notice {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 60;
+      background: rgba(255, 179, 0, 0.95);
+      color: #000;
       font-size: 0.72rem;
+      font-weight: 700;
+      text-align: center;
       padding: 4px 8px;
-      border-radius: 4px;
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      color: var(--text-muted);
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
     }
 
-    .pill.active {
-      border-color: var(--green);
-      color: var(--green);
-    }
-
-    .btn {
-      background: var(--bg-card);
-      color: var(--text);
-      border: 1px solid var(--border);
-      padding: 5px 10px;
-      border-radius: 5px;
-      font-family: inherit;
-      font-size: 0.74rem;
-      cursor: pointer;
-      transition: all 0.15s ease;
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-    }
-
-    .btn:hover {
-      border-color: var(--accent);
-      color: var(--accent);
-    }
-
-    .btn.primary {
-      background: var(--accent-dim);
-      border-color: var(--accent);
-      color: var(--accent);
-      font-weight: 600;
-    }
-
-    /* Main Workspace Grid */
-    .main-grid {
-      display: grid;
-      grid-template-columns: 1fr 340px;
-      gap: 12px;
-      align-items: start;
-    }
-
-    @media (max-width: 960px) {
-      .main-grid {
-        grid-template-columns: 1fr;
+    @media (orientation: portrait) and (max-width: 768px) {
+      .portrait-notice {
+        display: block;
       }
     }
 
-    /* Console / Handheld Unit */
-    .console-stage {
-      background: radial-gradient(circle at center, #161f2e 0%, #0d121b 100%);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 12px;
+    /* Handheld Console Full-Viewport Layout */
+    .handheld-layout {
+      width: 100%;
+      height: 100dvh;
       display: flex;
       flex-direction: column;
+      padding: env(safe-area-inset-top, 4px) env(safe-area-inset-right, 8px) env(safe-area-inset-bottom, 4px) env(safe-area-inset-left, 8px);
+      background: radial-gradient(circle at 50% 35%, #162033 0%, #070a0f 100%);
+    }
+
+    /* Compact HUD Top Bar */
+    .hud-topbar {
+      height: 38px;
+      flex-shrink: 0;
+      display: flex;
       align-items: center;
-      gap: 12px;
-      position: relative;
-    }
-
-    /* Telemetry Strip Above OLED */
-    .telemetry-strip {
-      width: 100%;
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+      justify-content: space-between;
       gap: 6px;
-    }
-
-    .stat-box {
-      background: rgba(10, 14, 20, 0.75);
-      border: 1px solid var(--border);
+      padding: 0 8px;
+      background: rgba(16, 22, 34, 0.9);
+      border-bottom: 1px solid var(--border);
       border-radius: 6px;
-      padding: 5px 8px;
+    }
+
+    .hud-stats {
       display: flex;
-      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      overflow-x: auto;
+      font-size: 0.72rem;
+      white-space: nowrap;
     }
 
-    .stat-label {
-      font-size: 0.63rem;
-      color: var(--text-muted);
-      text-transform: uppercase;
+    .hud-metric {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
     }
 
-    .stat-value {
-      font-size: 0.88rem;
-      font-weight: 700;
+    .hud-metric b {
       color: var(--accent);
-      margin-top: 1px;
+      font-variant-numeric: tabular-nums;
     }
 
-    .stat-value.amber { color: var(--amber); }
-    .stat-value.green { color: var(--green); }
+    .hud-metric b.amber { color: var(--amber); }
+    .hud-metric b.green { color: var(--green); }
 
-    /* OLED Bezel */
-    .oled-bezel {
-      background: #040609;
-      border: 3px solid #2b374b;
-      border-radius: 10px;
-      padding: 10px 12px 14px;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7), inset 0 0 12px rgba(0, 229, 255, 0.08);
+    .hud-actions {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      flex-shrink: 0;
+    }
+
+    .btn-hud {
+      background: var(--bg-panel);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 5px 8px;
+      font-family: inherit;
+      font-size: 0.68rem;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .btn-hud:active,
+    .btn-hud.active {
+      background: var(--accent-glow);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    /* Main Cockpit: [Left Gimbal] — [OLED 128x64] — [Right Gimbal] */
+    .cockpit-body {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(145px, 27vw) 1fr minmax(145px, 27vw);
+      align-items: center;
+      justify-items: center;
+      gap: 8px;
+      padding: 4px 2px;
+    }
+
+    /* Portrait fallback so it remains playable even if not rotated yet */
+    @media (orientation: portrait) and (max-width: 768px) {
+      .cockpit-body {
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: 1fr auto;
+        padding-bottom: 10px;
+      }
+      .center-display-col {
+        grid-column: 1 / -1;
+        grid-row: 1;
+      }
+      .gimbal-col.left {
+        grid-column: 1;
+        grid-row: 2;
+      }
+      .gimbal-col.right {
+        grid-column: 2;
+        grid-row: 2;
+      }
+    }
+
+    /* Gimbal Columns */
+    .gimbal-col {
       width: 100%;
-      max-width: 680px;
+      height: 100%;
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 6px;
+      justify-content: center;
+      gap: 4px;
+      touch-action: none;
     }
 
-    .oled-header {
+    .gimbal-label {
+      font-size: 0.62rem;
+      color: var(--text-muted);
+      letter-spacing: 0.5px;
+      text-align: center;
+    }
+
+    .gimbal-pad {
+      width: min(100%, 210px, 68dvh);
+      aspect-ratio: 1 / 1;
+      background: radial-gradient(circle at center, #121a28 0%, #090d14 100%);
+      border: 2px solid #2c3e5a;
+      border-radius: 18px;
+      position: relative;
+      touch-action: none;
+      box-shadow: inset 0 0 24px rgba(0, 0, 0, 0.9), 0 4px 14px rgba(0, 0, 0, 0.5);
+    }
+
+    .gimbal-pad.engaged {
+      border-color: var(--accent);
+      box-shadow: inset 0 0 24px rgba(0, 229, 255, 0.14), 0 0 12px rgba(0, 229, 255, 0.25);
+    }
+
+    .gimbal-axis-h,
+    .gimbal-axis-v {
+      position: absolute;
+      background: rgba(139, 155, 180, 0.2);
+      pointer-events: none;
+    }
+
+    .gimbal-axis-h {
+      top: 50%;
+      left: 8%;
+      right: 8%;
+      height: 1px;
+    }
+
+    .gimbal-axis-v {
+      left: 50%;
+      top: 8%;
+      bottom: 8%;
+      width: 1px;
+    }
+
+    .gimbal-ring-outer {
+      position: absolute;
+      inset: 12%;
+      border: 1px dashed rgba(139, 155, 180, 0.22);
+      border-radius: 50%;
+      pointer-events: none;
+    }
+
+    .gimbal-ring-inner {
+      position: absolute;
+      inset: 32%;
+      border: 1px solid rgba(139, 155, 180, 0.12);
+      border-radius: 50%;
+      pointer-events: none;
+    }
+
+    .gimbal-knob {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, #4df0ff, #0088aa 70%, #004d66 100%);
+      border: 2px solid #ffffff;
+      box-shadow: 0 4px 12px rgba(0, 229, 255, 0.55);
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+
+    .gimbal-readout {
+      font-size: 0.62rem;
+      color: var(--text-muted);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Center OLED 128x64 Screen Column */
+    .center-display-col {
       width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .oled-frame {
+      width: 100%;
+      max-width: min(100%, calc((100dvh - 76px) * 1.85));
+      background: #030508;
+      border: 3px solid #2e3d56;
+      border-radius: 10px;
+      padding: 6px 8px 8px;
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.8), inset 0 0 14px rgba(0, 229, 255, 0.08);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .oled-bezel-top {
       display: flex;
       justify-content: space-between;
-      font-size: 0.62rem;
-      color: #5c6bc0;
-      letter-spacing: 1px;
+      font-size: 0.58rem;
+      color: #6c809a;
+      letter-spacing: 0.8px;
     }
 
-    .canvas-container {
+    .canvas-wrap {
       width: 100%;
       aspect-ratio: 2 / 1;
       background: var(--oled-off);
-      border: 1px solid #1c2838;
+      border: 1px solid #1a2636;
       position: relative;
       overflow: hidden;
-      display: flex;
-      align-items: center;
-      justify-content: center;
     }
 
     #oledCanvas {
@@ -244,469 +317,290 @@
       display: block;
     }
 
-    /* Optional subtle pixel grid overlay */
-    .canvas-container.pixel-grid::after {
+    .canvas-wrap.pixel-grid::after {
       content: "";
       position: absolute;
       inset: 0;
       background-image:
-        linear-gradient(to right, rgba(0, 0, 0, 0.28) 1px, transparent 1px),
-        linear-gradient(to bottom, rgba(0, 0, 0, 0.28) 1px, transparent 1px);
+        linear-gradient(to right, rgba(0, 0, 0, 0.26) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(0, 0, 0, 0.26) 1px, transparent 1px);
       background-size: calc(100% / 128) calc(100% / 64);
       pointer-events: none;
     }
 
-    /* Touch & Gimbal Deck */
-    .gimbal-deck {
-      width: 100%;
-      max-width: 680px;
-      display: grid;
-      grid-template-columns: 1fr auto 1fr;
-      align-items: center;
-      gap: 10px;
-      padding: 4px 0;
-    }
-
-    .gimbal-wrapper {
+    .quick-flight-bar {
       display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 5px;
-    }
-
-    .gimbal-title {
-      font-size: 0.68rem;
-      color: var(--text-muted);
-      letter-spacing: 0.5px;
-    }
-
-    .gimbal-pad {
-      width: 148px;
-      height: 148px;
-      background: #0a0e15;
-      border: 2px solid #28364d;
-      border-radius: 14px;
-      position: relative;
-      touch-action: none;
-      cursor: grab;
-      box-shadow: inset 0 0 18px rgba(0, 0, 0, 0.85);
-    }
-
-    .gimbal-pad:active {
-      cursor: grabbing;
-      border-color: var(--accent);
-    }
-
-    .gimbal-crosshair-h,
-    .gimbal-crosshair-v {
-      position: absolute;
-      background: rgba(132, 146, 166, 0.18);
-      pointer-events: none;
-    }
-
-    .gimbal-crosshair-h {
-      top: 50%;
-      left: 8px;
-      right: 8px;
-      height: 1px;
-    }
-
-    .gimbal-crosshair-v {
-      left: 50%;
-      top: 8px;
-      bottom: 8px;
-      width: 1px;
-    }
-
-    .gimbal-ring {
-      position: absolute;
-      inset: 22%;
-      border: 1px dashed rgba(132, 146, 166, 0.22);
-      border-radius: 50%;
-      pointer-events: none;
-    }
-
-    .gimbal-knob {
-      width: 36px;
-      height: 36px;
-      border-radius: 50%;
-      background: radial-gradient(circle at 35% 35%, #00e5ff, #007799);
-      border: 2px solid #ffffff;
-      box-shadow: 0 3px 10px rgba(0, 229, 255, 0.45);
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      pointer-events: none;
-    }
-
-    .gimbal-readout {
-      font-size: 0.66rem;
-      color: var(--text-muted);
-      font-variant-numeric: tabular-nums;
-    }
-
-    .center-controls {
-      display: flex;
-      flex-direction: column;
       gap: 6px;
-      align-items: center;
+      flex-wrap: wrap;
       justify-content: center;
     }
 
-    @media (max-width: 480px) {
-      .gimbal-pad {
-        width: 132px;
-        height: 132px;
-      }
-      .gimbal-deck {
-        gap: 4px;
-      }
+    /* Slide-Over Calibration Drawer */
+    .settings-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.65);
+      z-index: 90;
+      display: none;
+      align-items: center;
+      justify-content: flex-end;
     }
 
-    /* Tuning & Config Sidebar */
-    .config-panel {
-      background: var(--bg-panel);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 12px;
+    .settings-backdrop.open {
+      display: flex;
+    }
+
+    .settings-drawer {
+      width: min(380px, 92vw);
+      height: 100dvh;
+      background: var(--bg-shell);
+      border-left: 1px solid var(--border);
+      padding: 12px 14px;
+      overflow-y: auto;
+      touch-action: pan-y;
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 10px;
     }
 
-    .panel-section {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 10px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    .section-header {
+    .drawer-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      font-size: 0.76rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
+    }
+
+    .drawer-title {
+      font-size: 0.85rem;
       font-weight: 700;
       color: var(--accent);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      border-bottom: 1px solid var(--border);
-      padding-bottom: 5px;
     }
 
-    .slider-row {
+    .config-group {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 9px;
       display: flex;
       flex-direction: column;
-      gap: 3px;
+      gap: 7px;
     }
 
-    .slider-top {
+    .group-title {
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: var(--amber);
+      text-transform: uppercase;
+    }
+
+    .slider-item {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .slider-label {
       display: flex;
       justify-content: space-between;
-      font-size: 0.71rem;
-    }
-
-    .slider-top span:first-child {
-      color: var(--text);
-    }
-
-    .slider-top span:last-child {
-      color: var(--amber);
-      font-weight: 600;
+      font-size: 0.68rem;
     }
 
     input[type="range"] {
       width: 100%;
       accent-color: var(--accent);
-      height: 5px;
-      background: #0b0f17;
-      border-radius: 4px;
+      height: 6px;
       cursor: pointer;
     }
 
-    .color-swatches {
+    .swatches {
       display: flex;
-      gap: 6px;
+      gap: 5px;
     }
 
     .swatch {
       flex: 1;
-      padding: 5px;
-      font-size: 0.68rem;
       text-align: center;
+      padding: 5px 4px;
+      font-size: 0.66rem;
       border-radius: 4px;
       border: 1px solid var(--border);
+      background: #080c12;
       cursor: pointer;
-      background: #090d14;
     }
 
     .swatch.active {
       border-color: #fff;
       font-weight: 700;
     }
-
-    .lap-list {
-      font-size: 0.72rem;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      max-height: 110px;
-      overflow-y: auto;
-    }
-
-    .lap-item {
-      display: flex;
-      justify-content: space-between;
-      padding: 3px 6px;
-      background: rgba(0, 0, 0, 0.25);
-      border-radius: 4px;
-    }
-
-    .help-footer {
-      font-size: 0.68rem;
-      color: var(--text-muted);
-      line-height: 1.45;
-    }
   </style>
 </head>
 <body>
-  <div class="app-shell">
-    <!-- Top Header -->
-    <header class="topbar">
-      <div class="brand">
-        <span class="brand-badge">128×64 1-BIT</span>
-        <span class="brand-title">FPVSim Acro Wireframe // ESP32-S3 Proto</span>
+  <div class="portrait-notice">
+    🔄 Gira el teléfono en horizontal (Landscape) para experiencia de consola FPV
+  </div>
+
+  <div class="handheld-layout">
+    <!-- Top Compact HUD Bar -->
+    <header class="hud-topbar">
+      <div class="hud-stats">
+        <span class="hud-metric">PUERTA <b id="uiGate">1/8</b></span>
+        <span class="hud-metric">TIEMPO <b id="uiLapTime" class="amber">00:00.0</b></span>
+        <span class="hud-metric">MEJOR <b id="uiBestLap" class="green">--:--.-</b></span>
+        <span class="hud-metric">VEL <b id="uiSpeed">0.0m/s</b></span>
+        <span class="hud-metric">ALT <b id="uiAlt">1.8m</b></span>
+        <span class="hud-metric">THR <b id="uiThr">42%</b></span>
       </div>
-      <div class="status-pills">
-        <div id="gamepadPill" class="pill">🎮 Gamepad: Desconectado</div>
-        <div id="fpsPill" class="pill active">⚡ 60 FPS | 1024 B</div>
-        <button id="btnResetDrone" class="btn primary" title="Reiniciar en línea de salida (Tecla R)">↺ Reset (R)</button>
-        <button id="btnFlightMode" class="btn" title="Alternar ACRO / AUTO-LEVEL">Modo: ACRO</button>
-        <button id="btnGridToggle" class="btn" title="Alternar retícula OLED">Grid OLED</button>
+
+      <div class="hud-actions">
+        <button id="btnFlightMode" class="btn-hud active" title="Alternar HORIZON (Asistido) / ACRO Puro">Modo: HORIZON</button>
+        <button id="btnCamView" class="btn-hud">🎥 FPV</button>
+        <button id="btnResetDrone" class="btn-hud">↺ Reset</button>
+        <button id="btnFullscreen" class="btn-hud">⛶ Full</button>
+        <button id="btnOpenSettings" class="btn-hud">⚙️ Ajustes</button>
       </div>
     </header>
 
-    <div class="main-grid">
-      <!-- Left Column: Handheld Console View -->
-      <section class="console-stage">
-        <div class="telemetry-strip">
-          <div class="stat-box">
-            <span class="stat-label">Puerta (Gate)</span>
-            <span id="uiGate" class="stat-value">1 / 8</span>
-          </div>
-          <div class="stat-box">
-            <span class="stat-label">Vuelta Actual</span>
-            <span id="uiLapTime" class="stat-value amber">00:00.00</span>
-          </div>
-          <div class="stat-box">
-            <span class="stat-label">Mejor Vuelta</span>
-            <span id="uiBestLap" class="stat-value green">--:--.--</span>
-          </div>
-          <div class="stat-box">
-            <span class="stat-label">Vel / Altitud</span>
-            <span id="uiSpeedAlt" class="stat-value">0.0 m/s | 1.5m</span>
-          </div>
-          <div class="stat-box">
-            <span class="stat-label">Empuje (Thr)</span>
-            <span id="uiThrottle" class="stat-value">40% (Hover)</span>
-          </div>
+    <!-- Handheld Cockpit Body: Left Stick | 128x64 OLED | Right Stick -->
+    <main class="cockpit-body">
+      <!-- Left Self-Centering Gimbal (Throttle + Yaw) -->
+      <div class="gimbal-col left">
+        <span class="gimbal-label">EMPUJE (HOVER) / YAW</span>
+        <div id="stickLeft" class="gimbal-pad">
+          <div class="gimbal-axis-h"></div>
+          <div class="gimbal-axis-v"></div>
+          <div class="gimbal-ring-outer"></div>
+          <div class="gimbal-ring-inner"></div>
+          <div id="knobLeft" class="gimbal-knob"></div>
         </div>
+        <span id="readoutLeft" class="gimbal-readout">T:+0.00 Y:+0.00</span>
+      </div>
 
-        <!-- 128x64 Native Framebuffer Display -->
-        <div class="oled-bezel">
-          <div class="oled-header">
-            <span>SSD1306 / SH1106 SPI DMA SIM</span>
-            <span id="oledResolutionInfo">VRAM: 128×64 (1024 Bytes)</span>
+      <!-- Center 128x64 Native Monochrome OLED -->
+      <div class="center-display-col">
+        <div class="oled-frame">
+          <div class="oled-bezel-top">
+            <span>ESP32-S3 // SSD1306 128×64 (1KB VRAM)</span>
+            <span id="fpsCounter">60 FPS</span>
           </div>
-          <div id="canvasContainer" class="canvas-container pixel-grid">
+          <div id="canvasContainer" class="canvas-wrap pixel-grid">
             <canvas id="oledCanvas" width="128" height="64"></canvas>
           </div>
         </div>
 
-        <!-- Dual Self-Centering Touch Gimbals (Mode 2) -->
-        <div class="gimbal-deck">
-          <div class="gimbal-wrapper">
-            <span class="gimbal-title">STICK IZQ (THR HOVER / YAW)</span>
-            <div id="stickLeft" class="gimbal-pad">
-              <div class="gimbal-crosshair-h"></div>
-              <div class="gimbal-crosshair-v"></div>
-              <div class="gimbal-ring"></div>
-              <div id="knobLeft" class="gimbal-knob"></div>
-            </div>
-            <span id="readoutLeft" class="gimbal-readout">T: +0.00 | Y: +0.00</span>
-          </div>
-
-          <div class="center-controls">
-            <button id="btnPause" class="btn">⏸ Pausa</button>
-            <button id="btnCamView" class="btn">🎥 FPV / Chase</button>
-            <button id="btnSound" class="btn">🔇 Audio Motor</button>
-          </div>
-
-          <div class="gimbal-wrapper">
-            <span class="gimbal-title">STICK DER (PITCH / ROLL)</span>
-            <div id="stickRight" class="gimbal-pad">
-              <div class="gimbal-crosshair-h"></div>
-              <div class="gimbal-crosshair-v"></div>
-              <div class="gimbal-ring"></div>
-              <div id="knobRight" class="gimbal-knob"></div>
-            </div>
-            <span id="readoutRight" class="gimbal-readout">P: +0.00 | R: +0.00</span>
-          </div>
+        <div class="quick-flight-bar">
+          <button id="btnSound" class="btn-hud">🔇 Audio Motor</button>
+          <button id="btnGridToggle" class="btn-hud active">Retícula OLED</button>
+          <span id="gamepadStatus" style="font-size:0.62rem;color:var(--text-muted);align-self:center;">
+            📱 Multitouch Activo
+          </span>
         </div>
-      </section>
+      </div>
 
-      <!-- Right Column: Live Parameter & Calibration Panel -->
-      <aside class="config-panel">
-        <!-- Color Palette / OLED Phosphor -->
-        <div class="panel-section">
-          <div class="section-header">
-            <span>Pantalla OLED 1-Bit</span>
-          </div>
-          <div class="color-swatches">
-            <div class="swatch active" data-color="#e8fcff" style="color:#e8fcff;">Blanco/Ice</div>
-            <div class="swatch" data-color="#00e5ff" style="color:#00e5ff;">Cyan SSD</div>
-            <div class="swatch" data-color="#ffb300" style="color:#ffb300;">Ámbar</div>
-            <div class="swatch" data-color="#00e676" style="color:#00e676;">Verde CRT</div>
-          </div>
+      <!-- Right Self-Centering Gimbal (Pitch + Roll) -->
+      <div class="gimbal-col right">
+        <span class="gimbal-label">PITCH (AVANCE) / ROLL</span>
+        <div id="stickRight" class="gimbal-pad">
+          <div class="gimbal-axis-h"></div>
+          <div class="gimbal-axis-v"></div>
+          <div class="gimbal-ring-outer"></div>
+          <div class="gimbal-ring-inner"></div>
+          <div id="knobRight" class="gimbal-knob"></div>
         </div>
+        <span id="readoutRight" class="gimbal-readout">P:+0.00 R:+0.00</span>
+      </div>
+    </main>
+  </div>
 
-        <!-- Physics & Camera Tuning -->
-        <div class="panel-section">
-          <div class="section-header">
-            <span>Física & Cámara FPV</span>
-            <button id="btnResetParams" class="btn" style="padding:2px 6px;font-size:0.65rem;">Por defecto</button>
-          </div>
+  <!-- Slide-over Calibration Drawer -->
+  <div id="settingsBackdrop" class="settings-backdrop">
+    <aside class="settings-drawer">
+      <div class="drawer-header">
+        <span class="drawer-title">⚙️ Calibración Física & Rates</span>
+        <button id="btnCloseSettings" class="btn-hud">✕ Cerrar</button>
+      </div>
 
-          <div class="slider-row">
-            <div class="slider-top">
-              <span>Camera Uptilt (°)</span>
-              <span id="valUptilt">25°</span>
-            </div>
-            <input id="slUptilt" type="range" min="0" max="45" step="1" value="25" />
-          </div>
+      <div class="config-group">
+        <span class="group-title">Color de Fósforo OLED 1-Bit</span>
+        <div class="swatches">
+          <div class="swatch active" data-color="#e8fcff" style="color:#e8fcff;">Blanco</div>
+          <div class="swatch" data-color="#00e5ff" style="color:#00e5ff;">Cyan</div>
+          <div class="swatch" data-color="#ffb300" style="color:#ffb300;">Ámbar</div>
+          <div class="swatch" data-color="#00e676" style="color:#00e676;">Verde</div>
+        </div>
+      </div>
 
-          <div class="slider-row">
-            <div class="slider-top">
-              <span>Hover Throttle (Centro Stick)</span>
-              <span id="valHover">40%</span>
-            </div>
-            <input id="slHover" type="range" min="25" max="60" step="1" value="40" />
-          </div>
+      <div class="config-group">
+        <span class="group-title">Cámara & Dinámica Traslacional</span>
 
-          <div class="slider-row">
-            <div class="slider-top">
-              <span>Empuje Máx (Thrust m/s²)</span>
-              <span id="valThrust">24.5</span>
-            </div>
-            <input id="slThrust" type="range" min="14" max="40" step="0.5" value="24.5" />
-          </div>
-
-          <div class="slider-row">
-            <div class="slider-top">
-              <span>Gravedad (m/s²)</span>
-              <span id="valGravity">9.81</span>
-            </div>
-            <input id="slGravity" type="range" min="4.0" max="15.0" step="0.1" value="9.81" />
-          </div>
-
-          <div class="slider-row">
-            <div class="slider-top">
-              <span>Drag Aerodinámico</span>
-              <span id="valDrag">0.18</span>
-            </div>
-            <input id="slDrag" type="range" min="0.02" max="0.60" step="0.02" value="0.18" />
-          </div>
+        <div class="slider-item">
+          <div class="slider-label"><span>Camera Uptilt (°)</span><b id="valUptilt">18°</b></div>
+          <input id="slUptilt" type="range" min="0" max="45" step="1" value="18" />
         </div>
 
-        <!-- Betaflight-style Rates & Stick Calibration -->
-        <div class="panel-section">
-          <div class="section-header">
-            <span>Rates (Acro) & Sticks</span>
-          </div>
-
-          <div class="slider-row">
-            <div class="slider-top">
-              <span>Pitch / Roll Rate (°/s)</span>
-              <span id="valRatePR">520°/s</span>
-            </div>
-            <input id="slRatePR" type="range" min="180" max="1080" step="10" value="520" />
-          </div>
-
-          <div class="slider-row">
-            <div class="slider-top">
-              <span>Yaw Rate (°/s)</span>
-              <span id="valRateYaw">400°/s</span>
-            </div>
-            <input id="slRateYaw" type="range" min="120" max="900" step="10" value="400" />
-          </div>
-
-          <div class="slider-row">
-            <div class="slider-top">
-              <span>Curva Expo</span>
-              <span id="valExpo">0.35</span>
-            </div>
-            <input id="slExpo" type="range" min="0.0" max="0.85" step="0.05" value="0.35" />
-          </div>
-
-          <div class="slider-row">
-            <div class="slider-top">
-              <span>Zona Muerta (Deadzone)</span>
-              <span id="valDeadzone">0.05</span>
-            </div>
-            <input id="slDeadzone" type="range" min="0.00" max="0.25" step="0.01" value="0.05" />
-          </div>
+        <div class="slider-item">
+          <div class="slider-label"><span>Empuje Máx (m/s²)</span><b id="valThrust">23.4</b></div>
+          <input id="slThrust" type="range" min="15" max="38" step="0.2" value="23.4" />
         </div>
 
-        <!-- Lap History -->
-        <div class="panel-section">
-          <div class="section-header">
-            <span>Cronómetro de Circuito</span>
-          </div>
-          <div id="lapHistory" class="lap-list">
-            <div class="lap-item"><span>Atraviesa la Puerta 1 para iniciar</span><span>--:--</span></div>
-          </div>
+        <div class="slider-item">
+          <div class="slider-label"><span>Gravedad (m/s²)</span><b id="valGravity">9.81</b></div>
+          <input id="slGravity" type="range" min="4.0" max="15.0" step="0.1" value="9.81" />
         </div>
 
-        <div class="help-footer">
-          <strong>Controles:</strong><br/>
-          • <strong>Smartphone:</strong> Usa los 2 joysticks táctiles multitouch con retorno al centro (Hover en centro).<br/>
-          • <strong>Gamepad USB/BT:</strong> Conecta mando estándar (Modo 2).<br/>
-          • <strong>Teclado:</strong> W/S (Empuje), A/D (Yaw), Flechas (Pitch/Roll), R (Reset), M (Modo Acro/Level).
+        <div class="slider-item">
+          <div class="slider-label"><span>Amortiguamiento (Drag)</span><b id="valDrag">0.24</b></div>
+          <input id="slDrag" type="range" min="0.05" max="0.60" step="0.01" value="0.24" />
         </div>
-      </aside>
-    </div>
+      </div>
+
+      <div class="config-group">
+        <span class="group-title">Sensibilidad de Sticks (Touch / Gamepad)</span>
+
+        <div class="slider-item">
+          <div class="slider-label"><span>Rate Pitch / Roll (°/s)</span><b id="valRatePR">260°/s</b></div>
+          <input id="slRatePR" type="range" min="100" max="800" step="10" value="260" />
+        </div>
+
+        <div class="slider-item">
+          <div class="slider-label"><span>Rate Yaw (°/s)</span><b id="valRateYaw">180°/s</b></div>
+          <input id="slRateYaw" type="range" min="80" max="600" step="10" value="180" />
+        </div>
+
+        <div class="slider-item">
+          <div class="slider-label"><span>Curva Expo</span><b id="valExpo">0.45</b></div>
+          <input id="slExpo" type="range" min="0.0" max="0.85" step="0.05" value="0.45" />
+        </div>
+
+        <div class="slider-item">
+          <div class="slider-label"><span>Zona Muerta (Deadzone)</span><b id="valDeadzone">0.06</b></div>
+          <input id="slDeadzone" type="range" min="0.00" max="0.25" step="0.01" value="0.06" />
+        </div>
+      </div>
+
+      <button id="btnResetParams" class="btn-hud" style="padding:8px;text-align:center;">
+        Restaurar Valores Recomendados
+      </button>
+    </aside>
   </div>
 
   <script>
     /***************************************************************************
-     * ARQUITECTURA PORTABLE A C/C++ (ESP32-S3)
-     * - Framebuffer estático de 1024 bytes (128x64 bits, 1 bit por píxel)
-     * - Estructuras planas Vec3, Quat, Mat3, Gate3D
-     * - Rasterizador entero Bresenham + Near-plane clipping (Z > 0.1)
+     * 1. FRAMEBUFFER ESTÁTICO DE 1.024 BYTES (128x64 1-BIT MONOCROMÁTICO)
      ***************************************************************************/
-
     const SCREEN_W = 128;
     const SCREEN_H = 64;
-    const FB_BYTES = (SCREEN_W * SCREEN_H) >> 3; // 1024 bytes exactos (1 KB)
-
-    // Framebuffer estático de 1 KB (idéntico al buffer DMA de SSD1306/SH1106 en ESP32-S3)
+    const FB_BYTES = 1024;
     const frameBuffer = new Uint8Array(FB_BYTES);
 
-    // Canvas de salida (128x64 nativo)
     const canvas = document.getElementById('oledCanvas');
     const ctx = canvas.getContext('2d', { alpha: false });
     const imgData = ctx.createImageData(SCREEN_W, SCREEN_H);
     const rgbaPixels = imgData.data;
 
-    // Color de fósforo OLED configurable
     let oledColorRGB = { r: 232, g: 252, b: 255 };
-    const oledBgRGB = { r: 5, g: 8, b: 12 };
+    const oledBgRGB = { r: 4, g: 7, b: 11 };
 
-    // Operaciones a nivel de bit sobre el Framebuffer de 1024 bytes
     function fbClear() {
       frameBuffer.fill(0);
     }
@@ -717,12 +611,7 @@
       frameBuffer[bitIndex >> 3] |= (1 << (bitIndex & 7));
     }
 
-    function fbGetPixel(x, y) {
-      const bitIndex = (y << 7) + x;
-      return (frameBuffer[bitIndex >> 3] >> (bitIndex & 7)) & 1;
-    }
-
-    // Algoritmo de Bresenham entero con Cohen-Sutherland 2D clipping para 128x64
+    // Cohen-Sutherland 2D Line Clipping + Bresenham Entero
     const CLIP_LEFT = 1, CLIP_RIGHT = 2, CLIP_BOTTOM = 4, CLIP_TOP = 8;
     function computeOutCode(x, y) {
       let code = 0;
@@ -734,53 +623,40 @@
     }
 
     function fbDrawLine(x0, y0, x1, y1) {
-      let outcode0 = computeOutCode(x0, y0);
-      let outcode1 = computeOutCode(x1, y1);
+      let out0 = computeOutCode(x0, y0);
+      let out1 = computeOutCode(x1, y1);
       let accept = false;
 
       while (true) {
-        if (!(outcode0 | outcode1)) {
-          accept = true;
-          break;
-        } else if (outcode0 & outcode1) {
-          break;
-        } else {
+        if (!(out0 | out1)) { accept = true; break; }
+        else if (out0 & out1) { break; }
+        else {
           let x = 0, y = 0;
-          const outcodeOut = outcode0 ? outcode0 : outcode1;
-          if (outcodeOut & CLIP_BOTTOM) {
+          const out = out0 ? out0 : out1;
+          if (out & CLIP_BOTTOM) {
             x = x0 + (x1 - x0) * (SCREEN_H - 1 - y0) / (y1 - y0);
             y = SCREEN_H - 1;
-          } else if (outcodeOut & CLIP_TOP) {
+          } else if (out & CLIP_TOP) {
             x = x0 + (x1 - x0) * (0 - y0) / (y1 - y0);
             y = 0;
-          } else if (outcodeOut & CLIP_RIGHT) {
+          } else if (out & CLIP_RIGHT) {
             y = y0 + (y1 - y0) * (SCREEN_W - 1 - x0) / (x1 - x0);
             x = SCREEN_W - 1;
-          } else if (outcodeOut & CLIP_LEFT) {
+          } else if (out & CLIP_LEFT) {
             y = y0 + (y1 - y0) * (0 - x0) / (x1 - x0);
             x = 0;
           }
-          if (outcodeOut === outcode0) {
-            x0 = x; y0 = y;
-            outcode0 = computeOutCode(x0, y0);
-          } else {
-            x1 = x; y1 = y;
-            outcode1 = computeOutCode(x1, y1);
-          }
+          if (out === out0) { x0 = x; y0 = y; out0 = computeOutCode(x0, y0); }
+          else { x1 = x; y1 = y; out1 = computeOutCode(x1, y1); }
         }
       }
 
       if (!accept) return;
 
-      let ix0 = x0 | 0;
-      let iy0 = y0 | 0;
-      const ix1 = x1 | 0;
-      const iy1 = y1 | 0;
-
-      const dx = Math.abs(ix1 - ix0);
-      const sx = ix0 < ix1 ? 1 : -1;
-      const dy = -Math.abs(iy1 - iy0);
-      const sy = iy0 < iy1 ? 1 : -1;
+      let ix0 = x0 | 0, iy0 = y0 | 0;
+      const ix1 = x1 | 0, iy1 = y1 | 0;
+      const dx = Math.abs(ix1 - ix0), sx = ix0 < ix1 ? 1 : -1;
+      const dy = -Math.abs(iy1 - iy0), sy = iy0 < iy1 ? 1 : -1;
       let err = dx + dy;
 
       while (true) {
@@ -792,7 +668,6 @@
       }
     }
 
-    // Línea punteada (para suelo o indicadores)
     function fbDrawDashedLine(x0, y0, x1, y1, mask) {
       let ix0 = x0 | 0, iy0 = y0 | 0, ix1 = x1 | 0, iy1 = y1 | 0;
       if ((ix0 < 0 && ix1 < 0) || (ix0 >= SCREEN_W && ix1 >= SCREEN_W) ||
@@ -806,62 +681,41 @@
         const e2 = err << 1;
         if (e2 >= dy) { err += dy; ix0 += sx; }
         if (e2 <= dx) { err += dx; iy0 += sy; }
-        step++;
-        if (step > 256) break;
+        if (++step > 256) break;
       }
     }
 
-    // Mini fuente bitmap 3x5 para OSD en el framebuffer 1-bit
     const FONT_3X5 = {
-      '0': [0b111, 0b101, 0b101, 0b101, 0b111],
-      '1': [0b010, 0b110, 0b010, 0b010, 0b111],
-      '2': [0b111, 0b001, 0b111, 0b100, 0b111],
-      '3': [0b111, 0b001, 0b111, 0b001, 0b111],
-      '4': [0b101, 0b101, 0b111, 0b001, 0b001],
-      '5': [0b111, 0b100, 0b111, 0b001, 0b111],
-      '6': [0b111, 0b100, 0b111, 0b101, 0b111],
-      '7': [0b111, 0b001, 0b001, 0b010, 0b010],
-      '8': [0b111, 0b101, 0b111, 0b101, 0b111],
-      '9': [0b111, 0b101, 0b111, 0b001, 0b111],
-      'A': [0b010, 0b101, 0b111, 0b101, 0b101],
-      'C': [0b111, 0b100, 0b100, 0b100, 0b111],
-      'G': [0b111, 0b100, 0b101, 0b101, 0b111],
-      'L': [0b100, 0b100, 0b100, 0b100, 0b111],
-      'M': [0b101, 0b111, 0b101, 0b101, 0b101],
-      'R': [0b110, 0b101, 0b110, 0b101, 0b101],
-      'T': [0b111, 0b010, 0b010, 0b010, 0b010],
-      'V': [0b101, 0b101, 0b101, 0b101, 0b010],
-      ':': [0b000, 0b010, 0b000, 0b010, 0b000],
-      '.': [0b000, 0b000, 0b000, 0b000, 0b010],
-      '/': [0b001, 0b001, 0b010, 0b100, 0b100],
-      '-': [0b000, 0b000, 0b111, 0b000, 0b000]
+      '0': [7,5,5,5,7], '1': [2,6,2,2,7], '2': [7,1,7,4,7], '3': [7,1,7,1,7],
+      '4': [5,5,7,1,1], '5': [7,4,7,1,7], '6': [7,4,7,5,7], '7': [7,1,1,2,2],
+      '8': [7,5,7,5,7], '9': [7,5,7,1,7], 'A': [2,5,7,5,5], 'C': [7,4,4,4,7],
+      'G': [7,4,5,5,7], 'H': [5,5,7,5,5], 'L': [4,4,4,4,7], 'R': [6,5,6,5,5],
+      'V': [5,5,5,5,2], '/': [1,1,2,4,4], ':': [0,2,0,2,0]
     };
 
     function fbDrawText(str, x, y) {
       let cx = x | 0;
       const cy = y | 0;
       for (let i = 0; i < str.length; i++) {
-        const glyph = FONT_3X5[str[i]];
-        if (glyph) {
+        const g = FONT_3X5[str[i]];
+        if (g) {
           for (let r = 0; r < 5; r++) {
-            const rowBits = glyph[r];
-            if (rowBits & 4) fbSetPixel(cx, cy + r);
-            if (rowBits & 2) fbSetPixel(cx + 1, cy + r);
-            if (rowBits & 1) fbSetPixel(cx + 2, cy + r);
+            const b = g[r];
+            if (b & 4) fbSetPixel(cx, cy + r);
+            if (b & 2) fbSetPixel(cx + 1, cy + r);
+            if (b & 1) fbSetPixel(cx + 2, cy + r);
           }
         }
         cx += 4;
       }
     }
 
-    // Volcado del Framebuffer de 1 KB al Canvas HTML5
     function fbPresentToCanvas() {
       let pIdx = 0;
       for (let byteIdx = 0; byteIdx < FB_BYTES; byteIdx++) {
         const b = frameBuffer[byteIdx];
         for (let bit = 0; bit < 8; bit++) {
-          const on = (b >> bit) & 1;
-          if (on) {
+          if ((b >> bit) & 1) {
             rgbaPixels[pIdx]     = oledColorRGB.r;
             rgbaPixels[pIdx + 1] = oledColorRGB.g;
             rgbaPixels[pIdx + 2] = oledColorRGB.b;
@@ -879,50 +733,47 @@
     }
 
     /***************************************************************************
-     * MATEMÁTICA 3D Y FÍSICA DE VUELO ACRO (Estructuras Planas)
+     * 2. MODELO FÍSICO DE VUELO (CONVENCIÓN ESTÁNDAR +X DERECHA, +Y ARRIBA, +Z FRENTE)
      ***************************************************************************/
     const DEG2RAD = Math.PI / 180.0;
     const NEAR_Z = 0.15;
-    const FOCAL_LEN = 72.0; // FOV optimizado para 128x64
+    const FOCAL_LEN = 70.0;
 
-    // Parámetros configurables en tiempo real
+    // FlightMode: 'HORIZON' (Híbrido intuitivo en pantalla táctil: auto-estabiliza en el centro y permite flips en los extremos)
+    //             'ACRO'    (Tasas angulares puras tipo Betaflight)
     const simConfig = {
-      camUptiltDeg: 25.0,
-      hoverThrottle: 0.40,
-      maxThrustAccel: 24.5,
+      camUptiltDeg: 18.0,
+      maxThrustAccel: 23.4, // Hover exacto a ~42% de empuje (9.81 / 23.4 = 0.419)
       gravity: 9.81,
-      dragLinear: 0.18,
-      dragQuad: 0.015,
-      ratePitchRoll: 520.0, // deg/s
-      rateYaw: 400.0,       // deg/s
-      expo: 0.35,
-      deadzone: 0.05,
-      autoLevel: false,
+      dragLinear: 0.24,
+      dragQuad: 0.018,
+      ratePitchRoll: 260.0,
+      rateYaw: 180.0,
+      expo: 0.45,
+      deadzone: 0.06,
+      mode: 'HORIZON',
       chaseCam: false
     };
 
-    // Estado del cuadricóptero
     const drone = {
-      px: 0.0, py: 1.6, pz: -8.0,
+      px: 0.0, py: 2.0, pz: -10.0,
       vx: 0.0, vy: 0.0, vz: 0.0,
-      // Cuaternión de orientación del cuerpo respecto al mundo (x, y, z, w)
       qx: 0.0, qy: 0.0, qz: 0.0, qw: 1.0,
-      throttleCmd: 0.40,
-      prevPx: 0.0, prevPy: 1.6, prevPz: -8.0
+      throttleCmd: 0.42,
+      prevPx: 0.0, prevPy: 2.0, prevPz: -10.0
     };
 
     function quatNormalize(q) {
-      const mag = Math.hypot(q.qx, q.qy, q.qz, q.qw) || 1.0;
-      q.qx /= mag; q.qy /= mag; q.qz /= mag; q.qw /= mag;
+      const m = Math.hypot(q.qx, q.qy, q.qz, q.qw) || 1.0;
+      q.qx /= m; q.qy /= m; q.qz /= m; q.qw /= m;
     }
 
-    // Integración de velocidades angulares locales (wx, wy, wz en rad/s) sobre el cuaternión
     function quatIntegrateBodyRates(q, wx, wy, wz, dt) {
       const hx = 0.5 * wx * dt;
       const hy = 0.5 * wy * dt;
       const hz = 0.5 * wz * dt;
-
       const dqW = 1.0 - 0.5 * (hx * hx + hy * hy + hz * hz);
+
       const nqx = q.qw * hx + q.qy * hz - q.qz * hy;
       const nqy = q.qw * hy + q.qz * hx - q.qx * hz;
       const nqz = q.qw * hz + q.qx * hy - q.qy * hx;
@@ -932,7 +783,6 @@
       quatNormalize(q);
     }
 
-    // Convierte cuaternión a matriz de rotación 3x3 (columnas: Right, Up, Forward en espacio mundo)
     const bodyMat = new Float32Array(9);
     function quatToMatrix(q, out) {
       const x = q.qx, y = q.qy, z = q.qz, w = q.qw;
@@ -941,27 +791,27 @@
       const yy = y * y2, yz = y * z2, zz = z * z2;
       const wx = w * x2, wy = w * y2, wz = w * z2;
 
-      // Columna 0: Eje X local (+Right)
+      // Columna 0: Right (+X local)
       out[0] = 1.0 - (yy + zz);
       out[1] = xy + wz;
       out[2] = xz - wy;
 
-      // Columna 1: Eje Y local (+Up / vector de empuje del dron)
+      // Columna 1: Up (+Y local / Vector de Empuje)
       out[3] = xy - wz;
       out[4] = 1.0 - (xx + zz);
       out[5] = yz + wx;
 
-      // Columna 2: Eje Z local (+Forward)
+      // Columna 2: Forward (+Z local / Nariz del dron)
       out[6] = xz + wy;
       out[7] = yz - wx;
       out[8] = 1.0 - (xx + yy);
     }
 
     /***************************************************************************
-     * ESCENARIO 3D WIREFRAME: CUADRÍCULA, PUERTAS NUMERADAS Y PILARES
+     * 3. CIRCUITO 3D WIREFRAME DE 8 PUERTAS + CRONÓMETRO
      ***************************************************************************/
-    const worldLines = []; // { x0,y0,z0, x1,y1,z1, dashed }
-    const gates = [];      // { cx, cy, cz, nx, ny, nz, width, height, corners: [] }
+    const worldLines = [];
+    const gates = [];
 
     function addLine(x0, y0, z0, x1, y1, z1, dashed = false) {
       worldLines.push({ x0, y0, z0, x1, y1, z1, dashed });
@@ -971,7 +821,7 @@
       worldLines.length = 0;
       gates.length = 0;
 
-      // 1. Cuadrícula de suelo de referencia (optimizada para claridad en 128x64)
+      // Cuadrícula de suelo de referencia
       const gridRange = 70;
       const gridStep = 10;
       for (let i = -gridRange; i <= gridRange; i += gridStep) {
@@ -979,139 +829,89 @@
         addLine(-gridRange, 0, i, gridRange, 0, i, true);
       }
 
-      // Pista central de salida
-      addLine(-2.2, 0.02, -6, 2.2, 0.02, -6, false);
-      addLine(-2.2, 0.02, -10, 2.2, 0.02, -10, false);
-      addLine(-2.2, 0.02, -10, -2.2, 0.02, -6, false);
-      addLine(2.2, 0.02, -10, 2.2, 0.02, -6, false);
+      // Helipuerto de salida
+      addLine(-2, 0.02, -8,  2, 0.02, -8, false);
+      addLine(-2, 0.02, -12, 2, 0.02, -12, false);
+      addLine(-2, 0.02, -12, -2, 0.02, -8, false);
+      addLine( 2, 0.02, -12,  2, 0.02, -8, false);
 
-      // 2. Circuito ovalado técnico de 8 puertas (posiciones X, Y, Z y ángulo Yaw en grados)
+      // 8 Puertas amplias para vuelo fluido en móvil
       const gateDefs = [
-        { x:   0, y: 2.2, z:  10, yaw:   0, w: 4.4, h: 3.6 },
-        { x:   4, y: 3.0, z:  28, yaw:  22, w: 4.4, h: 3.6 },
-        { x:  22, y: 3.8, z:  42, yaw:  65, w: 4.4, h: 3.6 },
-        { x:  40, y: 2.5, z:  28, yaw: 135, w: 4.4, h: 3.6 },
-        { x:  36, y: 2.2, z:   2, yaw: 195, w: 4.4, h: 3.6 },
-        { x:  18, y: 4.2, z: -20, yaw: 230, w: 4.4, h: 3.6 },
-        { x:  -8, y: 2.8, z: -30, yaw: 285, w: 4.4, h: 3.6 },
-        { x: -14, y: 2.2, z: -10, yaw: 335, w: 4.4, h: 3.6 }
+        { x:   0, y: 2.5, z:   8, yaw:   0, w: 5.2, h: 4.2 },
+        { x:   5, y: 3.0, z:  26, yaw:  22, w: 5.2, h: 4.2 },
+        { x:  22, y: 3.5, z:  40, yaw:  65, w: 5.2, h: 4.2 },
+        { x:  40, y: 2.6, z:  26, yaw: 135, w: 5.2, h: 4.2 },
+        { x:  36, y: 2.4, z:   0, yaw: 195, w: 5.2, h: 4.2 },
+        { x:  18, y: 3.8, z: -20, yaw: 230, w: 5.2, h: 4.2 },
+        { x:  -8, y: 2.8, z: -28, yaw: 285, w: 5.2, h: 4.2 },
+        { x: -12, y: 2.4, z:  -8, yaw: 335, w: 5.2, h: 4.2 }
       ];
 
       for (let i = 0; i < gateDefs.length; i++) {
         const gd = gateDefs[i];
         const rad = gd.yaw * DEG2RAD;
-        const cosY = Math.cos(rad);
-        const sinY = Math.sin(rad);
-
-        // Vector lateral de la puerta y normal de avance
+        const cosY = Math.cos(rad), sinY = Math.sin(rad);
         const rx = cosY, rz = -sinY;
         const nx = sinY, nz = cosY;
-        const hw = gd.w * 0.5;
-        const hh = gd.h * 0.5;
+        const hw = gd.w * 0.5, hh = gd.h * 0.5;
 
         const xL = gd.x - rx * hw, zL = gd.z - rz * hw;
         const xR = gd.x + rx * hw, zR = gd.z + rz * hw;
         const yBot = Math.max(0.0, gd.y - hh);
         const yTop = gd.y + hh;
 
-        // Soportes hasta el suelo
         if (yBot > 0.05) {
           addLine(xL, 0, zL, xL, yBot, zL, false);
           addLine(xR, 0, zR, xR, yBot, zR, false);
         }
 
         gates.push({
-          index: i,
-          cx: gd.x, cy: gd.y, cz: gd.z,
-          nx, ny: 0, nz,
-          rx, rz,
-          hw, hh,
-          xL, zL, xR, zR, yBot, yTop
+          index: i, cx: gd.x, cy: gd.y, cz: gd.z,
+          nx, nz, rx, rz, hw, hh, xL, zL, xR, zR, yBot, yTop
         });
-      }
-
-      // 3. Torres/pilares de referencia espacial en el campo
-      const pylons = [
-        { x: 14, z: 14, h: 9 },
-        { x: 25, z: 16, h: 11 },
-        { x: -16, z: 18, h: 8 },
-        { x: 8, z: -12, h: 8 }
-      ];
-      for (const p of pylons) {
-        const s = 0.8;
-        addLine(p.x - s, 0, p.z - s, p.x - s, p.h, p.z - s);
-        addLine(p.x + s, 0, p.z - s, p.x + s, p.h, p.z - s);
-        addLine(p.x + s, 0, p.z + s, p.x + s, p.h, p.z + s);
-        addLine(p.x - s, 0, p.z + s, p.x - s, p.h, p.z + s);
-        addLine(p.x - s, p.h, p.z - s, p.x + s, p.h, p.z - s);
-        addLine(p.x + s, p.h, p.z - s, p.x + s, p.h, p.z + s);
-        addLine(p.x + s, p.h, p.z + s, p.x - s, p.h, p.z + s);
-        addLine(p.x - s, p.h, p.z + s, p.x - s, p.h, p.z - s);
       }
     }
 
     buildCircuitGeometry();
 
-    /***************************************************************************
-     * CRONÓMETRO Y DETECCIÓN DE PASO POR PUERTAS
-     ***************************************************************************/
     let activeGateIdx = 0;
     let lapRunning = false;
     let lapStartTime = 0;
-    let currentLapMs = 0;
     let bestLapMs = null;
-    let lapCount = 0;
     let gateFlashTimer = 0;
 
-    function formatTimeMs(ms) {
+    function formatTimeShort(ms) {
       const totalSec = ms / 1000;
       const mins = Math.floor(totalSec / 60);
-      const secs = (totalSec % 60).toFixed(2).padStart(5, '0');
+      const secs = (totalSec % 60).toFixed(1).padStart(4, '0');
       return `${String(mins).padStart(2, '0')}:${secs}`;
-    }
-
-    function recordLapTime(ms) {
-      lapCount++;
-      if (bestLapMs === null || ms < bestLapMs) {
-        bestLapMs = ms;
-        document.getElementById('uiBestLap').textContent = formatTimeMs(bestLapMs);
-      }
-      const hist = document.getElementById('lapHistory');
-      if (lapCount === 1) hist.innerHTML = '';
-      const row = document.createElement('div');
-      row.className = 'lap-item';
-      row.innerHTML = `<span>Vuelta #${lapCount}</span><span style="color:var(--green);font-weight:700;">${formatTimeMs(ms)}</span>`;
-      hist.prepend(row);
     }
 
     function checkGateCrossing() {
       const g = gates[activeGateIdx];
-      // Vector desde el centro de la puerta a la posición previa y actual
       const d0x = drone.prevPx - g.cx, d0y = drone.prevPy - g.cy, d0z = drone.prevPz - g.cz;
       const d1x = drone.px - g.cx,     d1y = drone.py - g.cy,     d1z = drone.pz - g.cz;
 
       const side0 = d0x * g.nx + d0z * g.nz;
       const side1 = d1x * g.nx + d1z * g.nz;
 
-      // Si cruzó el plano de la puerta en dirección de avance
       if (side0 <= 0 && side1 > 0) {
-        const denom = (side0 - side1) || 1e-5;
-        const t = side0 / denom;
+        const t = side0 / ((side0 - side1) || 1e-5);
         const ix = d0x + (d1x - d0x) * t;
         const iy = d0y + (d1y - d0y) * t;
         const iz = d0z + (d1z - d0z) * t;
 
-        const lateralDist = Math.abs(ix * g.rx + iz * g.rz);
-        const vertDist = Math.abs(iy);
-
-        if (lateralDist <= g.hw * 1.15 && vertDist <= g.hh * 1.15) {
+        if (Math.abs(ix * g.rx + iz * g.rz) <= g.hw * 1.25 && Math.abs(iy) <= g.hh * 1.25) {
           gateFlashTimer = 0.28;
-          playGateBeep(activeGateIdx === 0 ? 980 : 720);
-
+          playGateBeep(activeGateIdx === 0 ? 980 : 740);
           if (activeGateIdx === 0) {
             const now = performance.now();
             if (lapRunning) {
-              recordLapTime(now - lapStartTime);
+              const lapMs = now - lapStartTime;
+              if (bestLapMs === null || lapMs < bestLapMs) {
+                bestLapMs = lapMs;
+                document.getElementById('uiBestLap').textContent = formatTimeShort(bestLapMs);
+              }
             }
             lapStartTime = now;
             lapRunning = true;
@@ -1122,96 +922,135 @@
     }
 
     /***************************************************************************
-     * ENTRADAS: TOUCH GIMBALS, GAMEPAD API Y TECLADO (Con Deadzone & Expo)
+     * 4. MULTITOUCH FLOATING GIMBALS (ORIGEN FLOTANTE EN EL PRIMER TOQUE)
+     *    - En cuanto tocas cualquier parte del pad, ese punto es el (0,0) neutral
+     *    - Arrastrar desde ahí produce respuesta inmediata y suave sin saltos
+     *    - Al soltar el dedo, el muelle regresa automáticamente a (0,0) (Hover)
      ***************************************************************************/
-    const rawStick = {
-      leftX: 0.0,  // Yaw (-1..+1)
-      leftY: 0.0,  // Throttle centrado en 0 (-1..+1, muelles autocentrados)
-      rightX: 0.0, // Roll (-1..+1)
-      rightY: 0.0  // Pitch (-1..+1)
-    };
+    let touchLeftX = 0, touchLeftY = 0;
+    let touchRightX = 0, touchRightY = 0;
 
-    const keyState = {};
-    window.addEventListener('keydown', (e) => {
-      keyState[e.code] = true;
-      if (e.code === 'KeyR') resetDrone();
-      if (e.code === 'KeyM') toggleFlightMode();
-    });
-    window.addEventListener('keyup', (e) => {
-      keyState[e.code] = false;
-    });
+    function attachFloatingTouchGimbal(padEl, knobEl, onUpdate) {
+      let activeTouchId = null;
+      let originX = 0;
+      let originY = 0;
 
-    // Soporte Multitouch para ambos sticks virtuales en pantalla
-    function setupTouchGimbal(padEl, knobEl, onMove) {
-      let activePointerId = null;
-
-      function updateFromClientXY(clientX, clientY) {
+      function handleDelta(clientX, clientY) {
         const rect = padEl.getBoundingClientRect();
-        const cx = rect.left + rect.width * 0.5;
-        const cy = rect.top + rect.height * 0.5;
-        const maxR = rect.width * 0.40;
+        const maxRadius = Math.max(36, rect.width * 0.36);
 
-        const dx = clientX - cx;
-        const dy = clientY - cy;
+        const dx = clientX - originX;
+        const dy = clientY - originY;
 
-        const nx = Math.max(-1, Math.min(1, dx / maxR));
-        const ny = Math.max(-1, Math.min(1, -dy / maxR)); // +1 arriba
+        // Limitar dentro de círculo unitario para evitar saturación diagonal brusca
+        const dist = Math.hypot(dx, dy);
+        const clampDist = Math.min(dist, maxRadius);
+        const scale = dist > 0.001 ? (clampDist / dist) : 0.0;
 
-        knobEl.style.left = `${50 + nx * 38}%`;
-        knobEl.style.top  = `${50 - ny * 38}%`;
-        onMove(nx, ny);
+        const nx = (dx * scale) / maxRadius;
+        const ny = (-dy * scale) / maxRadius; // +1 hacia arriba
+
+        knobEl.style.left = `${50 + nx * 36}%`;
+        knobEl.style.top  = `${50 - ny * 36}%`;
+        onUpdate(nx, ny);
       }
 
-      function resetKnob() {
-        activePointerId = null;
+      function releaseStick() {
+        activeTouchId = null;
+        padEl.classList.remove('engaged');
         knobEl.style.left = '50%';
         knobEl.style.top  = '50%';
-        onMove(0, 0);
+        onUpdate(0.0, 0.0);
       }
 
-      padEl.addEventListener('pointerdown', (e) => {
+      // Touch Events nativos con seguimiento por identifier (Multitouch independiente)
+      padEl.addEventListener('touchstart', (e) => {
         e.preventDefault();
-        activePointerId = e.pointerId;
-        padEl.setPointerCapture(e.pointerId);
-        updateFromClientXY(e.clientX, e.clientY);
-      });
+        if (activeTouchId !== null) return;
+        const t = e.changedTouches[0];
+        activeTouchId = t.identifier;
+        originX = t.clientX;
+        originY = t.clientY;
+        padEl.classList.add('engaged');
+        handleDelta(t.clientX, t.clientY);
+      }, { passive: false });
 
-      padEl.addEventListener('pointermove', (e) => {
-        if (e.pointerId !== activePointerId) return;
+      padEl.addEventListener('touchmove', (e) => {
         e.preventDefault();
-        updateFromClientXY(e.clientX, e.clientY);
+        if (activeTouchId === null) return;
+        for (let i = 0; i < e.changedTouches.length; i++) {
+          const t = e.changedTouches[i];
+          if (t.identifier === activeTouchId) {
+            handleDelta(t.clientX, t.clientY);
+            break;
+          }
+        }
+      }, { passive: false });
+
+      padEl.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        for (let i = 0; i < e.changedTouches.length; i++) {
+          if (e.changedTouches[i].identifier === activeTouchId) {
+            releaseStick();
+            break;
+          }
+        }
+      }, { passive: false });
+
+      padEl.addEventListener('touchcancel', (e) => {
+        e.preventDefault();
+        releaseStick();
+      }, { passive: false });
+
+      // Soporte para Mouse en PC
+      let mouseDown = false;
+      padEl.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        mouseDown = true;
+        originX = e.clientX;
+        originY = e.clientY;
+        padEl.classList.add('engaged');
+        handleDelta(e.clientX, e.clientY);
       });
 
-      padEl.addEventListener('pointerup', (e) => {
-        if (e.pointerId !== activePointerId) return;
-        resetKnob();
+      window.addEventListener('mousemove', (e) => {
+        if (!mouseDown) return;
+        handleDelta(e.clientX, e.clientY);
       });
 
-      padEl.addEventListener('pointercancel', (e) => {
-        if (e.pointerId !== activePointerId) return;
-        resetKnob();
+      window.addEventListener('mouseup', () => {
+        if (!mouseDown) return;
+        mouseDown = false;
+        releaseStick();
       });
     }
 
     const knobLeftEl = document.getElementById('knobLeft');
     const knobRightEl = document.getElementById('knobRight');
 
-    let touchLeftX = 0, touchLeftY = 0;
-    let touchRightX = 0, touchRightY = 0;
-
-    setupTouchGimbal(
+    attachFloatingTouchGimbal(
       document.getElementById('stickLeft'),
       knobLeftEl,
       (x, y) => { touchLeftX = x; touchLeftY = y; }
     );
 
-    setupTouchGimbal(
+    attachFloatingTouchGimbal(
       document.getElementById('stickRight'),
       knobRightEl,
       (x, y) => { touchRightX = x; touchRightY = y; }
     );
 
-    // Aplicación de Deadzone y Curva Expo tipo Betaflight
+    const keyState = {};
+    window.addEventListener('keydown', (e) => {
+      keyState[e.code] = true;
+      if (e.code === 'KeyR') resetDrone();
+    });
+    window.addEventListener('keyup', (e) => {
+      keyState[e.code] = false;
+    });
+
+    const rawStick = { leftX: 0, leftY: 0, rightX: 0, rightY: 0 };
+
     function applyDeadzoneAndExpo(val, dz, expo) {
       const absV = Math.abs(val);
       if (absV <= dz) return 0.0;
@@ -1220,93 +1059,66 @@
       return sign * ((1.0 - expo) * norm + expo * norm * norm * norm);
     }
 
-    // Mapeo de mando autocentrado para el acelerador:
-    // stickY = 0.0 -> hoverThrottle (~40%)
-    // stickY > 0.0 -> interpola hacia 100%
-    // stickY < 0.0 -> interpola hacia 0% (corte de motores)
-    function mapSelfCenteringThrottle(stickY) {
-      const dz = simConfig.deadzone;
-      if (Math.abs(stickY) <= dz) return simConfig.hoverThrottle;
-      if (stickY > 0) {
-        const t = (stickY - dz) / (1.0 - dz);
-        return simConfig.hoverThrottle + t * (1.0 - simConfig.hoverThrottle);
-      } else {
-        const t = (-stickY - dz) / (1.0 - dz);
-        return simConfig.hoverThrottle * (1.0 - t);
-      }
-    }
-
     function pollInputs() {
       let lx = touchLeftX;
       let ly = touchLeftY;
       let rx = touchRightX;
       let ry = touchRightY;
 
-      // Lectura de Gamepad físico vía Gamepad API
       const pads = navigator.getGamepads ? navigator.getGamepads() : [];
-      let gpConnected = false;
+      let gpActive = false;
       for (let i = 0; i < pads.length; i++) {
         const gp = pads[i];
         if (gp && gp.connected) {
-          gpConnected = true;
+          gpActive = true;
           const gLx = gp.axes[0] || 0;
           const gLy = -(gp.axes[1] || 0);
           const gRx = gp.axes[2] || 0;
           const gRy = -(gp.axes[3] || 0);
-
           if (Math.abs(gLx) > Math.abs(lx)) lx = gLx;
           if (Math.abs(gLy) > Math.abs(ly)) ly = gLy;
           if (Math.abs(gRx) > Math.abs(rx)) rx = gRx;
           if (Math.abs(gRy) > Math.abs(ry)) ry = gRy;
-
-          // Botón 0 (A/Cross) o Start para resetear dron
           if (gp.buttons[0] && gp.buttons[0].pressed) resetDrone();
           break;
         }
       }
 
-      const gpPill = document.getElementById('gamepadPill');
-      if (gpConnected) {
-        gpPill.textContent = '🎮 Gamepad: Activo';
-        gpPill.classList.add('active');
-      } else {
-        gpPill.textContent = '🎮 Gamepad: Táctil / Teclado';
-        gpPill.classList.remove('active');
-      }
+      document.getElementById('gamepadStatus').textContent =
+        gpActive ? '🎮 Gamepad Conectado' : '📱 Multitouch Activo';
 
-      // Teclado como respaldo
-      if (keyState['KeyW']) ly = 0.85;
-      if (keyState['KeyS']) ly = -0.85;
-      if (keyState['KeyA']) lx = -0.75;
-      if (keyState['KeyD']) lx = 0.75;
-      if (keyState['ArrowUp'])    ry = 0.75;
-      if (keyState['ArrowDown'])  ry = -0.75;
-      if (keyState['ArrowLeft'])  rx = -0.75;
-      if (keyState['ArrowRight']) rx = 0.75;
+      if (keyState['KeyW']) ly = 0.80;
+      if (keyState['KeyS']) ly = -0.80;
+      if (keyState['KeyA']) lx = -0.70;
+      if (keyState['KeyD']) lx = 0.70;
+      if (keyState['ArrowUp'])    ry = 0.70;
+      if (keyState['ArrowDown'])  ry = -0.70;
+      if (keyState['ArrowLeft'])  rx = -0.70;
+      if (keyState['ArrowRight']) rx = 0.70;
 
       rawStick.leftX = lx;
       rawStick.leftY = ly;
       rawStick.rightX = rx;
       rawStick.rightY = ry;
 
-      // Actualizar posición visual de los sticks si se usa teclado o gamepad
-      if (!touchLeftX && !touchLeftY) {
-        knobLeftEl.style.left = `${50 + lx * 38}%`;
-        knobLeftEl.style.top  = `${50 - ly * 38}%`;
-      }
-      if (!touchRightX && !touchRightY) {
-        knobRightEl.style.left = `${50 + rx * 38}%`;
-        knobRightEl.style.top  = `${50 - ry * 38}%`;
-      }
-
       document.getElementById('readoutLeft').textContent =
-        `T: ${ly >= 0 ? '+' : ''}${ly.toFixed(2)} | Y: ${lx >= 0 ? '+' : ''}${lx.toFixed(2)}`;
+        `T:${ly >= 0 ? '+' : ''}${ly.toFixed(2)} Y:${lx >= 0 ? '+' : ''}${lx.toFixed(2)}`;
       document.getElementById('readoutRight').textContent =
-        `P: ${ry >= 0 ? '+' : ''}${ry.toFixed(2)} | R: ${rx >= 0 ? '+' : ''}${rx.toFixed(2)}`;
+        `P:${ry >= 0 ? '+' : ''}${ry.toFixed(2)} R:${rx >= 0 ? '+' : ''}${rx.toFixed(2)}`;
     }
 
     /***************************************************************************
-     * PASO DE SIMULACIÓN FÍSICA (250 Hz Sub-stepping)
+     * 5. DINÁMICA DE VUELO REVISADA Y CORREGIDA
+     *    - En nuestra matriz de rotación:
+     *      • Pitch adelante (empujar stick derecho ARRIBA, pitchCmd > 0):
+     *        Gira la nariz (+Z) hacia abajo (-Y) -> velocidad angular wx < 0.
+     *        Al inclinarse hacia adelante, el vector de empuje (+Y local) apunta a +Z
+     *        y el dron acelera hacia ADELANTE.
+     *      • Roll derecha (empujar stick derecho DERECHA, rollCmd > 0):
+     *        Inclina el lado derecho (+X) hacia abajo (-Y) -> velocidad angular wz > 0.
+     *        El vector de empuje (+Y local) apunta hacia +X y el dron se desplaza a la DERECHA.
+     *      • Yaw derecha (empujar stick izquierdo DERECHA, yawCmd > 0):
+     *        Gira la nariz (+Z) hacia la derecha (+X) -> velocidad angular wy > 0.
      ***************************************************************************/
     function stepPhysics(dt) {
       drone.prevPx = drone.px;
@@ -1317,77 +1129,101 @@
       const expo = simConfig.expo;
 
       const yawCmd   = applyDeadzoneAndExpo(rawStick.leftX, dz, expo);
+      const thrStick = applyDeadzoneAndExpo(rawStick.leftY, dz, 0.25);
       const rollCmd  = applyDeadzoneAndExpo(rawStick.rightX, dz, expo);
       const pitchCmd = applyDeadzoneAndExpo(rawStick.rightY, dz, expo);
 
-      drone.throttleCmd = mapSelfCenteringThrottle(rawStick.leftY);
+      // Hover neutral exacto donde Empuje vertical = Gravedad
+      const hoverThr = Math.min(0.75, simConfig.gravity / simConfig.maxThrustAccel);
+      if (thrStick >= 0) {
+        drone.throttleCmd = hoverThr + thrStick * (1.0 - hoverThr);
+      } else {
+        drone.throttleCmd = hoverThr * (1.0 + thrStick);
+      }
 
-      if (!simConfig.autoLevel) {
-        // Modo ACRO puro: Integración de tasas angulares en el marco del cuerpo
-        // Convención de ejes locales: +X Derecha, +Y Arriba, +Z Adelante
-        // Pitch adelante (pitchCmd > 0) inclina nariz abajo -> rotación +X
-        // Roll derecha (rollCmd > 0) inclina ala derecha abajo -> rotación -Z
-        // Yaw derecha (yawCmd > 0) gira hacia la derecha -> rotación -Y
-        const wx =  pitchCmd * simConfig.ratePitchRoll * DEG2RAD;
-        const wy = -yawCmd   * simConfig.rateYaw       * DEG2RAD;
-        const wz = -rollCmd  * simConfig.ratePitchRoll * DEG2RAD;
+      quatToMatrix(drone, bodyMat);
 
+      if (simConfig.mode === 'ACRO') {
+        // Modo ACRO puro (tasas angulares directas)
+        const wx = -pitchCmd * simConfig.ratePitchRoll * DEG2RAD;
+        const wy =  yawCmd   * simConfig.rateYaw       * DEG2RAD;
+        const wz =  rollCmd  * simConfig.ratePitchRoll * DEG2RAD;
         quatIntegrateBodyRates(drone, wx, wy, wz, dt);
       } else {
-        // Modo Auto-Level (Angle) opcional para pruebas o principiantes
-        quatToMatrix(drone, bodyMat);
-        const curRoll  = Math.atan2(bodyMat[1], bodyMat[4]);
-        const curPitch = Math.atan2(-bodyMat[7], bodyMat[8]);
-        const maxAngle = 45.0 * DEG2RAD;
-        const targetRoll  = -rollCmd * maxAngle;
-        const targetPitch = -pitchCmd * maxAngle;
+        // Modo HORIZON (Híbrido ideal para sticks táctiles):
+        // En ángulos moderados controla inclinación y auto-nivela al soltar;
+        // en los extremos del stick (>80%) permite giros acrobáticos completos.
+        // bodyMat[4] = Up.y, bodyMat[3] = Up.x, bodyMat[5] = Up.z
+        const currentRoll  = Math.atan2(bodyMat[3], bodyMat[4]); // + cuando inclina a la derecha
+        const currentPitch = Math.atan2(bodyMat[5], bodyMat[4]); // + cuando inclina hacia adelante
 
-        const kp = 8.0;
-        const wx = (targetPitch - curPitch) * kp;
-        const wz = (targetRoll - curRoll) * kp;
-        const wy = -yawCmd * simConfig.rateYaw * DEG2RAD;
+        const maxTilt = 42.0 * DEG2RAD;
+        const targetRoll  = rollCmd * maxTilt;
+        const targetPitch = pitchCmd * maxTilt;
+
+        const stickDeflection = Math.max(Math.abs(rollCmd), Math.abs(pitchCmd));
+        const acroBlend = Math.max(0.0, (stickDeflection - 0.75) / 0.25);
+
+        const levelWx = -(targetPitch - currentPitch) * 7.5;
+        const levelWz =  (targetRoll  - currentRoll)  * 7.5;
+
+        const acroWx = -pitchCmd * simConfig.ratePitchRoll * DEG2RAD;
+        const acroWz =  rollCmd  * simConfig.ratePitchRoll * DEG2RAD;
+
+        const wx = levelWx * (1.0 - acroBlend) + acroWx * acroBlend;
+        const wz = levelWz * (1.0 - acroBlend) + acroWz * acroBlend;
+        // Coordinación suave de Yaw con Roll para giros muy naturales en móvil
+        const wy = (yawCmd * simConfig.rateYaw * DEG2RAD) + (rollCmd * 0.45);
+
         quatIntegrateBodyRates(drone, wx, wy, wz, dt);
       }
 
-      // Matriz de rotación actual del dron
       quatToMatrix(drone, bodyMat);
 
-      // Vector de empuje alineado con +Y local del cuadricóptero
+      // Compensación automática sutil de sustentación al inclinar (evita caer brusco al avanzar)
+      const tiltBoost = simConfig.mode === 'HORIZON'
+        ? (1.0 / Math.max(0.65, bodyMat[4]))
+        : 1.0;
+
+      const effectiveThr = Math.min(1.0, drone.throttleCmd * (0.65 + 0.35 * tiltBoost));
+      const thrustMag = effectiveThr * simConfig.maxThrustAccel;
+
       const upX = bodyMat[3];
       const upY = bodyMat[4];
       const upZ = bodyMat[5];
 
-      const thrustMag = drone.throttleCmd * simConfig.maxThrustAccel;
-
-      // Resistencia parásita (drag lineal + cuadrático)
       const speed = Math.hypot(drone.vx, drone.vy, drone.vz);
-      const dragFactor = simConfig.dragLinear + simConfig.dragQuad * speed;
+      const drag = simConfig.dragLinear + simConfig.dragQuad * speed;
 
-      const ax = upX * thrustMag - drone.vx * dragFactor;
-      const ay = upY * thrustMag - simConfig.gravity - drone.vy * dragFactor;
-      const az = upZ * thrustMag - drone.vz * dragFactor;
+      const ax = upX * thrustMag - drone.vx * drag;
+      const ay = upY * thrustMag - simConfig.gravity - drone.vy * drag;
+      const az = upZ * thrustMag - drone.vz * drag;
 
       drone.vx += ax * dt;
       drone.vy += ay * dt;
       drone.vz += az * dt;
 
+      // Amortiguamiento vertical extra cerca del hover cuando el stick izquierdo está centrado
+      if (Math.abs(thrStick) < 0.05) {
+        drone.vy *= (1.0 - 1.8 * dt);
+      }
+
       drone.px += drone.vx * dt;
       drone.py += drone.vy * dt;
       drone.pz += drone.vz * dt;
 
-      // Colisión suave con el suelo (Y = 0.25m)
-      if (drone.py < 0.25) {
-        drone.py = 0.25;
+      if (drone.py < 0.30) {
+        drone.py = 0.30;
         if (drone.vy < 0) drone.vy = 0;
-        drone.vx *= 0.92;
-        drone.vz *= 0.92;
+        drone.vx *= 0.90;
+        drone.vz *= 0.90;
       }
 
       checkGateCrossing();
     }
 
     /***************************************************************************
-     * PIPELINE GRÁFICO 3D WIREFRAME Y PROYECCIÓN CON NEAR-CLIPPING
+     * 6. CÁMARA FPV + PROYECCIÓN PERSPECTIVA 128x64
      ***************************************************************************/
     const camMat = new Float32Array(9);
     let camPosX = 0, camPosY = 0, camPosZ = 0;
@@ -1395,22 +1231,18 @@
     function updateCameraTransform() {
       quatToMatrix(drone, bodyMat);
 
-      // Rotación de inclinación de cámara (Camera Uptilt hacia arriba alrededor de X local)
       const tiltRad = simConfig.camUptiltDeg * DEG2RAD;
       const cosT = Math.cos(tiltRad);
       const sinT = Math.sin(tiltRad);
 
-      // Eje X de cámara = Eje X del dron
       camMat[0] = bodyMat[0];
       camMat[1] = bodyMat[1];
       camMat[2] = bodyMat[2];
 
-      // Eje Y de cámara = cosT * BodyUp - sinT * BodyForward
       camMat[3] = cosT * bodyMat[3] - sinT * bodyMat[6];
       camMat[4] = cosT * bodyMat[4] - sinT * bodyMat[7];
       camMat[5] = cosT * bodyMat[5] - sinT * bodyMat[8];
 
-      // Eje Z de cámara (Forward visual) = sinT * BodyUp + cosT * BodyForward
       camMat[6] = sinT * bodyMat[3] + cosT * bodyMat[6];
       camMat[7] = sinT * bodyMat[4] + cosT * bodyMat[7];
       camMat[8] = sinT * bodyMat[5] + cosT * bodyMat[8];
@@ -1420,19 +1252,16 @@
         camPosY = drone.py;
         camPosZ = drone.pz;
       } else {
-        // Vista en tercera persona (Chase Cam) para apreciar la inclinación del dron
-        camPosX = drone.px - camMat[6] * 3.2 + camMat[3] * 0.9;
-        camPosY = Math.max(0.4, drone.py - camMat[7] * 3.2 + camMat[4] * 0.9);
-        camPosZ = drone.pz - camMat[8] * 3.2 + camMat[5] * 0.9;
+        camPosX = drone.px - camMat[6] * 3.4 + camMat[3] * 1.0;
+        camPosY = Math.max(0.4, drone.py - camMat[7] * 3.4 + camMat[4] * 1.0);
+        camPosZ = drone.pz - camMat[8] * 3.4 + camMat[5] * 1.0;
       }
     }
 
-    // Transforma punto del mundo al espacio de cámara y recorta contra Z > NEAR_Z
     function renderLine3D(wx0, wy0, wz0, wx1, wy1, wz1, dashed = false) {
       const dx0 = wx0 - camPosX, dy0 = wy0 - camPosY, dz0 = wz0 - camPosZ;
       const dx1 = wx1 - camPosX, dy1 = wy1 - camPosY, dz1 = wz1 - camPosZ;
 
-      // Rotación inversa (transpuesta de camMat)
       let cx0 = dx0 * camMat[0] + dy0 * camMat[1] + dz0 * camMat[2];
       let cy0 = dx0 * camMat[3] + dy0 * camMat[4] + dz0 * camMat[5];
       let cz0 = dx0 * camMat[6] + dy0 * camMat[7] + dz0 * camMat[8];
@@ -1441,23 +1270,21 @@
       let cy1 = dx1 * camMat[3] + dy1 * camMat[4] + dz1 * camMat[5];
       let cz1 = dx1 * camMat[6] + dy1 * camMat[7] + dz1 * camMat[8];
 
-      // Near-plane clipping (Z > NEAR_Z) y Far-plane culling (85m)
       if (cz0 < NEAR_Z && cz1 < NEAR_Z) return;
       if (cz0 > 85.0 && cz1 > 85.0) return;
 
       if (cz0 < NEAR_Z) {
         const t = (NEAR_Z - cz0) / (cz1 - cz0);
-        cx0 = cx0 + t * (cx1 - cx0);
-        cy0 = cy0 + t * (cy1 - cy0);
+        cx0 += t * (cx1 - cx0);
+        cy0 += t * (cy1 - cy0);
         cz0 = NEAR_Z;
       } else if (cz1 < NEAR_Z) {
         const t = (NEAR_Z - cz1) / (cz0 - cz1);
-        cx1 = cx1 + t * (cx0 - cx1);
-        cy1 = cy1 + t * (cy0 - cy1);
+        cx1 += t * (cx0 - cx1);
+        cy1 += t * (cy0 - cy1);
         cz1 = NEAR_Z;
       }
 
-      // Proyección en perspectiva hacia coordenadas 128x64
       const invZ0 = FOCAL_LEN / cz0;
       const invZ1 = FOCAL_LEN / cz1;
 
@@ -1466,150 +1293,105 @@
       const sx1 = (SCREEN_W * 0.5) + cx1 * invZ1;
       const sy1 = (SCREEN_H * 0.5) - cy1 * invZ1;
 
-      if (dashed) {
-        fbDrawDashedLine(sx0, sy0, sx1, sy1, 1);
-      } else {
-        fbDrawLine(sx0, sy0, sx1, sy1);
-      }
+      if (dashed) fbDrawDashedLine(sx0, sy0, sx1, sy1, 1);
+      else fbDrawLine(sx0, sy0, sx1, sy1);
     }
 
-    // Dibuja el chasis del cuadricóptero si está activa la cámara Chase
     function renderChaseDroneModel() {
       if (!simConfig.chaseCam) return;
-      const s = 0.45;
-      const p = [
-        [-s, 0, -s], [s, 0, s],
-        [-s, 0,  s], [s, 0, -s]
-      ];
-      const wPts = p.map(([lx, ly, lz]) => [
+      const s = 0.5;
+      const pts = [[-s,0,-s],[s,0,s],[-s,0,s],[s,0,-s]].map(([lx,ly,lz]) => [
         drone.px + lx * bodyMat[0] + ly * bodyMat[3] + lz * bodyMat[6],
         drone.py + lx * bodyMat[1] + ly * bodyMat[4] + lz * bodyMat[7],
         drone.pz + lx * bodyMat[2] + ly * bodyMat[5] + lz * bodyMat[8]
       ]);
-      renderLine3D(wPts[0][0], wPts[0][1], wPts[0][2], wPts[1][0], wPts[1][1], wPts[1][2], false);
-      renderLine3D(wPts[2][0], wPts[2][1], wPts[2][2], wPts[3][0], wPts[3][1], wPts[3][2], false);
-    }
-
-    // Renderizado completo de la escena y el OSD en 128x64
-    function renderScene() {
-      fbClear();
-      updateCameraTransform();
-
-      // 1. Líneas del mundo (cuadrícula y pilares)
-      for (let i = 0; i < worldLines.length; i++) {
-        const l = worldLines[i];
-        renderLine3D(l.x0, l.y0, l.z0, l.x1, l.y1, l.z1, l.dashed);
-      }
-
-      // 2. Puertas del circuito (la puerta objetivo actual se dibuja con doble marco y baliza)
-      for (let i = 0; i < gates.length; i++) {
-        const g = gates[i];
-        const isTarget = (i === activeGateIdx);
-
-        // Marco exterior
-        renderLine3D(g.xL, g.yBot, g.zL, g.xL, g.yTop, g.zL, false);
-        renderLine3D(g.xR, g.yBot, g.zR, g.xR, g.yTop, g.zR, false);
-        renderLine3D(g.xL, g.yTop, g.zL, g.xR, g.yTop, g.zR, false);
-        renderLine3D(g.xL, g.yBot, g.zL, g.xR, g.yBot, g.zR, false);
-
-        if (isTarget) {
-          // Marco interior resaltado + diamante superior para identificar la siguiente puerta
-          const inW = g.hw * 0.86;
-          const inH = g.hh * 0.86;
-          const ixL = g.cx - g.rx * inW, izL = g.cz - g.rz * inW;
-          const ixR = g.cx + g.rx * inW, izR = g.cz + g.rz * inW;
-          const iyB = g.cy - inH, iyT = g.cy + inH;
-
-          renderLine3D(ixL, iyB, izL, ixL, iyT, izL, false);
-          renderLine3D(ixR, iyB, izR, ixR, iyT, izR, false);
-          renderLine3D(ixL, iyT, izL, ixR, iyT, izR, false);
-          renderLine3D(ixL, iyB, izL, ixR, iyB, izR, false);
-
-          // Indicador tipo flecha sobre la puerta objetivo
-          renderLine3D(g.cx, g.yTop + 1.8, g.cz, g.cx - g.rx * 0.9, g.yTop + 2.9, g.cz - g.rz * 0.9, false);
-          renderLine3D(g.cx, g.yTop + 1.8, g.cz, g.cx + g.rx * 0.9, g.yTop + 2.9, g.cz + g.rz * 0.9, false);
-        }
-      }
-
-      renderChaseDroneModel();
-
-      // 3. OSD Minimalista (1-Bit sobre el framebuffer)
-      renderOSD();
-
-      // 4. Volcar framebuffer de 1024 bytes al Canvas
-      fbPresentToCanvas();
+      renderLine3D(pts[0][0], pts[0][1], pts[0][2], pts[1][0], pts[1][1], pts[1][2], false);
+      renderLine3D(pts[2][0], pts[2][1], pts[2][2], pts[3][0], pts[3][1], pts[3][2], false);
     }
 
     function renderOSD() {
-      // Barra izquierda: Nivel de acelerador (Throttle)
-      const barX = 2;
-      const barTop = 10;
-      const barBot = 54;
-      const barH = barBot - barTop;
-
+      const barX = 2, barTop = 10, barBot = 54, barH = barBot - barTop;
       fbDrawLine(barX, barTop, barX, barBot);
-      fbSetPixel(barX + 1, barTop);
-      fbSetPixel(barX + 1, barBot);
-
-      // Marca de Hover en la barra de empuje
-      const hoverY = (barBot - Math.round(simConfig.hoverThrottle * barH)) | 0;
-      fbSetPixel(barX + 2, hoverY);
-      fbSetPixel(barX + 3, hoverY);
-
-      // Nivel actual de acelerador
       const thrY = (barBot - Math.round(drone.throttleCmd * barH)) | 0;
       for (let y = thrY; y <= barBot; y += 2) {
         fbSetPixel(barX + 1, y);
         fbSetPixel(barX + 2, y);
       }
 
-      // Barra derecha: Altitud (0 a 15 m)
       const altBarX = 125;
       fbDrawLine(altBarX, barTop, altBarX, barBot);
       const normAlt = Math.min(1.0, Math.max(0.0, drone.py / 15.0));
       const altY = (barBot - Math.round(normAlt * barH)) | 0;
       fbDrawLine(altBarX - 3, altY, altBarX, altY);
 
-      // Retícula central con horizonte artificial sutil
+      // Retícula central + Horizonte Artificial Dinámico en 1-bit
       const cx = 64, cy = 32;
       fbSetPixel(cx - 2, cy);
       fbSetPixel(cx + 2, cy);
       fbSetPixel(cx, cy - 2);
       fbSetPixel(cx, cy + 2);
 
-      // Indicador de dirección hacia la siguiente puerta en la parte superior del OSD
+      // Flecha superior hacia la puerta activa
       const g = gates[activeGateIdx];
-      const toGx = g.cx - drone.px;
-      const toGz = g.cz - drone.pz;
+      const toGx = g.cx - drone.px, toGz = g.cz - drone.pz;
       const camRightDot = toGx * camMat[0] + toGz * camMat[2];
       const camFwdDot   = toGx * camMat[6] + toGz * camMat[8];
       const angleToGate = Math.atan2(camRightDot, camFwdDot);
-      const pointerX = Math.max(18, Math.min(110, Math.round(64 + (angleToGate / (Math.PI * 0.6)) * 46)));
-      fbDrawLine(pointerX - 2, 2, pointerX, 4);
-      fbDrawLine(pointerX + 2, 2, pointerX, 4);
+      const ptrX = Math.max(18, Math.min(110, Math.round(64 + (angleToGate / (Math.PI * 0.6)) * 46)));
+      fbDrawLine(ptrX - 2, 2, ptrX, 4);
+      fbDrawLine(ptrX + 2, 2, ptrX, 4);
 
-      // Texto OSD 3x5 en las esquinas
       const hSpeed = Math.hypot(drone.vx, drone.vz);
-      fbDrawText(simConfig.autoLevel ? 'LVL' : 'ACR', 2, 2);
+      fbDrawText(simConfig.mode === 'ACRO' ? 'ACR' : 'HRZ', 2, 2);
       fbDrawText(`G${activeGateIdx + 1}/${gates.length}`, 104, 2);
       fbDrawText(`V${Math.round(hSpeed)}`, 6, 58);
       fbDrawText(`A${Math.round(drone.py)}`, 108, 58);
 
-      // Destello de borde al cruzar puerta
       if (gateFlashTimer > 0) {
         fbDrawLine(0, 0, 127, 0);
         fbDrawLine(0, 63, 127, 63);
       }
     }
 
+    function renderScene() {
+      fbClear();
+      updateCameraTransform();
+
+      for (let i = 0; i < worldLines.length; i++) {
+        const l = worldLines[i];
+        renderLine3D(l.x0, l.y0, l.z0, l.x1, l.y1, l.z1, l.dashed);
+      }
+
+      for (let i = 0; i < gates.length; i++) {
+        const g = gates[i];
+        renderLine3D(g.xL, g.yBot, g.zL, g.xL, g.yTop, g.zL, false);
+        renderLine3D(g.xR, g.yBot, g.zR, g.xR, g.yTop, g.zR, false);
+        renderLine3D(g.xL, g.yTop, g.zL, g.xR, g.yTop, g.zR, false);
+        renderLine3D(g.xL, g.yBot, g.zL, g.xR, g.yBot, g.zR, false);
+
+        if (i === activeGateIdx) {
+          const inW = g.hw * 0.85, inH = g.hh * 0.85;
+          const ixL = g.cx - g.rx * inW, izL = g.cz - g.rz * inW;
+          const ixR = g.cx + g.rx * inW, izR = g.cz + g.rz * inW;
+          const iyB = g.cy - inH, iyT = g.cy + inH;
+          renderLine3D(ixL, iyB, izL, ixL, iyT, izL, false);
+          renderLine3D(ixR, iyB, izR, ixR, iyT, izR, false);
+          renderLine3D(ixL, iyT, izL, ixR, iyT, izR, false);
+          renderLine3D(ixL, iyB, izL, ixR, iyB, izR, false);
+          renderLine3D(g.cx, g.yTop + 1.6, g.cz, g.cx - g.rx * 1.0, g.yTop + 2.8, g.cz - g.rz * 1.0, false);
+          renderLine3D(g.cx, g.yTop + 1.6, g.cz, g.cx + g.rx * 1.0, g.yTop + 2.8, g.cz + g.rz * 1.0, false);
+        }
+      }
+
+      renderChaseDroneModel();
+      renderOSD();
+      fbPresentToCanvas();
+    }
+
     /***************************************************************************
-     * AUDIO SINTETIZADO DE MOTORES FPV (Web Audio API opcional)
+     * 7. AUDIO MOTOR + CONTROLES UI
      ***************************************************************************/
-    let audioCtx = null;
-    let motorOsc1 = null;
-    let motorOsc2 = null;
-    let motorGain = null;
-    let soundEnabled = false;
+    let audioCtx = null, motorOsc1 = null, motorOsc2 = null, motorGain = null, soundEnabled = false;
 
     function toggleMotorAudio() {
       if (!audioCtx) {
@@ -1617,29 +1399,25 @@
         motorOsc1 = audioCtx.createOscillator();
         motorOsc2 = audioCtx.createOscillator();
         motorGain = audioCtx.createGain();
-
         motorOsc1.type = 'sawtooth';
         motorOsc2.type = 'triangle';
         motorGain.gain.value = 0.0;
-
         motorOsc1.connect(motorGain);
         motorOsc2.connect(motorGain);
         motorGain.connect(audioCtx.destination);
-
         motorOsc1.start();
         motorOsc2.start();
       }
-
       soundEnabled = !soundEnabled;
       const btn = document.getElementById('btnSound');
       if (soundEnabled) {
         audioCtx.resume();
         btn.textContent = '🔊 Audio Motor';
-        btn.classList.add('primary');
+        btn.classList.add('active');
       } else {
         motorGain.gain.setTargetAtTime(0.0, audioCtx.currentTime, 0.05);
         btn.textContent = '🔇 Audio Motor';
-        btn.classList.remove('primary');
+        btn.classList.remove('active');
       }
     }
 
@@ -1665,82 +1443,77 @@
       osc.stop(audioCtx.currentTime + 0.15);
     }
 
-    /***************************************************************************
-     * CONTROLES DE INTERFAZ Y SLIDERS EN TIEMPO REAL
-     ***************************************************************************/
     function resetDrone() {
-      drone.px = 0.0;
-      drone.py = 1.6;
-      drone.pz = -8.0;
-      drone.vx = 0.0;
-      drone.vy = 0.0;
-      drone.vz = 0.0;
-      drone.qx = 0.0;
-      drone.qy = 0.0;
-      drone.qz = 0.0;
-      drone.qw = 1.0;
-      drone.prevPx = drone.px;
-      drone.prevPy = drone.py;
-      drone.prevPz = drone.pz;
+      drone.px = 0.0; drone.py = 2.0; drone.pz = -10.0;
+      drone.vx = 0.0; drone.vy = 0.0; drone.vz = 0.0;
+      drone.qx = 0.0; drone.qy = 0.0; drone.qz = 0.0; drone.qw = 1.0;
+      drone.prevPx = drone.px; drone.prevPy = drone.py; drone.prevPz = drone.pz;
       activeGateIdx = 0;
       lapRunning = false;
-      currentLapMs = 0;
-      document.getElementById('uiLapTime').textContent = '00:00.00';
-    }
-
-    function toggleFlightMode() {
-      simConfig.autoLevel = !simConfig.autoLevel;
-      const btn = document.getElementById('btnFlightMode');
-      btn.textContent = simConfig.autoLevel ? 'Modo: LEVEL' : 'Modo: ACRO';
-      btn.classList.toggle('primary', simConfig.autoLevel);
+      document.getElementById('uiLapTime').textContent = '00:00.0';
     }
 
     document.getElementById('btnResetDrone').addEventListener('click', resetDrone);
-    document.getElementById('btnFlightMode').addEventListener('click', toggleFlightMode);
     document.getElementById('btnSound').addEventListener('click', toggleMotorAudio);
 
-    document.getElementById('btnGridToggle').addEventListener('click', () => {
-      document.getElementById('canvasContainer').classList.toggle('pixel-grid');
+    document.getElementById('btnFlightMode').addEventListener('click', (e) => {
+      simConfig.mode = simConfig.mode === 'HORIZON' ? 'ACRO' : 'HORIZON';
+      e.currentTarget.textContent = `Modo: ${simConfig.mode}`;
+      e.currentTarget.classList.toggle('active', simConfig.mode === 'HORIZON');
     });
 
-    document.getElementById('btnCamView').addEventListener('click', () => {
+    document.getElementById('btnCamView').addEventListener('click', (e) => {
       simConfig.chaseCam = !simConfig.chaseCam;
+      e.currentTarget.textContent = simConfig.chaseCam ? '🎥 3ra Persona' : '🎥 FPV';
+      e.currentTarget.classList.toggle('active', simConfig.chaseCam);
     });
 
-    let paused = false;
-    document.getElementById('btnPause').addEventListener('click', (e) => {
-      paused = !paused;
-      e.currentTarget.textContent = paused ? '▶ Reanudar' : '⏸ Pausa';
+    document.getElementById('btnGridToggle').addEventListener('click', (e) => {
+      const c = document.getElementById('canvasContainer');
+      c.classList.toggle('pixel-grid');
+      e.currentTarget.classList.toggle('active', c.classList.contains('pixel-grid'));
     });
 
-    // Selección de color de fósforo OLED
+    document.getElementById('btnFullscreen').addEventListener('click', async () => {
+      try {
+        if (!document.fullscreenElement) {
+          await document.documentElement.requestFullscreen();
+          if (screen.orientation && screen.orientation.lock) {
+            screen.orientation.lock('landscape').catch(() => {});
+          }
+        } else {
+          await document.exitFullscreen();
+        }
+      } catch (_) {}
+    });
+
+    const backdrop = document.getElementById('settingsBackdrop');
+    document.getElementById('btnOpenSettings').addEventListener('click', () => backdrop.classList.add('open'));
+    document.getElementById('btnCloseSettings').addEventListener('click', () => backdrop.classList.remove('open'));
+    backdrop.addEventListener('click', (e) => {
+      if (e.target === backdrop) backdrop.classList.remove('open');
+    });
+
     document.querySelectorAll('.swatch').forEach((sw) => {
       sw.addEventListener('click', () => {
         document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
         sw.classList.add('active');
-        const hex = sw.getAttribute('data-color');
-        const num = parseInt(hex.slice(1), 16);
-        oledColorRGB = {
-          r: (num >> 16) & 255,
-          g: (num >> 8) & 255,
-          b: num & 255
-        };
+        const num = parseInt(sw.getAttribute('data-color').slice(1), 16);
+        oledColorRGB = { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
       });
     });
 
-    // Binding de Sliders
     function bindSlider(id, valId, key, fmt) {
       const el = document.getElementById(id);
       const vEl = document.getElementById(valId);
       el.addEventListener('input', () => {
         const v = parseFloat(el.value);
-        simConfig[key] = key === 'hoverThrottle' ? v / 100.0 : v;
+        simConfig[key] = v;
         vEl.textContent = fmt(v);
       });
     }
 
     bindSlider('slUptilt',   'valUptilt',   'camUptiltDeg',   v => `${v}°`);
-    bindSlider('slHover',    'valHover',    'hoverThrottle',  v => `${v}%`);
     bindSlider('slThrust',   'valThrust',   'maxThrustAccel', v => v.toFixed(1));
     bindSlider('slGravity',  'valGravity',  'gravity',        v => v.toFixed(2));
     bindSlider('slDrag',     'valDrag',     'dragLinear',     v => v.toFixed(2));
@@ -1750,21 +1523,20 @@
     bindSlider('slDeadzone', 'valDeadzone', 'deadzone',       v => v.toFixed(2));
 
     document.getElementById('btnResetParams').addEventListener('click', () => {
-      document.getElementById('slUptilt').value = 25;
-      document.getElementById('slHover').value = 40;
-      document.getElementById('slThrust').value = 24.5;
+      document.getElementById('slUptilt').value = 18;
+      document.getElementById('slThrust').value = 23.4;
       document.getElementById('slGravity').value = 9.81;
-      document.getElementById('slDrag').value = 0.18;
-      document.getElementById('slRatePR').value = 520;
-      document.getElementById('slRateYaw').value = 400;
-      document.getElementById('slExpo').value = 0.35;
-      document.getElementById('slDeadzone').value = 0.05;
-      ['slUptilt','slHover','slThrust','slGravity','slDrag','slRatePR','slRateYaw','slExpo','slDeadzone']
+      document.getElementById('slDrag').value = 0.24;
+      document.getElementById('slRatePR').value = 260;
+      document.getElementById('slRateYaw').value = 180;
+      document.getElementById('slExpo').value = 0.45;
+      document.getElementById('slDeadzone').value = 0.06;
+      ['slUptilt','slThrust','slGravity','slDrag','slRatePR','slRateYaw','slExpo','slDeadzone']
         .forEach(id => document.getElementById(id).dispatchEvent(new Event('input')));
     });
 
     /***************************************************************************
-     * BUCLE PRINCIPAL A 60 FPS CON SUB-STEPPING FÍSICO (Emulación Dual-Core)
+     * 8. BUCLE PRINCIPAL A 60 FPS
      ***************************************************************************/
     let lastTime = performance.now();
     let fpsFrames = 0;
@@ -1778,36 +1550,30 @@
 
       pollInputs();
 
-      if (!paused) {
-        // Core 0 Sim: Física a ~240 Hz (4 sub-pasos por frame de 60 Hz)
-        const subSteps = 4;
-        const subDt = dtRaw / subSteps;
-        for (let s = 0; s < subSteps; s++) {
-          stepPhysics(subDt);
-        }
-
-        if (gateFlashTimer > 0) gateFlashTimer -= dtRaw;
-        if (lapRunning) {
-          currentLapMs = now - lapStartTime;
-          document.getElementById('uiLapTime').textContent = formatTimeMs(currentLapMs);
-        }
-        updateMotorAudio();
+      const subSteps = 4;
+      const subDt = dtRaw / subSteps;
+      for (let s = 0; s < subSteps; s++) {
+        stepPhysics(subDt);
       }
 
-      // Core 1 Sim: Proyección 3D, Rasterizado Bresenham y Refresco 128x64
+      if (gateFlashTimer > 0) gateFlashTimer -= dtRaw;
+      if (lapRunning) {
+        document.getElementById('uiLapTime').textContent = formatTimeShort(now - lapStartTime);
+      }
+      updateMotorAudio();
+
       renderScene();
 
-      // Actualizar telemetría DOM
       const speed = Math.hypot(drone.vx, drone.vy, drone.vz);
-      document.getElementById('uiGate').textContent = `${activeGateIdx + 1} / ${gates.length}`;
-      document.getElementById('uiSpeedAlt').textContent = `${speed.toFixed(1)} m/s | ${drone.py.toFixed(1)}m`;
-      document.getElementById('uiThrottle').textContent = `${Math.round(drone.throttleCmd * 100)}%`;
+      document.getElementById('uiGate').textContent = `${activeGateIdx + 1}/${gates.length}`;
+      document.getElementById('uiSpeed').textContent = `${speed.toFixed(1)}m/s`;
+      document.getElementById('uiAlt').textContent = `${drone.py.toFixed(1)}m`;
+      document.getElementById('uiThr').textContent = `${Math.round(drone.throttleCmd * 100)}%`;
 
-      // Medidor FPS
       fpsFrames++;
       if (now - fpsClock >= 500) {
         const fps = Math.round((fpsFrames * 1000) / (now - fpsClock));
-        document.getElementById('fpsPill').textContent = `⚡ ${fps} FPS | 1024 B`;
+        document.getElementById('fpsCounter').textContent = `${fps} FPS`;
         fpsFrames = 0;
         fpsClock = now;
       }
