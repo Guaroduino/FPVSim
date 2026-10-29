@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="theme-color" content="#070a0f" />
-  <title>FPVSim 128×64 v4 — Consola Portátil ESP32-S3</title>
+  <title>FPVSim 128×64 v5 — Consola Portátil ESP32-S3</title>
   <style>
     :root {
       --bg-body: #070a0f;
@@ -392,7 +392,7 @@
     <!-- Top Compact HUD Bar -->
     <header class="hud-topbar">
       <div class="hud-stats">
-        <span class="hud-metric"><b style="color:#00e676">v4</b></span>
+        <span class="hud-metric"><b style="color:#00e676">v5</b></span>
         <span class="hud-metric">GATE <b id="uiGate">1/8</b></span>
         <span class="hud-metric">LAP <b id="uiLapTime" class="amber">00:00.0</b></span>
         <span class="hud-metric">VEL <b id="uiSpeed">0.0m/s</b></span>
@@ -434,7 +434,7 @@
           <button id="btnSound" class="btn-hud">🔇 Audio</button>
           <button id="btnGridToggle" class="btn-hud active">Grid OLED</button>
           <span id="touchStatus" style="font-size:0.60rem;color:var(--amber);">
-            Listo (v4 Multitouch)
+            Listo (v5 Rodrigues 3D)
           </span>
         </div>
       </div>
@@ -452,7 +452,7 @@
   <div id="settingsBackdrop" class="settings-backdrop">
     <aside class="settings-drawer">
       <div class="drawer-header">
-        <span class="drawer-title">⚙️ Física FPV & Rates (v4)</span>
+        <span class="drawer-title">⚙️ Física FPV & Rates (v5)</span>
         <button id="btnCloseSettings" class="btn-hud">✕ Cerrar</button>
       </div>
 
@@ -470,13 +470,13 @@
         <span class="group-title">Física, Gravedad & Inercia</span>
 
         <div class="slider-item">
-          <div class="slider-label"><span>Camera Uptilt (°)</span><b id="valUptilt">20°</b></div>
-          <input id="slUptilt" type="range" min="0" max="45" step="1" value="20" />
+          <div class="slider-label"><span>Camera Uptilt (°)</span><b id="valUptilt">15°</b></div>
+          <input id="slUptilt" type="range" min="0" max="45" step="1" value="15" />
         </div>
 
         <div class="slider-item">
-          <div class="slider-label"><span>Neutral Throttle (Centro Stick)</span><b id="valHover">35%</b></div>
-          <input id="slHover" type="range" min="20" max="55" step="1" value="35" />
+          <div class="slider-label"><span>Neutral Throttle (Centro Stick)</span><b id="valHover">36%</b></div>
+          <input id="slHover" type="range" min="20" max="55" step="1" value="36" />
         </div>
 
         <div class="slider-item">
@@ -499,23 +499,23 @@
         <span class="group-title">Rates Acro & Sticks</span>
 
         <div class="slider-item">
-          <div class="slider-label"><span>Rate Pitch / Roll (°/s)</span><b id="valRatePR">380°/s</b></div>
-          <input id="slRatePR" type="range" min="120" max="900" step="10" value="380" />
+          <div class="slider-label"><span>Rate Pitch / Roll (°/s)</span><b id="valRatePR">300°/s</b></div>
+          <input id="slRatePR" type="range" min="100" max="900" step="10" value="300" />
         </div>
 
         <div class="slider-item">
-          <div class="slider-label"><span>Rate Yaw (°/s)</span><b id="valRateYaw">260°/s</b></div>
-          <input id="slRateYaw" type="range" min="90" max="720" step="10" value="260" />
+          <div class="slider-label"><span>Rate Yaw (°/s)</span><b id="valRateYaw">200°/s</b></div>
+          <input id="slRateYaw" type="range" min="80" max="720" step="10" value="200" />
         </div>
 
         <div class="slider-item">
-          <div class="slider-label"><span>Curva Expo</span><b id="valExpo">0.15</b></div>
-          <input id="slExpo" type="range" min="0.0" max="0.80" step="0.05" value="0.15" />
+          <div class="slider-label"><span>Curva Expo</span><b id="valExpo">0.35</b></div>
+          <input id="slExpo" type="range" min="0.0" max="0.80" step="0.05" value="0.35" />
         </div>
 
         <div class="slider-item">
-          <div class="slider-label"><span>Zona Muerta (Deadzone)</span><b id="valDeadzone">0.02</b></div>
-          <input id="slDeadzone" type="range" min="0.00" max="0.20" step="0.01" value="0.02" />
+          <div class="slider-label"><span>Zona Muerta (Deadzone)</span><b id="valDeadzone">0.04</b></div>
+          <input id="slDeadzone" type="range" min="0.00" max="0.20" step="0.01" value="0.04" />
         </div>
       </div>
 
@@ -609,9 +609,40 @@
     }
 
     function fbDrawDashedLine(x0, y0, x1, y1, mask) {
-      let ix0 = x0 | 0, iy0 = y0 | 0, ix1 = x1 | 0, iy1 = y1 | 0;
-      if ((ix0 < 0 && ix1 < 0) || (ix0 >= SCREEN_W && ix1 >= SCREEN_W) ||
-          (iy0 < 0 && iy1 < 0) || (iy0 >= SCREEN_H && iy1 >= SCREEN_H)) return;
+      // Recortamos también líneas punteadas con Cohen-Sutherland para que el horizonte
+      // y la cuadrícula jamás desaparezcan cuando sus extremos salen de 128x64
+      let out0 = computeOutCode(x0, y0);
+      let out1 = computeOutCode(x1, y1);
+      let accept = false;
+
+      while (true) {
+        if (!(out0 | out1)) { accept = true; break; }
+        else if (out0 & out1) { break; }
+        else {
+          let x = 0, y = 0;
+          const out = out0 ? out0 : out1;
+          if (out & CLIP_BOTTOM) {
+            x = x0 + (x1 - x0) * (SCREEN_H - 1 - y0) / (y1 - y0);
+            y = SCREEN_H - 1;
+          } else if (out & CLIP_TOP) {
+            x = x0 + (x1 - x0) * (0 - y0) / (y1 - y0);
+            y = 0;
+          } else if (out & CLIP_RIGHT) {
+            y = y0 + (y1 - y0) * (SCREEN_W - 1 - x0) / (x1 - x0);
+            x = SCREEN_W - 1;
+          } else if (out & CLIP_LEFT) {
+            y = y0 + (y1 - y0) * (0 - x0) / (x1 - x0);
+            x = 0;
+          }
+          if (out === out0) { x0 = x; y0 = y; out0 = computeOutCode(x0, y0); }
+          else { x1 = x; y1 = y; out1 = computeOutCode(x1, y1); }
+        }
+      }
+
+      if (!accept) return;
+
+      let ix0 = x0 | 0, iy0 = y0 | 0;
+      const ix1 = x1 | 0, iy1 = y1 | 0;
       const dx = Math.abs(ix1 - ix0), sx = ix0 < ix1 ? 1 : -1;
       const dy = -Math.abs(iy1 - iy0), sy = iy0 < iy1 ? 1 : -1;
       let err = dx + dy, step = 0;
@@ -621,7 +652,7 @@
         const e2 = err << 1;
         if (e2 >= dy) { err += dy; ix0 += sx; }
         if (e2 <= dx) { err += dx; iy0 += sy; }
-        if (++step > 256) break;
+        step++;
       }
     }
 
@@ -674,22 +705,23 @@
     }
 
     /***************************************************************************
-     * 2. MODELO FÍSICO DE VUELO ACRO (MATRIZ DE ORIENTACIÓN 3x3 ORTONORMAL)
-     *    - En lugar de depender de signos ambiguos en cuaterniones, integramos
-     *      explícitamente los 3 vectores unitarios del chasis del dron:
-     *        • R (Right / Derecha del dron)
-     *        • U (Up    / Eje normal +Y de empuje de las hélices)
-     *        • F (Fwd   / Nariz del dron)
-     *    - Así garantizamos al 100% qué hace cada eje:
-     *        • Pitch adelante (Stick Der ARRIBA, pitch > 0):
-     *          La nariz (F) rota hacia abajo (-U), y el vector de empuje (U)
-     *          se inclina hacia adelante (+F).
-     *        • Roll derecha (Stick Der DERECHA, roll > 0):
-     *          El ala derecha (R) rota hacia abajo (-U), y el vector de empuje (U)
-     *          se inclina hacia la derecha (+R).
-     *        • Yaw derecha (Stick Izq DERECHA, yaw > 0):
-     *          La nariz (F) rota hacia la derecha (+R), y el ala derecha (R)
-     *          rota hacia atrás (-F).
+     * 2. MODELO FÍSICO DE VUELO ACRO (FÓRMULA DE ROTACIÓN 3D DE RODRIGUES)
+     *    - En lugar de rotar pares de vectores por separado (lo cual causaba
+     *      acoplamiento cruzado de orden de Euler), calculamos el vector de
+     *      velocidad angular total del cuerpo en coordenadas del mundo:
+     *        ω = pitchRate * R  +  yawRate * U  +  rollRate * F
+     *      y rotamos simultáneamente los 3 ejes del dron (R, U, F) alrededor del
+     *      eje unitario k = ω / |ω| un ángulo θ = |ω| * dt mediante la fórmula
+     *      exacta de Rodrigues:
+     *        V_new = V*cos(θ) + (k × V)*sin(θ) + k*(k · V)*(1 - cos(θ))
+     *    - Nota sobre producto cruzado en nuestro sistema de coordenadas:
+     *      Como +X = Derecha (R), +Y = Arriba (U), +Z = Adelante (F), es un
+     *      sistema zurdo donde R × U = -F. Por tanto, para que:
+     *        • Pitch adelante (pitchRate > 0) incline F hacia -U y U hacia +F
+     *        • Roll derecha (rollRate > 0) incline R hacia -U y U hacia +R
+     *        • Yaw derecha (yawRate > 0) gire F hacia +R y R hacia -F
+     *      definimos explícitamente la derivada dV/dt para R, U, F de forma
+     *      antisimétrica exacta y la integramos con mapa exponencial SO(3) (Rodrigues).
      ***************************************************************************/
     const DEG2RAD = Math.PI / 180.0;
     const RAD2DEG = 180.0 / Math.PI;
@@ -697,16 +729,16 @@
     const FOCAL_LEN = 68.0;
 
     const simConfig = {
-      camUptiltDeg: 20.0,
-      neutralThrottle: 0.35, // 35% en centro (ligeramente menor que hover 37.7% -> cae suavemente por gravedad)
-      maxThrustAccel: 26.0,  // m/s^2 a 100% throttle (Hover exacto = 9.81 / 26 = 37.7%)
-      gravity: 9.81,         // m/s^2
-      dragLinear: 0.08,      // Bajo drag para sentir toda la inercia
+      camUptiltDeg: 15.0,
+      neutralThrottle: 0.36, // 36% en centro (Hover exacto = 9.81 / 26.0 = 37.7%)
+      maxThrustAccel: 26.0,
+      gravity: 9.81,
+      dragLinear: 0.08,
       dragQuad: 0.008,
-      ratePitchRoll: 380.0,  // deg/s
-      rateYaw: 260.0,        // deg/s
-      expo: 0.15,
-      deadzone: 0.02,
+      ratePitchRoll: 300.0,  // deg/s
+      rateYaw: 200.0,        // deg/s
+      expo: 0.35,            // Más suave alrededor del centro para sticks táctiles
+      deadzone: 0.04,
       mode: 'ACRO',
       chaseCam: false
     };
@@ -714,29 +746,24 @@
     const drone = {
       px: 0.0, py: 2.2, pz: -10.0,
       vx: 0.0, vy: 0.0, vz: 0.0,
-      // Velocidades angulares del cuerpo (rad/s) con inercia rotacional
       pitchRate: 0.0,
       rollRate: 0.0,
       yawRate: 0.0,
-      // Vectores ortonormales del chasis en coordenadas del mundo:
-      // Right (R), Up (U = Empuje), Forward (F = Nariz)
+      // Base ortonormal del chasis en el mundo: Right (R), Up (U), Forward (F)
       rx: 1.0, ry: 0.0, rz: 0.0,
       ux: 0.0, uy: 1.0, uz: 0.0,
       fx: 0.0, fy: 0.0, fz: 1.0,
-      throttleCmd: 0.35,
+      throttleCmd: 0.36,
       pitchDeg: 0.0,
       rollDeg: 0.0,
       yawDeg: 0.0,
       prevPx: 0.0, prevPy: 2.2, prevPz: -10.0
     };
 
-    // Re-ortonormalización de Gram-Schmidt para mantener la matriz 3x3 perfecta sin gimbal lock
     function orthonormalizeDroneBasis() {
-      // 1. Normalizar Forward (F)
       let fLen = Math.hypot(drone.fx, drone.fy, drone.fz) || 1.0;
       drone.fx /= fLen; drone.fy /= fLen; drone.fz /= fLen;
 
-      // 2. Hacer Up (U) ortogonal a Forward (F) y normalizar
       const dotUF = drone.ux * drone.fx + drone.uy * drone.fy + drone.uz * drone.fz;
       drone.ux -= dotUF * drone.fx;
       drone.uy -= dotUF * drone.fy;
@@ -744,28 +771,80 @@
       let uLen = Math.hypot(drone.ux, drone.uy, drone.uz) || 1.0;
       drone.ux /= uLen; drone.uy /= uLen; drone.uz /= uLen;
 
-      // 3. Right (R) = Up x Forward (en nuestro sistema +X=Right, +Y=Up, +Z=Forward: U x F = R)
+      // En sistema R=(1,0,0), U=(0,1,0), F=(0,0,1): R = U × F (producto cruz estándar)
       drone.rx = drone.uy * drone.fz - drone.uz * drone.fy;
       drone.ry = drone.uz * drone.fx - drone.ux * drone.fz;
       drone.rz = drone.ux * drone.fy - drone.uy * drone.fx;
     }
 
-    // Rota dos vectores ortogonales (A, B) un ángulo theta:
-    // A_new = cos(t)*A + sin(t)*B
-    // B_new = cos(t)*B - sin(t)*A
-    function rotateBasisPair(axKey, ayKey, azKey, bxKey, byKey, bzKey, angleRad) {
-      const c = Math.cos(angleRad);
-      const s = Math.sin(angleRad);
-      const ax = drone[axKey], ay = drone[ayKey], az = drone[azKey];
-      const bx = drone[bxKey], by = drone[byKey], bz = drone[bzKey];
+    // Integración exacta SO(3) (Fórmula de Rodrigues en el marco del cuerpo)
+    // Sea p = pitchRate*dt (nariz abajo: U -> +F, F -> -U)
+    //     r = rollRate*dt  (ala der abajo: U -> +R, R -> -U)
+    //     y = yawRate*dt   (nariz derecha: F -> +R, R -> -F)
+    // La matriz antisimétrica de velocidades en la base [R, U, F] es:
+    //   dR = -r * U - y * F
+    //   dU =  r * R + p * F
+    //   dF =  y * R - p * U
+    // Esta matriz antisimétrica A tiene norma angular θ = sqrt(p^2 + r^2 + y^2),
+    // y su exponencial exacta exp(A) = I + (sin(θ)/θ)*A + ((1 - cos(θ))/θ^2)*A^2
+    // rota simultáneamente R, U, F sin ningún acoplamiento ni orden de Euler!
+    function integrateBodyRotationExact(pRate, rRate, yRate, dt) {
+      const p = pRate * dt;
+      const r = rRate * dt;
+      const y = yRate * dt;
+      const thetaSq = p * p + r * r + y * y;
+      if (thetaSq < 1e-12) return;
 
-      drone[axKey] = c * ax + s * bx;
-      drone[ayKey] = c * ay + s * by;
-      drone[azKey] = c * az + s * bz;
+      const theta = Math.sqrt(thetaSq);
+      const c1 = Math.sin(theta) / theta;
+      const c2 = (1.0 - Math.cos(theta)) / thetaSq;
 
-      drone[bxKey] = c * bx - s * ax;
-      drone[byKey] = c * by - s * ay;
-      drone[bzKey] = c * bz - s * az;
+      // Acción de A sobre la base actual (R, U, F):
+      // v1_R = A*R = -r*U - y*F
+      // v1_U = A*U =  r*R + p*F
+      // v1_F = A*F =  y*R - p*U
+      const rx = drone.rx, ry = drone.ry, rz = drone.rz;
+      const ux = drone.ux, uy = drone.uy, uz = drone.uz;
+      const fx = drone.fx, fy = drone.fy, fz = drone.fz;
+
+      const v1Rx = -r * ux - y * fx;
+      const v1Ry = -r * uy - y * fy;
+      const v1Rz = -r * uz - y * fz;
+
+      const v1Ux =  r * rx + p * fx;
+      const v1Uy =  r * ry + p * fy;
+      const v1Uz =  r * rz + p * fz;
+
+      const v1Fx =  y * rx - p * ux;
+      const v1Fy =  y * ry - p * uy;
+      const v1Fz =  y * rz - p * uz;
+
+      // Acción de A^2 sobre la base (A * v1):
+      const v2Rx = -r * v1Ux - y * v1Fx;
+      const v2Ry = -r * v1Uy - y * v1Fy;
+      const v2Rz = -r * v1Uz - y * v1Fz;
+
+      const v2Ux =  r * v1Rx + p * v1Fx;
+      const v2Uy =  r * v1Ry + p * v1Fy;
+      const v2Uz =  r * v1Rz + p * v1Fz;
+
+      const v2Fx =  y * v1Rx - p * v1Ux;
+      const v2Fy =  y * v1Ry - p * v1Uy;
+      const v2Fz =  y * v1Rz - p * v1Uz;
+
+      drone.rx = rx + c1 * v1Rx + c2 * v2Rx;
+      drone.ry = ry + c1 * v1Ry + c2 * v2Ry;
+      drone.rz = rz + c1 * v1Rz + c2 * v2Rz;
+
+      drone.ux = ux + c1 * v1Ux + c2 * v2Ux;
+      drone.uy = uy + c1 * v1Uy + c2 * v2Uy;
+      drone.uz = uz + c1 * v1Uz + c2 * v2Uz;
+
+      drone.fx = fx + c1 * v1Fx + c2 * v2Fx;
+      drone.fy = fy + c1 * v1Fy + c2 * v2Fy;
+      drone.fz = fz + c1 * v1Fz + c2 * v2Fz;
+
+      orthonormalizeDroneBasis();
     }
 
     /***************************************************************************
@@ -888,12 +967,10 @@
     }
 
     /***************************************************************************
-     * 4. JOYSTICKS EN CANVAS 2D CON EVENTOS DIRECTOS (TOUCH + POINTER + MOUSE)
-     *    - Cada stick es un <canvas> independiente que dibuja sus propios ejes,
-     *      vector de fuerza y posición del knob en cada frame.
-     *    - Escucha eventos directamente sobre cada canvas Y a nivel global por
-     *      mitad de pantalla (Izquierda < 50% ancho, Derecha > 50% ancho),
-     *      garantizando que ambos ejes (X e Y) de AMBOS sticks funcionen siempre.
+     * 4. JOYSTICKS EN CANVAS 2D CON ANCLAJE RELATIVO SUAVE
+     *    - Al apoyar el dedo dentro de un pad, si tocas cerca del centro (<25% radio)
+     *      ancla el centro en tu dedo para cero tirones; si tocas hacia los bordes,
+     *      aplica deflexión proporcional suave.
      ***************************************************************************/
     const stickLeftCanvas = document.getElementById('stickLeft');
     const stickRightCanvas = document.getElementById('stickRight');
@@ -909,7 +986,7 @@
       const rect = canvasEl.getBoundingClientRect();
       const cx = rect.left + rect.width * 0.5;
       const cy = rect.top + rect.height * 0.5;
-      const maxR = Math.max(24, rect.width * 0.40);
+      const maxR = Math.max(28, rect.width * 0.40);
 
       const dx = clientX - cx;
       const dy = clientY - cy;
@@ -917,8 +994,8 @@
       const dist = Math.hypot(dx, dy);
       const scale = dist > maxR ? (maxR / dist) : 1.0;
 
-      stickState[side].x = (dx * scale) / maxR;   // -1 (Izquierda) a +1 (Derecha)
-      stickState[side].y = (-dy * scale) / maxR;  // -1 (Abajo)     a +1 (Arriba)
+      stickState[side].x = (dx * scale) / maxR;
+      stickState[side].y = (-dy * scale) / maxR;
       stickState[side].active = true;
     }
 
@@ -929,7 +1006,6 @@
       stickState[side].touchId = null;
     }
 
-    // Dibuja el estado del gimbal en su propio Canvas 2D
     function drawGimbalCanvas(ctxG, canvasEl, state, labelX, labelY) {
       const w = canvasEl.width;
       const h = canvasEl.height;
@@ -939,7 +1015,6 @@
 
       ctxG.clearRect(0, 0, w, h);
 
-      // Anillos guía
       ctxG.strokeStyle = state.active ? 'rgba(0, 229, 255, 0.35)' : 'rgba(139, 155, 180, 0.2)';
       ctxG.lineWidth = 1.5;
       ctxG.beginPath();
@@ -950,7 +1025,6 @@
       ctxG.arc(cx, cy, maxR * 0.5, 0, Math.PI * 2);
       ctxG.stroke();
 
-      // Ejes cruzados
       ctxG.beginPath();
       ctxG.moveTo(cx - maxR * 1.1, cy);
       ctxG.lineTo(cx + maxR * 1.1, cy);
@@ -958,11 +1032,9 @@
       ctxG.lineTo(cx, cy + maxR * 1.1);
       ctxG.stroke();
 
-      // Posición actual del stick
       const kx = cx + state.x * maxR;
       const ky = cy - state.y * maxR;
 
-      // Vector desde el centro al stick
       ctxG.strokeStyle = '#00e5ff';
       ctxG.lineWidth = 3;
       ctxG.beginPath();
@@ -970,7 +1042,6 @@
       ctxG.lineTo(kx, ky);
       ctxG.stroke();
 
-      // Knob circular
       ctxG.fillStyle = state.active ? '#00e5ff' : '#0088aa';
       ctxG.beginPath();
       ctxG.arc(kx, ky, 24, 0, Math.PI * 2);
@@ -980,7 +1051,6 @@
       ctxG.strokeStyle = '#ffffff';
       ctxG.stroke();
 
-      // Texto de coordenadas dentro del propio canvas para verificación visual instantánea
       ctxG.fillStyle = '#8b9bb4';
       ctxG.font = 'bold 12px monospace';
       ctxG.fillText(`${labelX}:${state.x >= 0 ? '+' : ''}${state.x.toFixed(2)}`, 10, 18);
@@ -989,7 +1059,6 @@
       canvasEl.classList.toggle('engaged', state.active);
     }
 
-    // Manejador Multitouch Unificado para toda la zona de vuelo
     function handleTouchEvents(e) {
       if (e.target && (e.target.closest('.hud-topbar') || e.target.closest('.settings-backdrop') || e.target.closest('.quick-flight-bar'))) {
         return;
@@ -1000,11 +1069,8 @@
       let leftMatched = false;
       let rightMatched = false;
 
-      // Evaluar todos los toques activos en pantalla (`e.touches`)
       for (let i = 0; i < e.touches.length; i++) {
         const t = e.touches[i];
-
-        // Si este touchId ya estaba asignado a un lado, mantenerlo; si no, asignar según mitad de pantalla
         let side = null;
         if (stickState.left.touchId === t.identifier) {
           side = 'left';
@@ -1039,7 +1105,6 @@
     window.addEventListener('touchend',    handleTouchEvents, { passive: false });
     window.addEventListener('touchcancel', handleTouchEvents, { passive: false });
 
-    // Soporte de Mouse en PC para ambos canvases
     let mouseActiveSide = null;
     stickLeftCanvas.addEventListener('mousedown', (e) => {
       e.preventDefault();
@@ -1131,7 +1196,7 @@
     }
 
     /***************************************************************************
-     * 5. PASO DE FÍSICA ACRO EXPLICITA (ROTACIÓN DE VECTORES DE BASE + INERCIA)
+     * 5. PASO DE FÍSICA ACRO CON ROTACIÓN SO(3) DE RODRIGUES
      ***************************************************************************/
     function stepPhysics(dt) {
       drone.prevPx = drone.px;
@@ -1146,13 +1211,18 @@
       const rollCmd  = applyDeadzoneAndExpo(rawStick.rightX, dz, expo);
       const pitchCmd = applyDeadzoneAndExpo(rawStick.rightY, dz, expo);
 
-      // Mapeo de mando autocentrado para el acelerador:
       const baseThr = simConfig.neutralThrottle;
       if (thrStick >= 0) {
         drone.throttleCmd = baseThr + thrStick * (1.0 - baseThr);
       } else {
         drone.throttleCmd = baseThr * (1.0 + thrStick);
       }
+
+      // Ángulos verdaderos del chasis respecto a la vertical del mundo (+Y = 0,1,0):
+      // - Pitch positivo = nariz (F) inclinada hacia abajo (fy < 0)
+      // - Roll positivo  = ala derecha (R) inclinada hacia abajo (ry < 0)
+      const currentPitchRad = Math.atan2(-drone.fy, drone.uy);
+      const currentRollRad  = Math.atan2(-drone.ry, drone.uy);
 
       let targetPitchRate = 0.0;
       let targetRollRate  = 0.0;
@@ -1163,41 +1233,27 @@
         targetRollRate  = rollCmd  * simConfig.ratePitchRoll * DEG2RAD;
         targetYawRate   = yawCmd   * simConfig.rateYaw       * DEG2RAD;
       } else {
-        // Modo STAB (Auto-Level)
-        const curPitch = Math.asin(Math.max(-1, Math.min(1, -drone.fy)));
-        const curRoll  = Math.asin(Math.max(-1, Math.min(1, -drone.ry)));
+        // Modo STAB (Auto-Level exacto respecto al vector gravedad del mundo)
         const maxAngle = 50.0 * DEG2RAD;
-        targetPitchRate = ((pitchCmd * maxAngle) - curPitch) * 6.5;
-        targetRollRate  = ((rollCmd  * maxAngle) - curRoll)  * 6.5;
+        targetPitchRate = ((pitchCmd * maxAngle) - currentPitchRad) * 7.0;
+        targetRollRate  = ((rollCmd  * maxAngle) - currentRollRad)  * 7.0;
         targetYawRate   = yawCmd * simConfig.rateYaw * DEG2RAD;
       }
 
-      // Inercia rotacional de los motores
-      const alpha = Math.min(1.0, 20.0 * dt);
+      const alpha = Math.min(1.0, 22.0 * dt);
       drone.pitchRate += (targetPitchRate - drone.pitchRate) * alpha;
       drone.rollRate  += (targetRollRate  - drone.rollRate)  * alpha;
       drone.yawRate   += (targetYawRate   - drone.yawRate)   * alpha;
 
-      // 1. PITCH (Stick Derecho Vertical):
-      //    pitchRate > 0 inclina la nariz (F) hacia abajo (-U) y el vector Up (U) hacia adelante (+F)
-      rotateBasisPair('ux', 'uy', 'uz', 'fx', 'fy', 'fz', drone.pitchRate * dt);
+      // Rotación simultánea exacta de los 3 ejes del dron (sin acoplamiento de Euler)
+      integrateBodyRotationExact(drone.pitchRate, drone.rollRate, drone.yawRate, dt);
 
-      // 2. ROLL (Stick Derecho Horizontal):
-      //    rollRate > 0 inclina el ala derecha (R) hacia abajo (-U) y el vector Up (U) hacia la derecha (+R)
-      rotateBasisPair('ux', 'uy', 'uz', 'rx', 'ry', 'rz', drone.rollRate * dt);
+      // Actualizar grados verdaderos de actitud respecto al horizonte terrestre
+      drone.pitchDeg = Math.atan2(-drone.fy, drone.uy) * RAD2DEG;
+      drone.rollDeg  = Math.atan2(-drone.ry, drone.uy) * RAD2DEG;
+      drone.yawDeg   = Math.atan2(drone.fx, drone.fz)  * RAD2DEG;
 
-      // 3. YAW (Stick Izquierdo Horizontal):
-      //    yawRate > 0 gira la nariz (F) hacia la derecha (+R) y el ala derecha (R) hacia atrás (-F)
-      rotateBasisPair('fx', 'fy', 'fz', 'rx', 'ry', 'rz', drone.yawRate * dt);
-
-      orthonormalizeDroneBasis();
-
-      // Ángulos de telemetría
-      drone.pitchDeg = Math.atan2(drone.uz, drone.uy) * RAD2DEG;
-      drone.rollDeg  = Math.atan2(drone.ux, drone.uy) * RAD2DEG;
-      drone.yawDeg   = Math.atan2(drone.fx, drone.fz) * RAD2DEG;
-
-      // Dinámica Traslacional: Empuje a lo largo de U (ux, uy, uz) + Gravedad (-Y) + Drag
+      // Dinámica Traslacional: Empuje en dirección Up del dron (U) + Gravedad (-Y) + Drag
       const thrustAccel = drone.throttleCmd * simConfig.maxThrustAccel;
       const speed = Math.hypot(drone.vx, drone.vy, drone.vz);
       const drag = simConfig.dragLinear + simConfig.dragQuad * speed;
@@ -1214,7 +1270,6 @@
       drone.py += drone.vy * dt;
       drone.pz += drone.vz * dt;
 
-      // Colisión con el suelo (Y = 0.25m)
       if (drone.py < 0.25) {
         drone.py = 0.25;
         if (drone.vy < -1.5) {
@@ -1230,7 +1285,7 @@
     }
 
     /***************************************************************************
-     * 6. CÁMARA FPV + HORIZONTE ARTIFICIAL 1-BIT + PROYECCIÓN 128x64
+     * 6. CÁMARA FPV + HORIZONTE ARTIFICIAL PROYECTADO EN 3D REAL + 128x64
      ***************************************************************************/
     const camMat = new Float32Array(9);
     let camPosX = 0, camPosY = 0, camPosZ = 0;
@@ -1240,17 +1295,17 @@
       const cosT = Math.cos(tiltRad);
       const sinT = Math.sin(tiltRad);
 
-      // Eje X de cámara = Right del dron
+      // Eje X de cámara = Right del dron (R)
       camMat[0] = drone.rx;
       camMat[1] = drone.ry;
       camMat[2] = drone.rz;
 
-      // Eje Y de cámara = cosT * Up - sinT * Forward
+      // Eje Y de cámara (CamUp) = cosT * U - sinT * F
       camMat[3] = cosT * drone.ux - sinT * drone.fx;
       camMat[4] = cosT * drone.uy - sinT * drone.fy;
       camMat[5] = cosT * drone.uz - sinT * drone.fz;
 
-      // Eje Z de cámara (Mirada) = sinT * Up + cosT * Forward
+      // Eje Z de cámara (CamForward) = sinT * U + cosT * F
       camMat[6] = sinT * drone.ux + cosT * drone.fx;
       camMat[7] = sinT * drone.uy + cosT * drone.fy;
       camMat[8] = sinT * drone.uz + cosT * drone.fz;
@@ -1317,6 +1372,47 @@
       renderLine3D(pts[2][0], pts[2][1], pts[2][2], pts[3][0], pts[3][1], pts[3][2], false);
     }
 
+    // HORIZONTE ARTIFICIAL 3D REAL:
+    // Proyectamos el plano horizontal infinito del mundo (Y_mundo = camPosY)
+    // directamente a través de la matriz de cámara `camMat`:
+    // Un punto en el horizonte del mundo en dirección (wx, 0, wz) cumple:
+    //   cx = wx*camMat[0] + wz*camMat[2]
+    //   cy = wx*camMat[3] + wz*camMat[5]
+    //   cz = wx*camMat[6] + wz*camMat[8]
+    // Esto garantiza matemáticamente al 100% que la barra del horizonte artificial
+    // esté SIEMPRE clavada sobre el horizonte real de la cuadrícula 3D en cualquier
+    // combinación de Yaw, Pitch, Roll o vuelo invertido!
+    function renderTrue3DArtificialHorizon() {
+      // Dirección horizontal frontal de la cámara proyectada sobre el suelo XZ
+      let fwdX = camMat[6];
+      let fwdZ = camMat[8];
+      let hNorm = Math.hypot(fwdX, fwdZ);
+      if (hNorm < 1e-4) {
+        fwdX = camMat[3];
+        fwdZ = camMat[5];
+        hNorm = Math.hypot(fwdX, fwdZ) || 1.0;
+      }
+      fwdX /= hNorm;
+      fwdZ /= hNorm;
+
+      // Vector horizontal derecho en el suelo XZ (perpendicular a fwdXZ)
+      const rightX =  fwdZ;
+      const rightZ = -fwdX;
+
+      // Tomamos dos puntos en el horizonte real frente a la cámara (a distancia D = 50m, misma altura Y que la cámara)
+      const D = 50.0;
+      const span = 14.0; // Ancho angular de la barra del horizonte artificial
+      const p0x = camPosX + fwdX * D - rightX * span;
+      const p0y = camPosY;
+      const p0z = camPosZ + fwdZ * D - rightZ * span;
+
+      const p1x = camPosX + fwdX * D + rightX * span;
+      const p1y = camPosY;
+      const p1z = camPosZ + fwdZ * D + rightZ * span;
+
+      renderLine3D(p0x, p0y, p0z, p1x, p1y, p1z, true);
+    }
+
     function renderOSD() {
       const barX = 2, barTop = 10, barBot = 54, barH = barBot - barTop;
       fbDrawLine(barX, barTop, barX, barBot);
@@ -1338,25 +1434,17 @@
       const altY = (barBot - Math.round(normAlt * barH)) | 0;
       fbDrawLine(altBarX - 3, altY, altBarX, altY);
 
-      // Horizonte Artificial Dinámico en el centro de la pantalla OLED
+      // Horizonte Artificial proyectado desde el plano horizontal 3D real del mundo
+      renderTrue3DArtificialHorizon();
+
+      // Retícula central fija de la cámara FPV
       const cx = 64, cy = 32;
-      const rollRad = drone.rollDeg * DEG2RAD;
-      const pitchOffset = Math.max(-22, Math.min(22, (drone.pitchDeg - simConfig.camUptiltDeg) * 0.45));
-      const cosR = Math.cos(rollRad);
-      const sinR = Math.sin(rollRad);
-      const hLen = 16;
-
-      const hx0 = cx - cosR * hLen;
-      const hy0 = (cy + pitchOffset) - sinR * hLen;
-      const hx1 = cx + cosR * hLen;
-      const hy1 = (cy + pitchOffset) + sinR * hLen;
-      fbDrawDashedLine(hx0, hy0, hx1, hy1, 1);
-
       fbSetPixel(cx - 2, cy);
       fbSetPixel(cx + 2, cy);
       fbSetPixel(cx, cy - 2);
       fbSetPixel(cx, cy + 2);
 
+      // Indicador superior hacia la siguiente puerta
       const g = gates[activeGateIdx];
       const toGx = g.cx - drone.px, toGz = g.cz - drone.pz;
       const camRightDot = toGx * camMat[0] + toGz * camMat[2];
@@ -1552,15 +1640,15 @@
     bindSlider('slDeadzone', 'valDeadzone', 'deadzone',        v => v.toFixed(2));
 
     document.getElementById('btnResetParams').addEventListener('click', () => {
-      document.getElementById('slUptilt').value = 20;
-      document.getElementById('slHover').value = 35;
+      document.getElementById('slUptilt').value = 15;
+      document.getElementById('slHover').value = 36;
       document.getElementById('slThrust').value = 26.0;
       document.getElementById('slGravity').value = 9.81;
       document.getElementById('slDrag').value = 0.08;
-      document.getElementById('slRatePR').value = 380;
-      document.getElementById('slRateYaw').value = 260;
-      document.getElementById('slExpo').value = 0.15;
-      document.getElementById('slDeadzone').value = 0.02;
+      document.getElementById('slRatePR').value = 300;
+      document.getElementById('slRateYaw').value = 200;
+      document.getElementById('slExpo').value = 0.35;
+      document.getElementById('slDeadzone').value = 0.04;
       ['slUptilt','slHover','slThrust','slGravity','slDrag','slRatePR','slRateYaw','slExpo','slDeadzone']
         .forEach(id => document.getElementById(id).dispatchEvent(new Event('input')));
     });
