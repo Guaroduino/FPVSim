@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="theme-color" content="#181a22" />
-  <title>RETRO-GO // ESP32-S3 N16R8 Handheld Console v8</title>
+  <title>RETRO-GO // ESP32-S3 N16R8 Handheld Console v9</title>
   <style>
     :root {
       --case-main: #222530;
@@ -51,16 +51,17 @@
     .retrogo-shell {
       width: 100%;
       height: 100%;
+      container-type: size;
       background: linear-gradient(180deg, #2b2f3d 0%, #1e212b 55%, #15171f 100%);
-      padding: env(safe-area-inset-top, 6px) 10px env(safe-area-inset-bottom, 8px);
+      padding: env(safe-area-inset-top, 6px) 2.2vw env(safe-area-inset-bottom, 8px);
       display: flex;
       flex-direction: column;
       justify-content: space-between;
-      gap: 6px;
+      gap: 0.8dvh;
     }
 
-    /* Only constrain width on large desktop monitors */
-    @media (min-width: 700px) and (pointer: fine) {
+    /* Only constrain width on large desktop PC monitors with mouse */
+    @media (min-width: 1100px) and (hover: hover) and (pointer: fine) {
       body {
         display: flex;
         justify-content: center;
@@ -68,8 +69,9 @@
         background: #090a0e;
       }
       .retrogo-shell {
-        max-width: 440px;
-        max-height: 900px;
+        max-width: 460px;
+        max-height: 920px;
+        padding: 10px 12px;
         border: 3px solid #3c4254;
         border-radius: 28px;
         box-shadow: 0 20px 60px rgba(0, 0, 0, 0.9);
@@ -81,23 +83,23 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 4px 8px;
+      padding: 0.7dvh 2vw;
       background: #14161d;
       border: 1px solid #313646;
       border-radius: 8px;
-      font-size: 0.62rem;
+      font-size: clamp(0.65rem, 2.3cqw, 1.05rem);
       flex-shrink: 0;
     }
 
     .led-cluster {
       display: flex;
       align-items: center;
-      gap: 5px;
+      gap: 1.2cqw;
     }
 
     .led {
-      width: 7px;
-      height: 7px;
+      width: clamp(7px, 1.8cqw, 12px);
+      height: clamp(7px, 1.8cqw, 12px);
       border-radius: 50%;
       background: var(--rg-green);
       box-shadow: 0 0 6px var(--rg-green);
@@ -116,17 +118,17 @@
 
     .top-hw-pills {
       display: flex;
-      gap: 4px;
+      gap: 1.2cqw;
     }
 
     .pill-btn {
       background: #232734;
       color: var(--text);
-      border: 1px solid #404659;
-      border-radius: 5px;
-      padding: 3px 7px;
+      border: 1.5px solid #404659;
+      border-radius: 6px;
+      padding: 0.5dvh 2cqw;
       font-family: inherit;
-      font-size: 0.60rem;
+      font-size: clamp(0.64rem, 2.2cqw, 1rem);
       font-weight: 700;
       cursor: pointer;
     }
@@ -141,13 +143,13 @@
       background: var(--bezel-black);
       border: 3px solid #141720;
       border-radius: 12px 12px 20px 12px;
-      padding: 6px 8px 7px;
+      padding: 0.7dvh 2cqw 0.8dvh;
       box-shadow:
         inset 0 0 18px rgba(0, 0, 0, 1),
         0 2px 0 rgba(255, 255, 255, 0.08);
       display: flex;
       flex-direction: column;
-      gap: 4px;
+      gap: 0.4dvh;
       flex-shrink: 0;
     }
 
@@ -155,7 +157,7 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      font-size: 0.56rem;
+      font-size: clamp(0.6rem, 2.1cqw, 0.95rem);
       color: #828c9e;
       letter-spacing: 0.6px;
     }
@@ -167,8 +169,8 @@
     }
 
     .rg-stripe i {
-      width: 9px;
-      height: 3px;
+      width: clamp(9px, 2.2cqw, 15px);
+      height: clamp(3px, 0.8cqw, 5px);
       display: inline-block;
       border-radius: 1px;
     }
@@ -209,7 +211,7 @@
     }
 
     .rg-logo-text {
-      font-size: 0.70rem;
+      font-size: clamp(0.75rem, 2.8cqw, 1.25rem);
       font-weight: 900;
       font-style: italic;
       letter-spacing: 1px;
@@ -221,20 +223,20 @@
     }
 
     .rg-sub-status {
-      font-size: 0.56rem;
+      font-size: clamp(0.58rem, 2cqw, 0.92rem);
       color: var(--rg-gold);
     }
 
     /* 3. UPPER CONTROLS: DUAL ANALOG JOYSTICKS (WITH L3 / R3 INTEGRATED) */
     .upper-joysticks-section {
-      flex: 1.1;
-      min-height: 135px;
+      flex: 1.08;
+      min-height: 0;
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 10px;
+      gap: 2.5cqw;
       align-items: center;
       justify-items: center;
-      padding: 2px 4px;
+      padding: 0.4dvh 1cqw;
     }
 
     .stick-unit {
@@ -244,71 +246,73 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 4px;
+      gap: 0.7dvh;
       position: relative;
     }
 
     .stick-top-row {
-      width: 100%;
+      width: 94%;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 0 6px;
+      padding: 0 1cqw;
     }
 
     .stick-adc-label {
-      font-size: 0.54rem;
+      font-size: clamp(0.65rem, 2.3cqw, 1.05rem);
       color: var(--muted);
+      font-weight: 700;
       font-variant-numeric: tabular-nums;
     }
 
     .btn-stick-click {
       background: #1b1f2a;
-      border: 1.5px solid #3f475c;
+      border: 2px solid #48526a;
       color: var(--rg-cyan);
-      border-radius: 6px;
-      padding: 2px 7px;
+      border-radius: 8px;
+      padding: 0.6dvh 2.6cqw;
       font-family: inherit;
-      font-size: 0.56rem;
+      font-size: clamp(0.68rem, 2.5cqw, 1.1rem);
       font-weight: 800;
-      box-shadow: 0 2px 0 #0c0e13;
+      box-shadow: 0 3px 0 #0c0e13;
     }
 
     .btn-stick-click.pressed {
-      transform: translateY(1px);
+      transform: translateY(2px);
       background: var(--rg-cyan);
       color: #000;
     }
 
     .stick-canvas {
-      width: min(100%, 168px, 24dvh);
+      width: min(44cqw, 26.5cqh);
+      height: min(44cqw, 26.5cqh);
       aspect-ratio: 1 / 1;
-      background: radial-gradient(circle at center, #181c26 0%, #0c0e14 100%);
-      border: 2px solid #383f52;
+      background: radial-gradient(circle at center, #1a1f2b 0%, #0b0d13 100%);
+      border: 3px solid #3f485e;
       border-radius: 50%;
       touch-action: none;
       display: block;
-      box-shadow: inset 0 4px 16px rgba(0, 0, 0, 0.95), 0 2px 5px rgba(255, 255, 255, 0.06);
+      box-shadow: inset 0 6px 20px rgba(0, 0, 0, 0.95), 0 3px 8px rgba(255, 255, 255, 0.07);
     }
 
     .stick-canvas.engaged {
       border-color: var(--rg-gold);
-      box-shadow: inset 0 4px 16px rgba(0,0,0,0.95), 0 0 12px rgba(255, 179, 0, 0.35);
+      box-shadow: inset 0 6px 20px rgba(0,0,0,0.95), 0 0 16px rgba(255, 179, 0, 0.45);
     }
 
     /* 4. LOWER CONTROLS: [D-PAD LEFT] — [SELECT / MENU CENTER] — [4 DIAMOND BUTTONS RIGHT] */
     .lower-controls-deck {
-      flex: 1;
-      min-height: 145px;
+      flex: 1.05;
+      min-height: 0;
       display: grid;
       grid-template-columns: 1fr auto 1fr;
       align-items: center;
       justify-items: center;
-      gap: 4px;
-      padding: 4px 2px 6px;
-      background: rgba(12, 14, 20, 0.35);
-      border-top: 1px solid rgba(255, 255, 255, 0.06);
-      border-radius: 16px;
+      gap: 1.5cqw;
+      padding: 0.8dvh 1.5cqw 1dvh;
+      background: rgba(12, 14, 20, 0.42);
+      border-top: 1.5px solid rgba(255, 255, 255, 0.08);
+      border-radius: 20px;
     }
 
     .hw-btn {
@@ -327,82 +331,82 @@
       filter: brightness(1.3);
     }
 
-    /* Classic Cross D-Pad (Left Side) */
+    /* Classic Cross D-Pad (Left Side) - Scaled to fill left zone */
     .dpad-cross {
-      width: 126px;
-      height: 126px;
+      width: min(37cqw, 25cqh);
+      height: min(37cqw, 25cqh);
       position: relative;
     }
 
     .dpad-arm {
       position: absolute;
-      background: linear-gradient(180deg, #2e3342 0%, #1c1f29 100%);
-      border: 2px solid #434a5e;
-      color: #aeb8c9;
-      font-size: 0.72rem;
-      box-shadow: 0 3px 0 #0b0d12, 0 4px 8px rgba(0,0,0,0.5);
+      background: linear-gradient(180deg, #323848 0%, #1d202b 100%);
+      border: 2.5px solid #4a5268;
+      color: #d0d8e8;
+      font-size: clamp(1rem, 4.2cqw, 1.9rem);
+      box-shadow: 0 4px 0 #090b10, 0 6px 12px rgba(0,0,0,0.55);
     }
 
     .dpad-arm.pressed {
-      background: #3b4256;
+      background: #41495f;
       color: var(--rg-gold);
       border-color: var(--rg-gold);
     }
 
     .dpad-up {
-      top: 0; left: 42px; width: 42px; height: 44px;
-      border-radius: 8px 8px 0 0;
+      top: 0; left: 33%; width: 34%; height: 36%;
+      border-radius: 18% 18% 0 0;
       border-bottom: none;
     }
     .dpad-down {
-      bottom: 0; left: 42px; width: 42px; height: 44px;
-      border-radius: 0 0 8px 8px;
+      bottom: 0; left: 33%; width: 34%; height: 36%;
+      border-radius: 0 0 18% 18%;
       border-top: none;
     }
     .dpad-left {
-      top: 42px; left: 0; width: 44px; height: 42px;
-      border-radius: 8px 0 0 8px;
+      top: 33%; left: 0; width: 36%; height: 34%;
+      border-radius: 18% 0 0 18%;
       border-right: none;
     }
     .dpad-right {
-      top: 42px; right: 0; width: 44px; height: 42px;
-      border-radius: 0 8px 8px 0;
+      top: 33%; right: 0; width: 36%; height: 34%;
+      border-radius: 0 18% 18% 0;
       border-left: none;
     }
     .dpad-center {
       position: absolute;
-      top: 42px; left: 42px; width: 42px; height: 42px;
-      background: #232733;
+      top: 33%; left: 33%; width: 34%; height: 34%;
+      background: #242834;
       pointer-events: none;
     }
     .dpad-center::after {
       content: "";
       position: absolute;
-      inset: 9px;
+      inset: 20%;
       border-radius: 50%;
-      background: radial-gradient(circle, #161922 20%, #262b38 100%);
+      background: radial-gradient(circle, #141720 20%, #292e3d 100%);
     }
 
     /* Center 2 System Buttons (SELECT + START/MENU) */
     .center-sys-cluster {
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 2.2cqh;
       align-items: center;
       justify-content: center;
-      padding: 0 4px;
+      padding: 0 0.5cqw;
     }
 
     .btn-sys-pill {
-      width: 68px;
-      height: 30px;
-      background: #181b24;
-      border: 2px solid #464d63;
-      border-radius: 15px;
-      color: #d0d7e3;
-      font-size: 0.56rem;
-      letter-spacing: 0.5px;
-      box-shadow: 0 3px 0 #0a0c10;
+      width: clamp(74px, 19.5cqw, 140px);
+      height: clamp(36px, 5.4cqh, 62px);
+      background: #1a1e28;
+      border: 2.5px solid #4e566e;
+      border-radius: 999px;
+      color: #dce3ef;
+      font-size: clamp(0.72rem, 2.5cqw, 1.18rem);
+      letter-spacing: 0.6px;
+      box-shadow: 0 4px 0 #0a0c10, 0 5px 10px rgba(0,0,0,0.45);
     }
 
     .btn-sys-pill.menu-pill {
@@ -410,47 +414,48 @@
       color: var(--rg-gold);
     }
 
-    /* 4 Action Buttons in Classic Diamond (X Top, Y Left, A Right, B Bottom) */
+    /* 4 Action Buttons in Classic Diamond (X Top, Y Left, A Right, B Bottom) - Scaled to fill right zone */
     .diamond-cluster {
-      width: 132px;
-      height: 132px;
+      width: min(38cqw, 25.5cqh);
+      height: min(38cqw, 25.5cqh);
       position: relative;
     }
 
     .btn-diamond {
       position: absolute;
-      width: 46px;
-      height: 46px;
+      width: 36%;
+      height: 36%;
       border-radius: 50%;
-      background: radial-gradient(circle at 35% 30%, #393e4f, #1d202a);
-      border: 2.5px solid #4c5369;
+      background: radial-gradient(circle at 35% 30%, #3d4356, #1d202b);
+      border: 3px solid #525a72;
       color: #fff;
-      font-size: 0.82rem;
-      box-shadow: 0 4px 0 #0b0d12, 0 5px 10px rgba(0,0,0,0.55);
+      font-size: clamp(0.95rem, 3.8cqw, 1.75rem);
+      line-height: 1;
+      box-shadow: 0 5px 0 #090b10, 0 6px 12px rgba(0,0,0,0.6);
     }
 
     .btn-diamond small {
-      font-size: 0.42rem;
-      color: #cbd2df;
-      font-weight: 600;
-      margin-top: -2px;
+      font-size: clamp(0.54rem, 1.95cqw, 0.9rem);
+      color: #d4dce8;
+      font-weight: 700;
+      margin-top: 2px;
     }
 
-    /* Posiciones del Diamante: X arriba, Y izquierda, A derecha, B abajo */
+    /* Posiciones del Diamante en porcentaje: X arriba, Y izquierda, A derecha, B abajo */
     .btn-diamond.pos-top {
-      top: 0; left: 43px;
+      top: 0; left: 32%;
       border-color: var(--btn-x);
     }
     .btn-diamond.pos-left {
-      top: 43px; left: 0;
+      top: 32%; left: 0;
       border-color: var(--btn-y);
     }
     .btn-diamond.pos-right {
-      top: 43px; right: 0;
+      top: 32%; right: 0;
       border-color: var(--btn-a);
     }
     .btn-diamond.pos-bottom {
-      bottom: 0; left: 43px;
+      bottom: 0; left: 32%;
       border-color: var(--btn-b);
     }
   </style>
@@ -464,7 +469,7 @@
         <span>PWR</span>
         <span id="sdLed" class="led sd-act" title="Flash / SD Activity"></span>
         <span>ROM</span>
-        <span style="color:#828c9e;margin-left:3px;">ESP32-S3 N16R8 (v8)</span>
+        <span style="color:#828c9e;margin-left:3px;">ESP32-S3 N16R8 (v9)</span>
       </div>
       <div class="top-hw-pills">
         <button id="btnPalette" class="pill-btn">🎨 PAL</button>
@@ -945,13 +950,14 @@
 
     function drawThumbstickWell(ctxG, canvasEl, x, y, active, clicked, label) {
       const w = canvasEl.width, h = canvasEl.height;
-      const cx = w * 0.5, cy = h * 0.5, maxR = w * 0.37;
+      const cx = w * 0.5, cy = h * 0.5, maxR = w * 0.36;
+      const capR = w * 0.21;
       ctxG.clearRect(0, 0, w, h);
 
-      ctxG.strokeStyle = active ? 'rgba(255, 179, 0, 0.45)' : 'rgba(154, 165, 180, 0.18)';
-      ctxG.lineWidth = 1.5;
+      ctxG.strokeStyle = active ? 'rgba(255, 179, 0, 0.5)' : 'rgba(154, 165, 180, 0.22)';
+      ctxG.lineWidth = 2;
       ctxG.beginPath(); ctxG.arc(cx, cy, maxR, 0, Math.PI * 2); ctxG.stroke();
-      ctxG.beginPath(); ctxG.arc(cx, cy, maxR * 0.5, 0, Math.PI * 2); ctxG.stroke();
+      ctxG.beginPath(); ctxG.arc(cx, cy, maxR * 0.52, 0, Math.PI * 2); ctxG.stroke();
 
       ctxG.beginPath();
       ctxG.moveTo(cx - maxR, cy); ctxG.lineTo(cx + maxR, cy);
@@ -961,23 +967,26 @@
       const kx = cx + x * maxR;
       const ky = cy - y * maxR;
 
-      ctxG.strokeStyle = '#525866';
-      ctxG.lineWidth = 6;
+      ctxG.strokeStyle = '#5c6375';
+      ctxG.lineWidth = 10;
+      ctxG.lineCap = 'round';
       ctxG.beginPath(); ctxG.moveTo(cx, cy); ctxG.lineTo(kx, ky); ctxG.stroke();
 
-      ctxG.fillStyle = clicked ? '#e53935' : (active ? '#3a3f4d' : '#282c37');
-      ctxG.beginPath(); ctxG.arc(kx, ky, 26, 0, Math.PI * 2); ctxG.fill();
+      ctxG.fillStyle = clicked ? '#e53935' : (active ? '#3e4454' : '#2b303c');
+      ctxG.beginPath(); ctxG.arc(kx, ky, capR, 0, Math.PI * 2); ctxG.fill();
+      ctxG.lineWidth = 3;
+      ctxG.strokeStyle = clicked ? '#ffb300' : (active ? '#00e5ff' : '#586178');
+      ctxG.stroke();
+
+      ctxG.beginPath(); ctxG.arc(kx, ky, capR * 0.62, 0, Math.PI * 2);
       ctxG.lineWidth = 2;
-      ctxG.strokeStyle = clicked ? '#ffb300' : (active ? '#00e5ff' : '#4d5466');
+      ctxG.strokeStyle = 'rgba(255,255,255,0.22)';
       ctxG.stroke();
 
-      ctxG.beginPath(); ctxG.arc(kx, ky, 16, 0, Math.PI * 2);
-      ctxG.strokeStyle = 'rgba(255,255,255,0.15)';
-      ctxG.stroke();
-
-      ctxG.fillStyle = '#9aa5b4';
-      ctxG.font = 'bold 10px monospace';
-      ctxG.fillText(label, 58, 17);
+      ctxG.fillStyle = '#aeb9c9';
+      ctxG.font = 'bold 12px monospace';
+      ctxG.textAlign = 'center';
+      ctxG.fillText(label, cx, 20);
       canvasEl.classList.toggle('engaged', active || clicked);
     }
 
