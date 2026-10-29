@@ -6,22 +6,19 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="mobile-web-app-capable" content="yes" />
-  <meta name="theme-color" content="#070a0f" />
-  <title>FPVSim 128×64 v5 — Consola Portátil ESP32-S3</title>
+  <meta name="theme-color" content="#0d111a" />
+  <title>ESP32-S3 Retro-Go Handheld — Firmware & Multi-Game SDK (128×64)</title>
   <style>
     :root {
-      --bg-body: #070a0f;
-      --bg-shell: #101622;
-      --bg-panel: #161f30;
-      --border: #28364f;
+      --shell-bg: #181f2c;
+      --shell-edge: #2b374f;
+      --bezel-bg: #070a10;
       --accent: #00e5ff;
-      --accent-glow: rgba(0, 229, 255, 0.28);
       --amber: #ffb300;
       --green: #00e676;
       --red: #ff5252;
       --text: #e6edf3;
-      --text-muted: #8b9bb4;
-      --oled-off: #04070b;
+      --muted: #8b9bb4;
     }
 
     * {
@@ -40,218 +37,116 @@
       overflow: hidden;
       position: fixed;
       inset: 0;
-      background: var(--bg-body);
+      background: #080b11;
       color: var(--text);
       font-family: 'JetBrains Mono', 'Consolas', monospace;
       touch-action: none;
+      display: flex;
+      justify-content: center;
+      align-items: center;
     }
 
-    .portrait-notice {
-      display: none;
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      z-index: 60;
-      background: rgba(255, 179, 0, 0.95);
-      color: #000;
-      font-size: 0.72rem;
-      font-weight: 700;
-      text-align: center;
-      padding: 4px 8px;
-    }
-
-    @media (orientation: portrait) and (max-width: 768px) {
-      .portrait-notice {
-        display: block;
-      }
-    }
-
-    .handheld-layout {
+    /* Vertical Handheld Console Shell (GameBoy / Retro-Go Format) */
+    .console-body {
       width: 100%;
+      max-width: 440px;
       height: 100dvh;
+      max-height: 920px;
+      background: linear-gradient(165deg, #212b3d 0%, #141a26 60%, #0e131d 100%);
+      border: 2px solid var(--shell-edge);
+      border-radius: 26px;
+      padding: env(safe-area-inset-top, 8px) 12px env(safe-area-inset-bottom, 10px);
       display: flex;
       flex-direction: column;
-      padding: env(safe-area-inset-top, 4px) env(safe-area-inset-right, 8px) env(safe-area-inset-bottom, 4px) env(safe-area-inset-left, 8px);
-      background: radial-gradient(circle at 50% 35%, #162033 0%, #070a0f 100%);
-    }
-
-    /* Compact HUD Top Bar */
-    .hud-topbar {
-      height: 36px;
-      flex-shrink: 0;
-      display: flex;
-      align-items: center;
       justify-content: space-between;
       gap: 6px;
-      padding: 0 8px;
-      background: rgba(16, 22, 34, 0.92);
-      border-bottom: 1px solid var(--border);
-      border-radius: 6px;
+      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.85), inset 0 1px 2px rgba(255, 255, 255, 0.12);
+      position: relative;
     }
 
-    .hud-stats {
+    @media (max-width: 460px) {
+      .console-body {
+        border-radius: 0;
+        border: none;
+        max-height: 100dvh;
+      }
+    }
+
+    /* Top Hardware Status Strip */
+    .hw-header {
       display: flex;
+      justify-content: space-between;
       align-items: center;
-      gap: 8px;
-      overflow-x: auto;
-      font-size: 0.67rem;
-      white-space: nowrap;
-    }
-
-    .hud-metric {
-      display: inline-flex;
-      align-items: center;
-      gap: 3px;
-    }
-
-    .hud-metric b {
-      color: var(--accent);
-      font-variant-numeric: tabular-nums;
-    }
-
-    .hud-metric b.amber { color: var(--amber); }
-    .hud-metric b.green { color: var(--green); }
-
-    .hud-actions {
-      display: flex;
-      align-items: center;
-      gap: 4px;
+      padding: 4px 6px;
+      background: rgba(8, 12, 18, 0.65);
+      border: 1px solid #27344a;
+      border-radius: 8px;
+      font-size: 0.62rem;
       flex-shrink: 0;
     }
 
-    .btn-hud {
-      background: var(--bg-panel);
-      color: var(--text);
-      border: 1px solid var(--border);
-      border-radius: 5px;
-      padding: 4px 7px;
-      font-family: inherit;
-      font-size: 0.65rem;
-      font-weight: 600;
-      cursor: pointer;
-      white-space: nowrap;
-    }
-
-    .btn-hud:active,
-    .btn-hud.active {
-      background: var(--accent-glow);
-      border-color: var(--accent);
-      color: var(--accent);
-    }
-
-    /* Main Cockpit: [Left Gimbal] — [OLED 128x64] — [Right Gimbal] */
-    .cockpit-body {
-      flex: 1;
-      min-height: 0;
-      display: grid;
-      grid-template-columns: minmax(138px, 27vw) 1fr minmax(138px, 27vw);
+    .hw-badge {
+      display: flex;
       align-items: center;
-      justify-items: center;
       gap: 6px;
-      padding: 4px 2px;
     }
 
-    @media (orientation: portrait) and (max-width: 768px) {
-      .cockpit-body {
-        grid-template-columns: 1fr 1fr;
-        grid-template-rows: 1fr auto;
-        padding-bottom: 8px;
-      }
-      .center-display-col {
-        grid-column: 1 / -1;
-        grid-row: 1;
-      }
-      .gimbal-col.left {
-        grid-column: 1;
-        grid-row: 2;
-      }
-      .gimbal-col.right {
-        grid-column: 2;
-        grid-row: 2;
-      }
+    .led-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 6px var(--green);
     }
 
-    .gimbal-col {
-      width: 100%;
-      height: 100%;
+    .hw-controls {
       display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
       gap: 4px;
-      touch-action: none;
     }
 
-    .gimbal-label {
-      font-size: 0.58rem;
-      color: var(--text-muted);
-      letter-spacing: 0.3px;
-      text-align: center;
-    }
-
-    /* Canvas-rendered Interactive Gimbal Pad */
-    .gimbal-canvas {
-      width: min(100%, 195px, 65dvh);
-      aspect-ratio: 1 / 1;
-      border-radius: 16px;
-      border: 2px solid #2c3e5a;
-      background: #0a0f18;
-      touch-action: none;
-      display: block;
-      box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.9), 0 4px 12px rgba(0, 0, 0, 0.5);
-    }
-
-    .gimbal-canvas.engaged {
-      border-color: var(--accent);
-      box-shadow: 0 0 14px rgba(0, 229, 255, 0.35);
-    }
-
-    .gimbal-readout {
+    .mini-btn {
+      background: #172133;
+      color: var(--text);
+      border: 1px solid #2e405e;
+      border-radius: 4px;
+      padding: 3px 6px;
+      font-family: inherit;
       font-size: 0.60rem;
-      color: var(--accent);
-      font-variant-numeric: tabular-nums;
       font-weight: 700;
+      cursor: pointer;
     }
 
-    /* Center OLED 128x64 Screen Column */
-    .center-display-col {
-      width: 100%;
-      height: 100%;
+    .mini-btn.active {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    /* OLED 128x64 Screen Bezel */
+    .screen-bezel {
+      background: var(--bezel-bg);
+      border: 3px solid #2b3952;
+      border-radius: 12px;
+      padding: 8px 10px 10px;
+      box-shadow: inset 0 0 18px rgba(0, 0, 0, 0.95), 0 4px 14px rgba(0, 0, 0, 0.5);
       display: flex;
       flex-direction: column;
-      align-items: center;
-      justify-content: center;
       gap: 5px;
-      min-width: 0;
+      flex-shrink: 0;
     }
 
-    .oled-frame {
-      width: 100%;
-      max-width: min(100%, calc((100dvh - 76px) * 1.85));
-      background: #030508;
-      border: 3px solid #2e3d56;
-      border-radius: 10px;
-      padding: 5px 7px 7px;
-      box-shadow: 0 8px 26px rgba(0, 0, 0, 0.85), inset 0 0 14px rgba(0, 229, 255, 0.08);
-      display: flex;
-      flex-direction: column;
-      gap: 3px;
-    }
-
-    .oled-bezel-top {
+    .bezel-top-info {
       display: flex;
       justify-content: space-between;
       font-size: 0.56rem;
-      color: #6c809a;
-      letter-spacing: 0.6px;
+      color: #6b7d99;
+      letter-spacing: 0.5px;
     }
 
-    .canvas-wrap {
+    .oled-viewport {
       width: 100%;
       aspect-ratio: 2 / 1;
-      background: var(--oled-off);
-      border: 1px solid #1a2636;
+      background: #04070b;
+      border: 1px solid #1c283a;
       position: relative;
       overflow: hidden;
     }
@@ -264,7 +159,7 @@
       display: block;
     }
 
-    .canvas-wrap.pixel-grid::after {
+    .oled-viewport.pixel-grid::after {
       content: "";
       position: absolute;
       inset: 0;
@@ -275,281 +170,297 @@
       pointer-events: none;
     }
 
-    .quick-flight-bar {
-      display: flex;
-      gap: 5px;
-      flex-wrap: wrap;
-      justify-content: center;
-      align-items: center;
-    }
-
-    /* Slide-Over Calibration Drawer */
-    .settings-backdrop {
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.65);
-      z-index: 90;
-      display: none;
-      align-items: center;
-      justify-content: flex-end;
-    }
-
-    .settings-backdrop.open {
-      display: flex;
-    }
-
-    .settings-drawer {
-      width: min(370px, 92vw);
-      height: 100dvh;
-      background: var(--bg-shell);
-      border-left: 1px solid var(--border);
-      padding: 12px 14px;
-      overflow-y: auto;
-      touch-action: pan-y;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-
-    .drawer-header {
+    .bezel-bottom-info {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      border-bottom: 1px solid var(--border);
-      padding-bottom: 8px;
-    }
-
-    .drawer-title {
-      font-size: 0.82rem;
-      font-weight: 700;
+      font-size: 0.60rem;
       color: var(--accent);
     }
 
-    .config-group {
-      background: var(--bg-panel);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 9px;
+    /* Middle Section: 4 Physical Buttons (SELECT, START/MENU, B, A) + L3/R3 Clicks */
+    .mid-controls-deck {
       display: flex;
       flex-direction: column;
-      gap: 7px;
+      gap: 6px;
+      flex-shrink: 0;
     }
 
-    .group-title {
-      font-size: 0.68rem;
+    /* System & L3/R3 Click Row */
+    .shoulder-click-row {
+      display: grid;
+      grid-template-columns: 1fr auto auto 1fr;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .hw-btn {
+      background: linear-gradient(180deg, #273449 0%, #192231 100%);
+      border: 2px solid #384b69;
+      color: var(--text);
+      border-radius: 10px;
+      font-family: inherit;
       font-weight: 700;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 3px 0 #0d121b, 0 4px 8px rgba(0,0,0,0.45);
+      transition: transform 0.05s;
+    }
+
+    .hw-btn.pressed {
+      transform: translateY(2px);
+      box-shadow: 0 1px 0 #0d121b;
+      border-color: var(--accent);
+      background: #1b2d42;
+      color: var(--accent);
+    }
+
+    .btn-click-stick {
+      height: 36px;
+      font-size: 0.64rem;
+    }
+
+    .btn-sys {
+      height: 32px;
+      padding: 0 10px;
+      border-radius: 16px;
+      font-size: 0.58rem;
       color: var(--amber);
-      text-transform: uppercase;
+      border-color: #4b5c78;
     }
 
-    .slider-item {
+    /* Main Action Buttons Row (4 Tactile Buttons: Y/1, X/2, B, A or Quick Game Switch) */
+    .action-buttons-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      padding: 2px 4px;
+    }
+
+    .btn-action {
+      height: 44px;
+      border-radius: 12px;
+      font-size: 0.78rem;
+    }
+
+    .btn-action small {
+      font-size: 0.52rem;
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    .btn-action.btn-a {
+      border-color: #00b8d4;
+    }
+
+    .btn-action.btn-b {
+      border-color: #ff5252;
+    }
+
+    /* Bottom Dual Analog Joysticks Section */
+    .dual-sticks-deck {
+      flex: 1;
+      min-height: 150px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      align-items: center;
+      justify-items: center;
+      padding: 2px 0;
+    }
+
+    .stick-module {
+      width: 100%;
+      height: 100%;
       display: flex;
       flex-direction: column;
-      gap: 2px;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
     }
 
-    .slider-label {
-      display: flex;
-      justify-content: space-between;
-      font-size: 0.66rem;
+    .stick-canvas {
+      width: min(100%, 172px, 28dvh);
+      aspect-ratio: 1 / 1;
+      background: radial-gradient(circle at center, #141d2e 0%, #090d15 100%);
+      border: 2px solid #2e405e;
+      border-radius: 18px;
+      touch-action: none;
+      display: block;
+      box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.9), 0 4px 12px rgba(0, 0, 0, 0.5);
     }
 
-    input[type="range"] {
-      width: 100%;
-      accent-color: var(--accent);
-      height: 6px;
-      cursor: pointer;
+    .stick-canvas.engaged {
+      border-color: var(--accent);
+      box-shadow: 0 0 12px rgba(0, 229, 255, 0.3);
     }
 
-    .swatches {
-      display: flex;
-      gap: 5px;
-    }
-
-    .swatch {
-      flex: 1;
+    .stick-caption {
+      font-size: 0.56rem;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
       text-align: center;
-      padding: 5px 4px;
-      font-size: 0.65rem;
-      border-radius: 4px;
-      border: 1px solid var(--border);
-      background: #080c12;
-      cursor: pointer;
-    }
-
-    .swatch.active {
-      border-color: #fff;
-      font-weight: 700;
     }
   </style>
 </head>
 <body>
-  <div class="portrait-notice">
-    🔄 Gira el teléfono en horizontal (Landscape) para volar cómodamente
-  </div>
-
-  <div class="handheld-layout">
-    <!-- Top Compact HUD Bar -->
-    <header class="hud-topbar">
-      <div class="hud-stats">
-        <span class="hud-metric"><b style="color:#00e676">v5</b></span>
-        <span class="hud-metric">GATE <b id="uiGate">1/8</b></span>
-        <span class="hud-metric">LAP <b id="uiLapTime" class="amber">00:00.0</b></span>
-        <span class="hud-metric">VEL <b id="uiSpeed">0.0m/s</b></span>
-        <span class="hud-metric">ALT <b id="uiAlt">2.0m</b></span>
-        <span class="hud-metric">P/R/Y <b id="uiAttitude">0°/0°/0°</b></span>
+  <div class="console-body">
+    <!-- 1. Top ESP32-S3 N16R8 Hardware Header -->
+    <header class="hw-header">
+      <div class="hw-badge">
+        <span class="led-dot"></span>
+        <span><b>ESP32-S3 N16R8</b> (16MB / 8MB PSRAM)</span>
       </div>
-
-      <div class="hud-actions">
-        <button id="btnFlightMode" class="btn-hud active" title="Alternar ACRO Puro / STAB">Modo: ACRO</button>
-        <button id="btnCamView" class="btn-hud">🎥 FPV</button>
-        <button id="btnResetDrone" class="btn-hud">↺ Reset</button>
-        <button id="btnFullscreen" class="btn-hud">⛶ Full</button>
-        <button id="btnOpenSettings" class="btn-hud">⚙️</button>
+      <div class="hw-controls">
+        <button id="btnColorCycle" class="mini-btn">🎨 OLED</button>
+        <button id="btnAudioToggle" class="mini-btn">🔇 Audio</button>
+        <button id="btnGridToggle" class="mini-btn active">Grid</button>
       </div>
     </header>
 
-    <!-- Handheld Cockpit Body: Left Stick | 128x64 OLED | Right Stick -->
-    <main class="cockpit-body">
-      <!-- Left Self-Centering Gimbal (Throttle + Yaw) -->
-      <div class="gimbal-col left">
-        <span class="gimbal-label">STICK IZQ: THR (↕) + YAW (↔)</span>
-        <canvas id="stickLeft" class="gimbal-canvas" width="220" height="220"></canvas>
-        <span id="readoutLeft" class="gimbal-readout">THR: 35% | YAW: +0.00</span>
+    <!-- 2. 128x64 Monochrome OLED Screen Bezel -->
+    <section class="screen-bezel">
+      <div class="bezel-top-info">
+        <span id="uiCurrentAppTitle">RETRO-GO LAUNCHER v1.0</span>
+        <span id="uiFpsCounter">60 FPS | 1KB VRAM</span>
       </div>
 
-      <!-- Center 128x64 Native Monochrome OLED -->
-      <div class="center-display-col">
-        <div class="oled-frame">
-          <div class="oled-bezel-top">
-            <span>ESP32-S3 // SSD1306 128×64 (1KB VRAM)</span>
-            <span id="fpsCounter">60 FPS</span>
-          </div>
-          <div id="canvasContainer" class="canvas-wrap pixel-grid">
-            <canvas id="oledCanvas" width="128" height="64"></canvas>
-          </div>
-        </div>
-
-        <div class="quick-flight-bar">
-          <button id="btnSound" class="btn-hud">🔇 Audio</button>
-          <button id="btnGridToggle" class="btn-hud active">Grid OLED</button>
-          <span id="touchStatus" style="font-size:0.60rem;color:var(--amber);">
-            Listo (v5 Rodrigues 3D)
-          </span>
-        </div>
+      <div id="oledViewport" class="oled-viewport pixel-grid">
+        <canvas id="oledCanvas" width="128" height="64"></canvas>
       </div>
 
-      <!-- Right Self-Centering Gimbal (Pitch + Roll) -->
-      <div class="gimbal-col right">
-        <span class="gimbal-label">STICK DER: PITCH (↕) + ROLL (↔)</span>
-        <canvas id="stickRight" class="gimbal-canvas" width="220" height="220"></canvas>
-        <span id="readoutRight" class="gimbal-readout">PIT: +0.00 | ROL: +0.00</span>
+      <div class="bezel-bottom-info">
+        <span id="uiControlsHint">Stick: Mover | A: Abrir | MENU: Salir</span>
+        <span id="uiTelemetryMini">ADC 12-Bit OK</span>
       </div>
-    </main>
-  </div>
+    </section>
 
-  <!-- Slide-over Calibration Drawer -->
-  <div id="settingsBackdrop" class="settings-backdrop">
-    <aside class="settings-drawer">
-      <div class="drawer-header">
-        <span class="drawer-title">⚙️ Física FPV & Rates (v5)</span>
-        <button id="btnCloseSettings" class="btn-hud">✕ Cerrar</button>
-      </div>
-
-      <div class="config-group">
-        <span class="group-title">Color de Fósforo OLED 1-Bit</span>
-        <div class="swatches">
-          <div class="swatch active" data-color="#e8fcff" style="color:#e8fcff;">Blanco</div>
-          <div class="swatch" data-color="#00e5ff" style="color:#00e5ff;">Cyan</div>
-          <div class="swatch" data-color="#ffb300" style="color:#ffb300;">Ámbar</div>
-          <div class="swatch" data-color="#00e676" style="color:#00e676;">Verde</div>
-        </div>
+    <!-- 3. Tactile Buttons Deck: L3/R3 Stick Clicks + 4 Physical Console Buttons -->
+    <section class="mid-controls-deck">
+      <!-- Row 1: L3 (Left Stick Click), SELECT, START/MENU, R3 (Right Stick Click) -->
+      <div class="shoulder-click-row">
+        <button class="hw-btn btn-click-stick" data-btn="L3">
+          <span>L3 CLICK</span>
+        </button>
+        <button class="hw-btn btn-sys" data-btn="SELECT">
+          <span>SELECT</span>
+        </button>
+        <button class="hw-btn btn-sys" data-btn="MENU">
+          <span>🏠 MENU</span>
+        </button>
+        <button class="hw-btn btn-click-stick" data-btn="R3">
+          <span>R3 CLICK</span>
+        </button>
       </div>
 
-      <div class="config-group">
-        <span class="group-title">Física, Gravedad & Inercia</span>
+      <!-- Row 2: 4 Physical Face Buttons (Y, X, B, A) -->
+      <div class="action-buttons-row">
+        <button class="hw-btn btn-action" data-btn="Y">
+          <span>Y</span>
+          <small id="lblBtnY">CAM / MODO</small>
+        </button>
+        <button class="hw-btn btn-action" data-btn="X">
+          <span>X</span>
+          <small id="lblBtnX">RESET / NITRO</small>
+        </button>
+        <button class="hw-btn btn-action btn-b" data-btn="B">
+          <span>B</span>
+          <small id="lblBtnB">FRENO / ATRÁS</small>
+        </button>
+        <button class="hw-btn btn-action btn-a" data-btn="A">
+          <span>A</span>
+          <small id="lblBtnA">ACCIÓN / GAS</small>
+        </button>
+      </div>
+    </section>
 
-        <div class="slider-item">
-          <div class="slider-label"><span>Camera Uptilt (°)</span><b id="valUptilt">15°</b></div>
-          <input id="slUptilt" type="range" min="0" max="45" step="1" value="15" />
-        </div>
-
-        <div class="slider-item">
-          <div class="slider-label"><span>Neutral Throttle (Centro Stick)</span><b id="valHover">36%</b></div>
-          <input id="slHover" type="range" min="20" max="55" step="1" value="36" />
-        </div>
-
-        <div class="slider-item">
-          <div class="slider-label"><span>Empuje Máx (m/s²)</span><b id="valThrust">26.0</b></div>
-          <input id="slThrust" type="range" min="15" max="42" step="0.5" value="26.0" />
-        </div>
-
-        <div class="slider-item">
-          <div class="slider-label"><span>Gravedad (m/s²)</span><b id="valGravity">9.81</b></div>
-          <input id="slGravity" type="range" min="3.0" max="18.0" step="0.1" value="9.81" />
-        </div>
-
-        <div class="slider-item">
-          <div class="slider-label"><span>Resistencia Aire (Drag)</span><b id="valDrag">0.08</b></div>
-          <input id="slDrag" type="range" min="0.01" max="0.40" step="0.01" value="0.08" />
-        </div>
+    <!-- 4. Dual Self-Centering Analog Joysticks (Mode 2 / Twin-Stick) -->
+    <section class="dual-sticks-deck">
+      <div class="stick-module">
+        <canvas id="stickLeft" class="stick-canvas" width="200" height="200"></canvas>
+        <span id="readoutLeft" class="stick-caption">LX:+0.00 LY:+0.00 (L3:0)</span>
       </div>
 
-      <div class="config-group">
-        <span class="group-title">Rates Acro & Sticks</span>
-
-        <div class="slider-item">
-          <div class="slider-label"><span>Rate Pitch / Roll (°/s)</span><b id="valRatePR">300°/s</b></div>
-          <input id="slRatePR" type="range" min="100" max="900" step="10" value="300" />
-        </div>
-
-        <div class="slider-item">
-          <div class="slider-label"><span>Rate Yaw (°/s)</span><b id="valRateYaw">200°/s</b></div>
-          <input id="slRateYaw" type="range" min="80" max="720" step="10" value="200" />
-        </div>
-
-        <div class="slider-item">
-          <div class="slider-label"><span>Curva Expo</span><b id="valExpo">0.35</b></div>
-          <input id="slExpo" type="range" min="0.0" max="0.80" step="0.05" value="0.35" />
-        </div>
-
-        <div class="slider-item">
-          <div class="slider-label"><span>Zona Muerta (Deadzone)</span><b id="valDeadzone">0.04</b></div>
-          <input id="slDeadzone" type="range" min="0.00" max="0.20" step="0.01" value="0.04" />
-        </div>
+      <div class="stick-module">
+        <canvas id="stickRight" class="stick-canvas" width="200" height="200"></canvas>
+        <span id="readoutRight" class="stick-caption">RX:+0.00 RY:+0.00 (R3:0)</span>
       </div>
-
-      <button id="btnResetParams" class="btn-hud" style="padding:8px;text-align:center;">
-        Restaurar Valores por Defecto
-      </button>
-    </aside>
+    </section>
   </div>
 
   <script>
     /***************************************************************************
-     * 1. FRAMEBUFFER ESTÁTICO DE 1.024 BYTES (128x64 1-BIT MONOCROMÁTICO)
+     * 1. CAPA DE ABSTRACCIÓN DE HARDWARE (HAL) — ESP32-S3 (128x64 1-BIT)
+     *    - Framebuffer estático de 1.024 bytes (`frameBuffer`)
+     *    - Primitivas gráficas 1-bit: píxel, línea Bresenham con recorte,
+     *      rectángulos, círculos y texto bitmap 3x5 / 5x7
      ***************************************************************************/
     const SCREEN_W = 128;
     const SCREEN_H = 64;
     const FB_BYTES = 1024;
     const frameBuffer = new Uint8Array(FB_BYTES);
 
-    const canvas = document.getElementById('oledCanvas');
-    const ctx = canvas.getContext('2d', { alpha: false });
-    const imgData = ctx.createImageData(SCREEN_W, SCREEN_H);
-    const rgbaPixels = imgData.data;
+    const oledCanvas = document.getElementById('oledCanvas');
+    const oledCtx = oledCanvas.getContext('2d', { alpha: false });
+    const oledImgData = oledCtx.createImageData(SCREEN_W, SCREEN_H);
+    const rgbaPixels = oledImgData.data;
 
-    let oledColorRGB = { r: 232, g: 252, b: 255 };
+    const OLED_PALETTES = [
+      { name: 'Blanco Ice', r: 232, g: 252, b: 255 },
+      { name: 'Cyan SSD',   r: 0,   g: 229, b: 255 },
+      { name: 'Ámbar Retro',r: 255, g: 179, b: 0   },
+      { name: 'Verde CRT',  r: 0,   g: 230, b: 118 }
+    ];
+    let currentPaletteIdx = 0;
     const oledBgRGB = { r: 4, g: 7, b: 11 };
 
     function fbClear() {
       frameBuffer.fill(0);
     }
 
-    function fbSetPixel(x, y) {
-      if (x < 0 || x >= SCREEN_W || y < 0 || y >= SCREEN_H) return;
-      const bitIndex = (y << 7) + x;
-      frameBuffer[bitIndex >> 3] |= (1 << (bitIndex & 7));
+    function fbSetPixel(x, y, color = 1) {
+      const ix = x | 0;
+      const iy = y | 0;
+      if (ix < 0 || ix >= SCREEN_W || iy < 0 || iy >= SCREEN_H) return;
+      const bitIndex = (iy << 7) + ix;
+      if (color) {
+        frameBuffer[bitIndex >> 3] |= (1 << (bitIndex & 7));
+      } else {
+        frameBuffer[bitIndex >> 3] &= ~(1 << (bitIndex & 7));
+      }
+    }
+
+    function fbRect(x, y, w, h, fill = false, color = 1) {
+      const x0 = x | 0, y0 = y | 0, rw = w | 0, rh = h | 0;
+      if (fill) {
+        for (let py = y0; py < y0 + rh; py++) {
+          for (let px = x0; px < x0 + rw; px++) {
+            fbSetPixel(px, py, color);
+          }
+        }
+      } else {
+        fbDrawLine(x0, y0, x0 + rw - 1, y0);
+        fbDrawLine(x0, y0 + rh - 1, x0 + rw - 1, y0 + rh - 1);
+        fbDrawLine(x0, y0, x0, y0 + rh - 1);
+        fbDrawLine(x0 + rw - 1, y0, x0 + rw - 1, y0 + rh - 1);
+      }
+    }
+
+    function fbCircle(cx, cy, r) {
+      let x = r | 0, y = 0, err = 0;
+      const x0 = cx | 0, y0 = cy | 0;
+      while (x >= y) {
+        fbSetPixel(x0 + x, y0 + y); fbSetPixel(x0 + y, y0 + x);
+        fbSetPixel(x0 - y, y0 + x); fbSetPixel(x0 - x, y0 + y);
+        fbSetPixel(x0 - x, y0 - y); fbSetPixel(x0 - y, y0 - x);
+        fbSetPixel(x0 + y, y0 - x); fbSetPixel(x0 + x, y0 - y);
+        y += 1;
+        if (err <= 0) err += 2 * y + 1;
+        if (err > 0) { x -= 1; err -= 2 * x + 1; }
+      }
     }
 
     const CLIP_LEFT = 1, CLIP_RIGHT = 2, CLIP_BOTTOM = 4, CLIP_TOP = 8;
@@ -562,55 +473,7 @@
       return code;
     }
 
-    function fbDrawLine(x0, y0, x1, y1) {
-      let out0 = computeOutCode(x0, y0);
-      let out1 = computeOutCode(x1, y1);
-      let accept = false;
-
-      while (true) {
-        if (!(out0 | out1)) { accept = true; break; }
-        else if (out0 & out1) { break; }
-        else {
-          let x = 0, y = 0;
-          const out = out0 ? out0 : out1;
-          if (out & CLIP_BOTTOM) {
-            x = x0 + (x1 - x0) * (SCREEN_H - 1 - y0) / (y1 - y0);
-            y = SCREEN_H - 1;
-          } else if (out & CLIP_TOP) {
-            x = x0 + (x1 - x0) * (0 - y0) / (y1 - y0);
-            y = 0;
-          } else if (out & CLIP_RIGHT) {
-            y = y0 + (y1 - y0) * (SCREEN_W - 1 - x0) / (x1 - x0);
-            x = SCREEN_W - 1;
-          } else if (out & CLIP_LEFT) {
-            y = y0 + (y1 - y0) * (0 - x0) / (x1 - x0);
-            x = 0;
-          }
-          if (out === out0) { x0 = x; y0 = y; out0 = computeOutCode(x0, y0); }
-          else { x1 = x; y1 = y; out1 = computeOutCode(x1, y1); }
-        }
-      }
-
-      if (!accept) return;
-
-      let ix0 = x0 | 0, iy0 = y0 | 0;
-      const ix1 = x1 | 0, iy1 = y1 | 0;
-      const dx = Math.abs(ix1 - ix0), sx = ix0 < ix1 ? 1 : -1;
-      const dy = -Math.abs(iy1 - iy0), sy = iy0 < iy1 ? 1 : -1;
-      let err = dx + dy;
-
-      while (true) {
-        fbSetPixel(ix0, iy0);
-        if (ix0 === ix1 && iy0 === iy1) break;
-        const e2 = err << 1;
-        if (e2 >= dy) { err += dy; ix0 += sx; }
-        if (e2 <= dx) { err += dx; iy0 += sy; }
-      }
-    }
-
-    function fbDrawDashedLine(x0, y0, x1, y1, mask) {
-      // Recortamos también líneas punteadas con Cohen-Sutherland para que el horizonte
-      // y la cuadrícula jamás desaparezcan cuando sus extremos salen de 128x64
+    function fbDrawLine(x0, y0, x1, y1, dashedMask = 0) {
       let out0 = computeOutCode(x0, y0);
       let out1 = computeOutCode(x1, y1);
       let accept = false;
@@ -646,8 +509,9 @@
       const dx = Math.abs(ix1 - ix0), sx = ix0 < ix1 ? 1 : -1;
       const dy = -Math.abs(iy1 - iy0), sy = iy0 < iy1 ? 1 : -1;
       let err = dx + dy, step = 0;
+
       while (true) {
-        if ((step & mask) === 0) fbSetPixel(ix0, iy0);
+        if (!dashedMask || (step & dashedMask) === 0) fbSetPixel(ix0, iy0);
         if (ix0 === ix1 && iy0 === iy1) break;
         const e2 = err << 1;
         if (e2 >= dy) { err += dy; ix0 += sx; }
@@ -656,26 +520,34 @@
       }
     }
 
+    // Fuente compacta 3x5 para textos en pantalla 128x64
     const FONT_3X5 = {
       '0': [7,5,5,5,7], '1': [2,6,2,2,7], '2': [7,1,7,4,7], '3': [7,1,7,1,7],
       '4': [5,5,7,1,1], '5': [7,4,7,1,7], '6': [7,4,7,5,7], '7': [7,1,1,2,2],
-      '8': [7,5,7,5,7], '9': [7,5,7,1,7], 'A': [2,5,7,5,5], 'C': [7,4,4,4,7],
-      'G': [7,4,5,5,7], 'H': [5,5,7,5,5], 'L': [4,4,4,4,7], 'R': [6,5,6,5,5],
-      'S': [7,4,7,1,7], 'T': [7,2,2,2,2], 'V': [5,5,5,5,2], '/': [1,1,2,4,4],
-      '-': [0,0,7,0,0]
+      '8': [7,5,7,5,7], '9': [7,5,7,1,7],
+      'A': [2,5,7,5,5], 'B': [6,5,6,5,6], 'C': [7,4,4,4,7], 'D': [6,5,5,5,6],
+      'E': [7,4,6,4,7], 'F': [7,4,6,4,4], 'G': [7,4,5,5,7], 'H': [5,5,7,5,5],
+      'I': [7,2,2,2,7], 'J': [1,1,1,5,7], 'K': [5,5,6,5,5], 'L': [4,4,4,4,7],
+      'M': [5,7,7,5,5], 'N': [5,7,7,7,5], 'O': [7,5,5,5,7], 'P': [7,5,7,4,4],
+      'Q': [7,5,5,7,3], 'R': [6,5,6,5,5], 'S': [7,4,7,1,7], 'T': [7,2,2,2,2],
+      'U': [5,5,5,5,7], 'V': [5,5,5,5,2], 'W': [5,5,7,7,5], 'X': [5,5,2,5,5],
+      'Y': [5,5,2,2,2], 'Z': [7,1,2,4,7],
+      ':': [0,2,0,2,0], '-': [0,0,7,0,0], '/': [1,1,2,4,4], '.': [0,0,0,0,2],
+      '+': [0,2,7,2,0], '>': [4,2,1,2,4], '<': [1,2,4,2,1], '%': [5,1,2,4,5]
     };
 
-    function fbDrawText(str, x, y) {
+    function fbDrawText(str, x, y, color = 1) {
+      const s = String(str).toUpperCase();
       let cx = x | 0;
       const cy = y | 0;
-      for (let i = 0; i < str.length; i++) {
-        const g = FONT_3X5[str[i]];
+      for (let i = 0; i < s.length; i++) {
+        const g = FONT_3X5[s[i]];
         if (g) {
           for (let r = 0; r < 5; r++) {
             const b = g[r];
-            if (b & 4) fbSetPixel(cx, cy + r);
-            if (b & 2) fbSetPixel(cx + 1, cy + r);
-            if (b & 1) fbSetPixel(cx + 2, cy + r);
+            if (b & 4) fbSetPixel(cx, cy + r, color);
+            if (b & 2) fbSetPixel(cx + 1, cy + r, color);
+            if (b & 1) fbSetPixel(cx + 2, cy + r, color);
           }
         }
         cx += 4;
@@ -683,14 +555,15 @@
     }
 
     function fbPresentToCanvas() {
+      const pal = OLED_PALETTES[currentPaletteIdx];
       let pIdx = 0;
       for (let byteIdx = 0; byteIdx < FB_BYTES; byteIdx++) {
         const b = frameBuffer[byteIdx];
         for (let bit = 0; bit < 8; bit++) {
           if ((b >> bit) & 1) {
-            rgbaPixels[pIdx]     = oledColorRGB.r;
-            rgbaPixels[pIdx + 1] = oledColorRGB.g;
-            rgbaPixels[pIdx + 2] = oledColorRGB.b;
+            rgbaPixels[pIdx]     = pal.r;
+            rgbaPixels[pIdx + 1] = pal.g;
+            rgbaPixels[pIdx + 2] = pal.b;
             rgbaPixels[pIdx + 3] = 255;
           } else {
             rgbaPixels[pIdx]     = oledBgRGB.r;
@@ -701,1004 +574,1157 @@
           pIdx += 4;
         }
       }
-      ctx.putImageData(imgData, 0, 0);
+      oledCtx.putImageData(oledImgData, 0, 0);
     }
 
     /***************************************************************************
-     * 2. MODELO FÍSICO DE VUELO ACRO (FÓRMULA DE ROTACIÓN 3D DE RODRIGUES)
-     *    - En lugar de rotar pares de vectores por separado (lo cual causaba
-     *      acoplamiento cruzado de orden de Euler), calculamos el vector de
-     *      velocidad angular total del cuerpo en coordenadas del mundo:
-     *        ω = pitchRate * R  +  yawRate * U  +  rollRate * F
-     *      y rotamos simultáneamente los 3 ejes del dron (R, U, F) alrededor del
-     *      eje unitario k = ω / |ω| un ángulo θ = |ω| * dt mediante la fórmula
-     *      exacta de Rodrigues:
-     *        V_new = V*cos(θ) + (k × V)*sin(θ) + k*(k · V)*(1 - cos(θ))
-     *    - Nota sobre producto cruzado en nuestro sistema de coordenadas:
-     *      Como +X = Derecha (R), +Y = Arriba (U), +Z = Adelante (F), es un
-     *      sistema zurdo donde R × U = -F. Por tanto, para que:
-     *        • Pitch adelante (pitchRate > 0) incline F hacia -U y U hacia +F
-     *        • Roll derecha (rollRate > 0) incline R hacia -U y U hacia +R
-     *        • Yaw derecha (yawRate > 0) gire F hacia +R y R hacia -F
-     *      definimos explícitamente la derivada dV/dt para R, U, F de forma
-     *      antisimétrica exacta y la integramos con mapa exponencial SO(3) (Rodrigues).
+     * 2. AUDIO SINTETIZADO DE CONSOLA (BEEPER / MOTOR PWM)
      ***************************************************************************/
-    const DEG2RAD = Math.PI / 180.0;
-    const RAD2DEG = 180.0 / Math.PI;
-    const NEAR_Z = 0.15;
-    const FOCAL_LEN = 68.0;
+    let audioCtx = null;
+    let soundEnabled = false;
 
-    const simConfig = {
-      camUptiltDeg: 15.0,
-      neutralThrottle: 0.36, // 36% en centro (Hover exacto = 9.81 / 26.0 = 37.7%)
-      maxThrustAccel: 26.0,
-      gravity: 9.81,
-      dragLinear: 0.08,
-      dragQuad: 0.008,
-      ratePitchRoll: 300.0,  // deg/s
-      rateYaw: 200.0,        // deg/s
-      expo: 0.35,            // Más suave alrededor del centro para sticks táctiles
-      deadzone: 0.04,
-      mode: 'ACRO',
-      chaseCam: false
-    };
-
-    const drone = {
-      px: 0.0, py: 2.2, pz: -10.0,
-      vx: 0.0, vy: 0.0, vz: 0.0,
-      pitchRate: 0.0,
-      rollRate: 0.0,
-      yawRate: 0.0,
-      // Base ortonormal del chasis en el mundo: Right (R), Up (U), Forward (F)
-      rx: 1.0, ry: 0.0, rz: 0.0,
-      ux: 0.0, uy: 1.0, uz: 0.0,
-      fx: 0.0, fy: 0.0, fz: 1.0,
-      throttleCmd: 0.36,
-      pitchDeg: 0.0,
-      rollDeg: 0.0,
-      yawDeg: 0.0,
-      prevPx: 0.0, prevPy: 2.2, prevPz: -10.0
-    };
-
-    function orthonormalizeDroneBasis() {
-      let fLen = Math.hypot(drone.fx, drone.fy, drone.fz) || 1.0;
-      drone.fx /= fLen; drone.fy /= fLen; drone.fz /= fLen;
-
-      const dotUF = drone.ux * drone.fx + drone.uy * drone.fy + drone.uz * drone.fz;
-      drone.ux -= dotUF * drone.fx;
-      drone.uy -= dotUF * drone.fy;
-      drone.uz -= dotUF * drone.fz;
-      let uLen = Math.hypot(drone.ux, drone.uy, drone.uz) || 1.0;
-      drone.ux /= uLen; drone.uy /= uLen; drone.uz /= uLen;
-
-      // En sistema R=(1,0,0), U=(0,1,0), F=(0,0,1): R = U × F (producto cruz estándar)
-      drone.rx = drone.uy * drone.fz - drone.uz * drone.fy;
-      drone.ry = drone.uz * drone.fx - drone.ux * drone.fz;
-      drone.rz = drone.ux * drone.fy - drone.uy * drone.fx;
-    }
-
-    // Integración exacta SO(3) (Fórmula de Rodrigues en el marco del cuerpo)
-    // Sea p = pitchRate*dt (nariz abajo: U -> +F, F -> -U)
-    //     r = rollRate*dt  (ala der abajo: U -> +R, R -> -U)
-    //     y = yawRate*dt   (nariz derecha: F -> +R, R -> -F)
-    // La matriz antisimétrica de velocidades en la base [R, U, F] es:
-    //   dR = -r * U - y * F
-    //   dU =  r * R + p * F
-    //   dF =  y * R - p * U
-    // Esta matriz antisimétrica A tiene norma angular θ = sqrt(p^2 + r^2 + y^2),
-    // y su exponencial exacta exp(A) = I + (sin(θ)/θ)*A + ((1 - cos(θ))/θ^2)*A^2
-    // rota simultáneamente R, U, F sin ningún acoplamiento ni orden de Euler!
-    function integrateBodyRotationExact(pRate, rRate, yRate, dt) {
-      const p = pRate * dt;
-      const r = rRate * dt;
-      const y = yRate * dt;
-      const thetaSq = p * p + r * r + y * y;
-      if (thetaSq < 1e-12) return;
-
-      const theta = Math.sqrt(thetaSq);
-      const c1 = Math.sin(theta) / theta;
-      const c2 = (1.0 - Math.cos(theta)) / thetaSq;
-
-      // Acción de A sobre la base actual (R, U, F):
-      // v1_R = A*R = -r*U - y*F
-      // v1_U = A*U =  r*R + p*F
-      // v1_F = A*F =  y*R - p*U
-      const rx = drone.rx, ry = drone.ry, rz = drone.rz;
-      const ux = drone.ux, uy = drone.uy, uz = drone.uz;
-      const fx = drone.fx, fy = drone.fy, fz = drone.fz;
-
-      const v1Rx = -r * ux - y * fx;
-      const v1Ry = -r * uy - y * fy;
-      const v1Rz = -r * uz - y * fz;
-
-      const v1Ux =  r * rx + p * fx;
-      const v1Uy =  r * ry + p * fy;
-      const v1Uz =  r * rz + p * fz;
-
-      const v1Fx =  y * rx - p * ux;
-      const v1Fy =  y * ry - p * uy;
-      const v1Fz =  y * rz - p * uz;
-
-      // Acción de A^2 sobre la base (A * v1):
-      const v2Rx = -r * v1Ux - y * v1Fx;
-      const v2Ry = -r * v1Uy - y * v1Fy;
-      const v2Rz = -r * v1Uz - y * v1Fz;
-
-      const v2Ux =  r * v1Rx + p * v1Fx;
-      const v2Uy =  r * v1Ry + p * v1Fy;
-      const v2Uz =  r * v1Rz + p * v1Fz;
-
-      const v2Fx =  y * v1Rx - p * v1Ux;
-      const v2Fy =  y * v1Ry - p * v1Uy;
-      const v2Fz =  y * v1Rz - p * v1Uz;
-
-      drone.rx = rx + c1 * v1Rx + c2 * v2Rx;
-      drone.ry = ry + c1 * v1Ry + c2 * v2Ry;
-      drone.rz = rz + c1 * v1Rz + c2 * v2Rz;
-
-      drone.ux = ux + c1 * v1Ux + c2 * v2Ux;
-      drone.uy = uy + c1 * v1Uy + c2 * v2Uy;
-      drone.uz = uz + c1 * v1Uz + c2 * v2Uz;
-
-      drone.fx = fx + c1 * v1Fx + c2 * v2Fx;
-      drone.fy = fy + c1 * v1Fy + c2 * v2Fy;
-      drone.fz = fz + c1 * v1Fz + c2 * v2Fz;
-
-      orthonormalizeDroneBasis();
+    function playTone(freq = 600, dur = 0.08, type = 'square', vol = 0.05) {
+      if (!soundEnabled) return;
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = type;
+      osc.frequency.value = freq;
+      gain.gain.value = vol;
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + dur);
+      osc.stop(audioCtx.currentTime + dur + 0.01);
     }
 
     /***************************************************************************
-     * 3. ESCENARIO 3D WIREFRAME: CUADRÍCULA DENSA, PUERTAS Y PILARES
-     ***************************************************************************/
-    const worldLines = [];
-    const gates = [];
-
-    function addLine(x0, y0, z0, x1, y1, z1, dashed = false) {
-      worldLines.push({ x0, y0, z0, x1, y1, z1, dashed });
-    }
-
-    function buildCircuitGeometry() {
-      worldLines.length = 0;
-      gates.length = 0;
-
-      const gridRange = 60;
-      const gridStep = 6;
-      for (let i = -gridRange; i <= gridRange; i += gridStep) {
-        addLine(i, 0, -gridRange, i, 0, gridRange, true);
-        addLine(-gridRange, 0, i, gridRange, 0, i, true);
-      }
-
-      // Helipuerto de salida
-      addLine(-2, 0.02, -8,  2, 0.02, -8, false);
-      addLine(-2, 0.02, -12, 2, 0.02, -12, false);
-      addLine(-2, 0.02, -12, -2, 0.02, -8, false);
-      addLine( 2, 0.02, -12,  2, 0.02, -8, false);
-
-      const gateDefs = [
-        { x:   0, y: 2.5, z:   4, yaw:   0, w: 5.0, h: 4.0 },
-        { x:   4, y: 3.2, z:  22, yaw:  20, w: 5.0, h: 4.0 },
-        { x:  20, y: 3.6, z:  36, yaw:  65, w: 5.0, h: 4.0 },
-        { x:  38, y: 2.6, z:  24, yaw: 135, w: 5.0, h: 4.0 },
-        { x:  34, y: 2.4, z:   0, yaw: 195, w: 5.0, h: 4.0 },
-        { x:  16, y: 3.8, z: -18, yaw: 230, w: 5.0, h: 4.0 },
-        { x:  -8, y: 2.8, z: -26, yaw: 285, w: 5.0, h: 4.0 },
-        { x: -12, y: 2.4, z:  -6, yaw: 335, w: 5.0, h: 4.0 }
-      ];
-
-      for (let i = 0; i < gateDefs.length; i++) {
-        const gd = gateDefs[i];
-        const rad = gd.yaw * DEG2RAD;
-        const cosY = Math.cos(rad), sinY = Math.sin(rad);
-        const rx = cosY, rz = -sinY;
-        const nx = sinY, nz = cosY;
-        const hw = gd.w * 0.5, hh = gd.h * 0.5;
-
-        const xL = gd.x - rx * hw, zL = gd.z - rz * hw;
-        const xR = gd.x + rx * hw, zR = gd.z + rz * hw;
-        const yBot = Math.max(0.0, gd.y - hh);
-        const yTop = gd.y + hh;
-
-        if (yBot > 0.05) {
-          addLine(xL, 0, zL, xL, yBot, zL, false);
-          addLine(xR, 0, zR, xR, yBot, zR, false);
-        }
-
-        gates.push({
-          index: i, cx: gd.x, cy: gd.y, cz: gd.z,
-          nx, nz, rx, rz, hw, hh, xL, zL, xR, zR, yBot, yTop
-        });
-      }
-
-      const pillars = [
-        { x: -6, z: -2, h: 5 },
-        { x:  6, z: -2, h: 5 },
-        { x: -8, z: 12, h: 7 },
-        { x: 10, z: 12, h: 7 },
-        { x: 18, z: 15, h: 9 }
-      ];
-      for (const p of pillars) {
-        const s = 0.6;
-        addLine(p.x - s, 0, p.z - s, p.x - s, p.h, p.z - s, false);
-        addLine(p.x + s, 0, p.z - s, p.x + s, p.h, p.z - s, false);
-        addLine(p.x - s, p.h, p.z - s, p.x + s, p.h, p.z - s, false);
-        addLine(p.x - s, p.h, p.z - s, p.x - s, p.h, p.z + s, false);
-        addLine(p.x + s, p.h, p.z - s, p.x + s, p.h, p.z + s, false);
-      }
-    }
-
-    buildCircuitGeometry();
-
-    let activeGateIdx = 0;
-    let lapRunning = false;
-    let lapStartTime = 0;
-    let gateFlashTimer = 0;
-
-    function formatTimeShort(ms) {
-      const totalSec = ms / 1000;
-      const mins = Math.floor(totalSec / 60);
-      const secs = (totalSec % 60).toFixed(1).padStart(4, '0');
-      return `${String(mins).padStart(2, '0')}:${secs}`;
-    }
-
-    function checkGateCrossing() {
-      const g = gates[activeGateIdx];
-      const d0x = drone.prevPx - g.cx, d0y = drone.prevPy - g.cy, d0z = drone.prevPz - g.cz;
-      const d1x = drone.px - g.cx,     d1y = drone.py - g.cy,     d1z = drone.pz - g.cz;
-
-      const side0 = d0x * g.nx + d0z * g.nz;
-      const side1 = d1x * g.nx + d1z * g.nz;
-
-      if (side0 <= 0 && side1 > 0) {
-        const t = side0 / ((side0 - side1) || 1e-5);
-        const ix = d0x + (d1x - d0x) * t;
-        const iy = d0y + (d1y - d0y) * t;
-        const iz = d0z + (d1z - d0z) * t;
-
-        if (Math.abs(ix * g.rx + iz * g.rz) <= g.hw * 1.25 && Math.abs(iy) <= g.hh * 1.25) {
-          gateFlashTimer = 0.28;
-          playGateBeep(activeGateIdx === 0 ? 980 : 740);
-          if (activeGateIdx === 0) {
-            lapStartTime = performance.now();
-            lapRunning = true;
-          }
-          activeGateIdx = (activeGateIdx + 1) % gates.length;
-        }
-      }
-    }
-
-    /***************************************************************************
-     * 4. JOYSTICKS EN CANVAS 2D CON ANCLAJE RELATIVO SUAVE
-     *    - Al apoyar el dedo dentro de un pad, si tocas cerca del centro (<25% radio)
-     *      ancla el centro en tu dedo para cero tirones; si tocas hacia los bordes,
-     *      aplica deflexión proporcional suave.
+     * 3. ENTRADAS DE LA CONSOLA: 2 JOYSTICKS + L3/R3 + 4 BOTONES + MENU/SELECT
+     *    - Doble clic sobre cualquier joystick también activa L3 / R3
      ***************************************************************************/
     const stickLeftCanvas = document.getElementById('stickLeft');
     const stickRightCanvas = document.getElementById('stickRight');
     const ctxLeft = stickLeftCanvas.getContext('2d');
     const ctxRight = stickRightCanvas.getContext('2d');
 
-    const stickState = {
-      left:  { x: 0.0, y: 0.0, active: false, touchId: null },
-      right: { x: 0.0, y: 0.0, active: false, touchId: null }
+    const hwInput = {
+      lx: 0.0, ly: 0.0,
+      rx: 0.0, ry: 0.0,
+      leftActive: false,
+      rightActive: false,
+      btn:     { A: false, B: false, X: false, Y: false, L3: false, R3: false, SELECT: false, MENU: false },
+      prevBtn: { A: false, B: false, X: false, Y: false, L3: false, R3: false, SELECT: false, MENU: false },
+      justPressed(k) { return this.btn[k] && !this.prevBtn[k]; }
     };
 
-    function updateStickFromClientXY(side, canvasEl, clientX, clientY) {
+    const touchTrack = {
+      leftId: null,
+      rightId: null,
+      lastTapLeft: 0,
+      lastTapRight: 0
+    };
+
+    function computeStickXY(canvasEl, clientX, clientY) {
       const rect = canvasEl.getBoundingClientRect();
       const cx = rect.left + rect.width * 0.5;
       const cy = rect.top + rect.height * 0.5;
-      const maxR = Math.max(28, rect.width * 0.40);
-
+      const maxR = Math.max(24, rect.width * 0.40);
       const dx = clientX - cx;
       const dy = clientY - cy;
-
       const dist = Math.hypot(dx, dy);
       const scale = dist > maxR ? (maxR / dist) : 1.0;
-
-      stickState[side].x = (dx * scale) / maxR;
-      stickState[side].y = (-dy * scale) / maxR;
-      stickState[side].active = true;
+      return {
+        x: (dx * scale) / maxR,
+        y: (-dy * scale) / maxR
+      };
     }
 
-    function resetStick(side) {
-      stickState[side].x = 0.0;
-      stickState[side].y = 0.0;
-      stickState[side].active = false;
-      stickState[side].touchId = null;
-    }
-
-    function drawGimbalCanvas(ctxG, canvasEl, state, labelX, labelY) {
-      const w = canvasEl.width;
-      const h = canvasEl.height;
-      const cx = w * 0.5;
-      const cy = h * 0.5;
-      const maxR = w * 0.38;
-
-      ctxG.clearRect(0, 0, w, h);
-
-      ctxG.strokeStyle = state.active ? 'rgba(0, 229, 255, 0.35)' : 'rgba(139, 155, 180, 0.2)';
-      ctxG.lineWidth = 1.5;
-      ctxG.beginPath();
-      ctxG.arc(cx, cy, maxR, 0, Math.PI * 2);
-      ctxG.stroke();
-
-      ctxG.beginPath();
-      ctxG.arc(cx, cy, maxR * 0.5, 0, Math.PI * 2);
-      ctxG.stroke();
-
-      ctxG.beginPath();
-      ctxG.moveTo(cx - maxR * 1.1, cy);
-      ctxG.lineTo(cx + maxR * 1.1, cy);
-      ctxG.moveTo(cx, cy - maxR * 1.1);
-      ctxG.lineTo(cx, cy + maxR * 1.1);
-      ctxG.stroke();
-
-      const kx = cx + state.x * maxR;
-      const ky = cy - state.y * maxR;
-
-      ctxG.strokeStyle = '#00e5ff';
-      ctxG.lineWidth = 3;
-      ctxG.beginPath();
-      ctxG.moveTo(cx, cy);
-      ctxG.lineTo(kx, ky);
-      ctxG.stroke();
-
-      ctxG.fillStyle = state.active ? '#00e5ff' : '#0088aa';
-      ctxG.beginPath();
-      ctxG.arc(kx, ky, 24, 0, Math.PI * 2);
-      ctxG.fill();
-
-      ctxG.lineWidth = 2.5;
-      ctxG.strokeStyle = '#ffffff';
-      ctxG.stroke();
-
-      ctxG.fillStyle = '#8b9bb4';
-      ctxG.font = 'bold 12px monospace';
-      ctxG.fillText(`${labelX}:${state.x >= 0 ? '+' : ''}${state.x.toFixed(2)}`, 10, 18);
-      ctxG.fillText(`${labelY}:${state.y >= 0 ? '+' : ''}${state.y.toFixed(2)}`, 10, 34);
-
-      canvasEl.classList.toggle('engaged', state.active);
-    }
-
-    function handleTouchEvents(e) {
-      if (e.target && (e.target.closest('.hud-topbar') || e.target.closest('.settings-backdrop') || e.target.closest('.quick-flight-bar'))) {
+    function handleStickTouches(e) {
+      // No interceptar botones superiores ni botones de acción
+      if (e.target && (e.target.closest('.hw-header') || e.target.closest('.mid-controls-deck'))) {
         return;
       }
       e.preventDefault();
 
       const midX = window.innerWidth * 0.5;
-      let leftMatched = false;
-      let rightMatched = false;
+      let leftFound = false;
+      let rightFound = false;
+
+      // Detectar doble tap en el stick para emular L3/R3 físicamente
+      if (e.type === 'touchstart') {
+        const now = performance.now();
+        for (let i = 0; i < e.changedTouches.length; i++) {
+          const t = e.changedTouches[i];
+          if (t.clientX < midX) {
+            if (now - touchTrack.lastTapLeft < 260) hwInput.btn.L3 = true;
+            touchTrack.lastTapLeft = now;
+          } else {
+            if (now - touchTrack.lastTapRight < 260) hwInput.btn.R3 = true;
+            touchTrack.lastTapRight = now;
+          }
+        }
+      }
 
       for (let i = 0; i < e.touches.length; i++) {
         const t = e.touches[i];
+        // Ignorar toques que empezaron sobre un botón físico
+        if (t.target && t.target.closest('.hw-btn')) continue;
+
         let side = null;
-        if (stickState.left.touchId === t.identifier) {
+        if (touchTrack.leftId === t.identifier) side = 'left';
+        else if (touchTrack.rightId === t.identifier) side = 'right';
+        else if (t.clientX < midX && !leftFound) {
           side = 'left';
-        } else if (stickState.right.touchId === t.identifier) {
+          touchTrack.leftId = t.identifier;
+        } else if (t.clientX >= midX && !rightFound) {
           side = 'right';
-        } else if (t.clientX < midX && !leftMatched) {
-          side = 'left';
-          stickState.left.touchId = t.identifier;
-        } else if (t.clientX >= midX && !rightMatched) {
-          side = 'right';
-          stickState.right.touchId = t.identifier;
+          touchTrack.rightId = t.identifier;
         }
 
         if (side === 'left') {
-          leftMatched = true;
-          updateStickFromClientXY('left', stickLeftCanvas, t.clientX, t.clientY);
+          leftFound = true;
+          const v = computeStickXY(stickLeftCanvas, t.clientX, t.clientY);
+          hwInput.lx = v.x; hwInput.ly = v.y; hwInput.leftActive = true;
         } else if (side === 'right') {
-          rightMatched = true;
-          updateStickFromClientXY('right', stickRightCanvas, t.clientX, t.clientY);
+          rightFound = true;
+          const v = computeStickXY(stickRightCanvas, t.clientX, t.clientY);
+          hwInput.rx = v.x; hwInput.ry = v.y; hwInput.rightActive = true;
         }
       }
 
-      if (!leftMatched) resetStick('left');
-      if (!rightMatched) resetStick('right');
-
-      document.getElementById('touchStatus').textContent =
-        `L(${stickState.left.x.toFixed(1)},${stickState.left.y.toFixed(1)}) R(${stickState.right.x.toFixed(1)},${stickState.right.y.toFixed(1)})`;
+      if (!leftFound) {
+        hwInput.lx = 0; hwInput.ly = 0; hwInput.leftActive = false; touchTrack.leftId = null;
+        if (!btnTouchCounts.L3) hwInput.btn.L3 = false;
+      }
+      if (!rightFound) {
+        hwInput.rx = 0; hwInput.ry = 0; hwInput.rightActive = false; touchTrack.rightId = null;
+        if (!btnTouchCounts.R3) hwInput.btn.R3 = false;
+      }
     }
 
-    window.addEventListener('touchstart',  handleTouchEvents, { passive: false });
-    window.addEventListener('touchmove',   handleTouchEvents, { passive: false });
-    window.addEventListener('touchend',    handleTouchEvents, { passive: false });
-    window.addEventListener('touchcancel', handleTouchEvents, { passive: false });
+    window.addEventListener('touchstart',  handleStickTouches, { passive: false });
+    window.addEventListener('touchmove',   handleStickTouches, { passive: false });
+    window.addEventListener('touchend',    handleStickTouches, { passive: false });
+    window.addEventListener('touchcancel', handleStickTouches, { passive: false });
 
-    let mouseActiveSide = null;
+    // Soporte de Mouse en PC para los sticks
+    let mouseSide = null;
     stickLeftCanvas.addEventListener('mousedown', (e) => {
-      e.preventDefault();
-      mouseActiveSide = 'left';
-      updateStickFromClientXY('left', stickLeftCanvas, e.clientX, e.clientY);
+      mouseSide = 'left';
+      const v = computeStickXY(stickLeftCanvas, e.clientX, e.clientY);
+      hwInput.lx = v.x; hwInput.ly = v.y; hwInput.leftActive = true;
     });
     stickRightCanvas.addEventListener('mousedown', (e) => {
-      e.preventDefault();
-      mouseActiveSide = 'right';
-      updateStickFromClientXY('right', stickRightCanvas, e.clientX, e.clientY);
+      mouseSide = 'right';
+      const v = computeStickXY(stickRightCanvas, e.clientX, e.clientY);
+      hwInput.rx = v.x; hwInput.ry = v.y; hwInput.rightActive = true;
     });
     window.addEventListener('mousemove', (e) => {
-      if (mouseActiveSide === 'left') {
-        updateStickFromClientXY('left', stickLeftCanvas, e.clientX, e.clientY);
-      } else if (mouseActiveSide === 'right') {
-        updateStickFromClientXY('right', stickRightCanvas, e.clientX, e.clientY);
+      if (mouseSide === 'left') {
+        const v = computeStickXY(stickLeftCanvas, e.clientX, e.clientY);
+        hwInput.lx = v.x; hwInput.ly = v.y;
+      } else if (mouseSide === 'right') {
+        const v = computeStickXY(stickRightCanvas, e.clientX, e.clientY);
+        hwInput.rx = v.x; hwInput.ry = v.y;
       }
     });
     window.addEventListener('mouseup', () => {
-      if (mouseActiveSide) {
-        resetStick(mouseActiveSide);
-        mouseActiveSide = null;
-      }
+      if (mouseSide === 'left') { hwInput.lx = 0; hwInput.ly = 0; hwInput.leftActive = false; }
+      if (mouseSide === 'right') { hwInput.rx = 0; hwInput.ry = 0; hwInput.rightActive = false; }
+      mouseSide = null;
     });
 
-    const keyState = {};
+    // Botones físicos táctiles (A, B, X, Y, L3, R3, SELECT, MENU)
+    const btnTouchCounts = {};
+    document.querySelectorAll('.hw-btn').forEach((btnEl) => {
+      const key = btnEl.getAttribute('data-btn');
+      btnTouchCounts[key] = 0;
+
+      const press = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        btnTouchCounts[key] = 1;
+        hwInput.btn[key] = true;
+        btnEl.classList.add('pressed');
+        playTone(520, 0.03, 'square', 0.02);
+      };
+      const release = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        btnTouchCounts[key] = 0;
+        hwInput.btn[key] = false;
+        btnEl.classList.remove('pressed');
+      };
+
+      btnEl.addEventListener('touchstart', press, { passive: false });
+      btnEl.addEventListener('touchend', release, { passive: false });
+      btnEl.addEventListener('touchcancel', release, { passive: false });
+      btnEl.addEventListener('mousedown', press);
+      btnEl.addEventListener('mouseup', release);
+      btnEl.addEventListener('mouseleave', release);
+    });
+
+    // Teclado en PC
+    const keyMap = {
+      KeyZ: 'A', Space: 'A', Enter: 'A',
+      KeyX: 'B', Backspace: 'B',
+      KeyC: 'X', KeyR: 'X',
+      KeyV: 'Y', KeyM: 'Y',
+      KeyQ: 'L3', KeyE: 'R3',
+      Tab: 'SELECT', Escape: 'MENU'
+    };
+    const rawKeys = {};
     window.addEventListener('keydown', (e) => {
-      keyState[e.code] = true;
-      if (e.code === 'KeyR') resetDrone();
+      rawKeys[e.code] = true;
+      if (keyMap[e.code]) hwInput.btn[keyMap[e.code]] = true;
     });
     window.addEventListener('keyup', (e) => {
-      keyState[e.code] = false;
+      rawKeys[e.code] = false;
+      if (keyMap[e.code]) hwInput.btn[keyMap[e.code]] = false;
     });
 
-    const rawStick = { leftX: 0, leftY: 0, rightX: 0, rightY: 0 };
+    function drawStickWidget(ctxG, canvasEl, x, y, active, clicked, title) {
+      const w = canvasEl.width, h = canvasEl.height;
+      const cx = w * 0.5, cy = h * 0.5, maxR = w * 0.38;
+      ctxG.clearRect(0, 0, w, h);
 
-    function applyDeadzoneAndExpo(val, dz, expo) {
-      const absV = Math.abs(val);
-      if (absV <= dz) return 0.0;
-      const sign = val < 0 ? -1.0 : 1.0;
-      const norm = (absV - dz) / (1.0 - dz);
-      return sign * ((1.0 - expo) * norm + expo * norm * norm * norm);
+      ctxG.strokeStyle = active ? 'rgba(0, 229, 255, 0.35)' : 'rgba(139, 155, 180, 0.2)';
+      ctxG.lineWidth = 1.5;
+      ctxG.beginPath(); ctxG.arc(cx, cy, maxR, 0, Math.PI * 2); ctxG.stroke();
+      ctxG.beginPath(); ctxG.arc(cx, cy, maxR * 0.5, 0, Math.PI * 2); ctxG.stroke();
+
+      ctxG.beginPath();
+      ctxG.moveTo(cx - maxR, cy); ctxG.lineTo(cx + maxR, cy);
+      ctxG.moveTo(cx, cy - maxR); ctxG.lineTo(cx, cy + maxR);
+      ctxG.stroke();
+
+      const kx = cx + x * maxR;
+      const ky = cy - y * maxR;
+
+      ctxG.strokeStyle = clicked ? '#ffb300' : '#00e5ff';
+      ctxG.lineWidth = 3;
+      ctxG.beginPath(); ctxG.moveTo(cx, cy); ctxG.lineTo(kx, ky); ctxG.stroke();
+
+      ctxG.fillStyle = clicked ? '#ffb300' : (active ? '#00e5ff' : '#0088aa');
+      ctxG.beginPath(); ctxG.arc(kx, ky, 22, 0, Math.PI * 2); ctxG.fill();
+      ctxG.lineWidth = 2; ctxG.strokeStyle = '#fff'; ctxG.stroke();
+
+      ctxG.fillStyle = '#8b9bb4';
+      ctxG.font = 'bold 11px monospace';
+      ctxG.fillText(title, 10, 16);
+      canvasEl.classList.toggle('engaged', active || clicked);
     }
 
-    function pollInputs() {
-      let lx = stickState.left.x;
-      let ly = stickState.left.y;
-      let rx = stickState.right.x;
-      let ry = stickState.right.y;
+    function updateInputPolling() {
+      // Mezclar teclado y Gamepad USB/BT si están activos
+      if (!hwInput.leftActive) {
+        hwInput.lx = (rawKeys['KeyD'] ? 0.8 : 0) - (rawKeys['KeyA'] ? 0.8 : 0);
+        hwInput.ly = (rawKeys['KeyW'] ? 0.8 : 0) - (rawKeys['KeyS'] ? 0.8 : 0);
+      }
+      if (!hwInput.rightActive) {
+        hwInput.rx = (rawKeys['ArrowRight'] ? 0.8 : 0) - (rawKeys['ArrowLeft'] ? 0.8 : 0);
+        hwInput.ry = (rawKeys['ArrowUp'] ? 0.8 : 0)    - (rawKeys['ArrowDown'] ? 0.8 : 0);
+      }
 
       const pads = navigator.getGamepads ? navigator.getGamepads() : [];
       for (let i = 0; i < pads.length; i++) {
         const gp = pads[i];
         if (gp && gp.connected) {
-          const gLx = gp.axes[0] || 0;
-          const gLy = -(gp.axes[1] || 0);
-          const gRx = gp.axes[2] || 0;
-          const gRy = -(gp.axes[3] || 0);
-          if (Math.abs(gLx) > Math.abs(lx)) lx = gLx;
-          if (Math.abs(gLy) > Math.abs(ly)) ly = gLy;
-          if (Math.abs(gRx) > Math.abs(rx)) rx = gRx;
-          if (Math.abs(gRy) > Math.abs(ry)) ry = gRy;
-          if (gp.buttons[0] && gp.buttons[0].pressed) resetDrone();
+          if (Math.abs(gp.axes[0]) > 0.08) hwInput.lx = gp.axes[0];
+          if (Math.abs(gp.axes[1]) > 0.08) hwInput.ly = -gp.axes[1];
+          if (Math.abs(gp.axes[2]) > 0.08) hwInput.rx = gp.axes[2];
+          if (Math.abs(gp.axes[3]) > 0.08) hwInput.ry = -gp.axes[3];
+          if (gp.buttons[0]?.pressed) hwInput.btn.A = true;
+          if (gp.buttons[1]?.pressed) hwInput.btn.B = true;
+          if (gp.buttons[2]?.pressed) hwInput.btn.X = true;
+          if (gp.buttons[3]?.pressed) hwInput.btn.Y = true;
+          if (gp.buttons[10]?.pressed) hwInput.btn.L3 = true;
+          if (gp.buttons[11]?.pressed) hwInput.btn.R3 = true;
+          if (gp.buttons[9]?.pressed) hwInput.btn.MENU = true;
           break;
         }
       }
 
-      if (keyState['KeyW']) ly = 0.85;
-      if (keyState['KeyS']) ly = -0.85;
-      if (keyState['KeyA']) lx = -0.75;
-      if (keyState['KeyD']) lx = 0.75;
-      if (keyState['ArrowUp'])    ry = 0.75;
-      if (keyState['ArrowDown'])  ry = -0.75;
-      if (keyState['ArrowLeft'])  rx = -0.75;
-      if (keyState['ArrowRight']) rx = 0.75;
-
-      rawStick.leftX = lx;
-      rawStick.leftY = ly;
-      rawStick.rightX = rx;
-      rawStick.rightY = ry;
-
-      drawGimbalCanvas(ctxLeft, stickLeftCanvas, { x: lx, y: ly, active: stickState.left.active || Math.hypot(lx, ly) > 0.01 }, 'YAW', 'THR');
-      drawGimbalCanvas(ctxRight, stickRightCanvas, { x: rx, y: ry, active: stickState.right.active || Math.hypot(rx, ry) > 0.01 }, 'ROL', 'PIT');
+      drawStickWidget(ctxLeft, stickLeftCanvas, hwInput.lx, hwInput.ly, hwInput.leftActive, hwInput.btn.L3, 'STICK IZQ (L3)');
+      drawStickWidget(ctxRight, stickRightCanvas, hwInput.rx, hwInput.ry, hwInput.rightActive, hwInput.btn.R3, 'STICK DER (R3)');
 
       document.getElementById('readoutLeft').textContent =
-        `THR: ${Math.round(drone.throttleCmd * 100)}% | YAW: ${lx >= 0 ? '+' : ''}${lx.toFixed(2)}`;
+        `LX:${hwInput.lx >= 0 ? '+' : ''}${hwInput.lx.toFixed(2)} LY:${hwInput.ly >= 0 ? '+' : ''}${hwInput.ly.toFixed(2)} L3:${hwInput.btn.L3 ? 1 : 0}`;
       document.getElementById('readoutRight').textContent =
-        `PIT: ${ry >= 0 ? '+' : ''}${ry.toFixed(2)} | ROL: ${rx >= 0 ? '+' : ''}${rx.toFixed(2)}`;
+        `RX:${hwInput.rx >= 0 ? '+' : ''}${hwInput.rx.toFixed(2)} RY:${hwInput.ry >= 0 ? '+' : ''}${hwInput.ry.toFixed(2)} R3:${hwInput.btn.R3 ? 1 : 0}`;
+    }
+
+    function snapshotPrevButtons() {
+      for (const k in hwInput.btn) {
+        hwInput.prevBtn[k] = hwInput.btn[k];
+      }
+    }
+
+    function setButtonLabels(yTxt, xTxt, bTxt, aTxt, hintTxt) {
+      document.getElementById('lblBtnY').textContent = yTxt;
+      document.getElementById('lblBtnX').textContent = xTxt;
+      document.getElementById('lblBtnB').textContent = bTxt;
+      document.getElementById('lblBtnA').textContent = aTxt;
+      document.getElementById('uiControlsHint').textContent = hintTxt;
     }
 
     /***************************************************************************
-     * 5. PASO DE FÍSICA ACRO CON ROTACIÓN SO(3) DE RODRIGUES
+     * 4. SISTEMA DE CARTUCHOS / APPS DEL FIRMWARE RETRO-GO (5 APPS INTEGRADAS)
      ***************************************************************************/
-    function stepPhysics(dt) {
-      drone.prevPx = drone.px;
-      drone.prevPy = drone.py;
-      drone.prevPz = drone.pz;
+    const APPS = [
+      { id: 'fpv',    title: '1. FPV DRONE 3D ACRO',   sub: 'Simulador Vuelo 8 Puertas' },
+      { id: 'rally',  title: '2. RALLY STAGE 3D',      sub: 'WRC Wireframe + Drift' },
+      { id: 'space',  title: '3. STARFIGHTER 3D',      sub: 'Combate Espacial 6-DOF' },
+      { id: 'arena',  title: '4. TWIN-STICK ARENA',    sub: 'Shooter 360 Dual-Stick' },
+      { id: 'hwtest', title: '5. HW & ADC DIAGNOSTIC', sub: 'Test Sticks, L3/R3 y RAM' }
+    ];
 
-      const dz = simConfig.deadzone;
-      const expo = simConfig.expo;
+    let currentApp = 'launcher';
+    let menuIndex = 0;
+    let menuCooldown = 0;
 
-      const yawCmd   = applyDeadzoneAndExpo(rawStick.leftX, dz, expo);
-      const thrStick = applyDeadzoneAndExpo(rawStick.leftY, dz, 0.10);
-      const rollCmd  = applyDeadzoneAndExpo(rawStick.rightX, dz, expo);
-      const pitchCmd = applyDeadzoneAndExpo(rawStick.rightY, dz, expo);
-
-      const baseThr = simConfig.neutralThrottle;
-      if (thrStick >= 0) {
-        drone.throttleCmd = baseThr + thrStick * (1.0 - baseThr);
-      } else {
-        drone.throttleCmd = baseThr * (1.0 + thrStick);
+    function switchApp(appId) {
+      currentApp = appId;
+      playTone(780, 0.07, 'square', 0.05);
+      if (appId === 'launcher') {
+        document.getElementById('uiCurrentAppTitle').textContent = 'RETRO-GO LAUNCHER // S3-N16R8';
+        setButtonLabels('COLOR', 'INFO', 'SALIR', 'ABRIR JUEGO', 'Stick: Elegir | A: Iniciar');
+      } else if (appId === 'fpv') {
+        document.getElementById('uiCurrentAppTitle').textContent = 'APP 1: FPV DRONE 3D ACRO';
+        setButtonLabels('ACRO/STAB', 'RESET', 'CAM 3RA', 'TURBO', 'Izq:Thr/Yaw | Der:Pitch/Roll');
+        fpvGame.reset();
+      } else if (appId === 'rally') {
+        document.getElementById('uiCurrentAppTitle').textContent = 'APP 2: RALLY STAGE 3D WRC';
+        setButtonLabels('CAMARA', 'RESET', 'FRENO/DRIFT', 'ACELERAR', 'Izq:Giro | Der/A:Gas B:Drift');
+        rallyGame.reset();
+      } else if (appId === 'space') {
+        document.getElementById('uiCurrentAppTitle').textContent = 'APP 3: STARFIGHTER 3D';
+        setButtonLabels('RADAR', 'RESET', 'TURBO', 'LASER (R3)', 'Izq:Vel/Roll | Der:Pitch/Yaw');
+        spaceGame.reset();
+      } else if (appId === 'arena') {
+        document.getElementById('uiCurrentAppTitle').textContent = 'APP 4: TWIN-STICK ARENA';
+        setButtonLabels('PAUSA', 'REINICIAR', 'BOMBA EMP', 'DISPARO', 'Izq:Mover | Der:Apuntar 360');
+        arenaGame.reset();
+      } else if (appId === 'hwtest') {
+        document.getElementById('uiCurrentAppTitle').textContent = 'APP 5: HARDWARE & ADC TEST';
+        setButtonLabels('TEST Y', 'TEST X', 'TEST B', 'TEST A', 'Pulsa MENU para volver');
       }
+    }
 
-      // Ángulos verdaderos del chasis respecto a la vertical del mundo (+Y = 0,1,0):
-      // - Pitch positivo = nariz (F) inclinada hacia abajo (fy < 0)
-      // - Roll positivo  = ala derecha (R) inclinada hacia abajo (ry < 0)
-      const currentPitchRad = Math.atan2(-drone.fy, drone.uy);
-      const currentRollRad  = Math.atan2(-drone.ry, drone.uy);
+    /***************************************************************************
+     * LAUNCHER: RETRO-GO FIRMWARE MENU
+     ***************************************************************************/
+    function updateAndRenderLauncher(dt) {
+      if (menuCooldown > 0) menuCooldown -= dt;
 
-      let targetPitchRate = 0.0;
-      let targetRollRate  = 0.0;
-      let targetYawRate   = 0.0;
-
-      if (simConfig.mode === 'ACRO') {
-        targetPitchRate = pitchCmd * simConfig.ratePitchRoll * DEG2RAD;
-        targetRollRate  = rollCmd  * simConfig.ratePitchRoll * DEG2RAD;
-        targetYawRate   = yawCmd   * simConfig.rateYaw       * DEG2RAD;
-      } else {
-        // Modo STAB (Auto-Level exacto respecto al vector gravedad del mundo)
-        const maxAngle = 50.0 * DEG2RAD;
-        targetPitchRate = ((pitchCmd * maxAngle) - currentPitchRad) * 7.0;
-        targetRollRate  = ((rollCmd  * maxAngle) - currentRollRad)  * 7.0;
-        targetYawRate   = yawCmd * simConfig.rateYaw * DEG2RAD;
-      }
-
-      const alpha = Math.min(1.0, 22.0 * dt);
-      drone.pitchRate += (targetPitchRate - drone.pitchRate) * alpha;
-      drone.rollRate  += (targetRollRate  - drone.rollRate)  * alpha;
-      drone.yawRate   += (targetYawRate   - drone.yawRate)   * alpha;
-
-      // Rotación simultánea exacta de los 3 ejes del dron (sin acoplamiento de Euler)
-      integrateBodyRotationExact(drone.pitchRate, drone.rollRate, drone.yawRate, dt);
-
-      // Actualizar grados verdaderos de actitud respecto al horizonte terrestre
-      drone.pitchDeg = Math.atan2(-drone.fy, drone.uy) * RAD2DEG;
-      drone.rollDeg  = Math.atan2(-drone.ry, drone.uy) * RAD2DEG;
-      drone.yawDeg   = Math.atan2(drone.fx, drone.fz)  * RAD2DEG;
-
-      // Dinámica Traslacional: Empuje en dirección Up del dron (U) + Gravedad (-Y) + Drag
-      const thrustAccel = drone.throttleCmd * simConfig.maxThrustAccel;
-      const speed = Math.hypot(drone.vx, drone.vy, drone.vz);
-      const drag = simConfig.dragLinear + simConfig.dragQuad * speed;
-
-      const ax = drone.ux * thrustAccel - drone.vx * drag;
-      const ay = drone.uy * thrustAccel - simConfig.gravity - drone.vy * drag;
-      const az = drone.uz * thrustAccel - drone.vz * drag;
-
-      drone.vx += ax * dt;
-      drone.vy += ay * dt;
-      drone.vz += az * dt;
-
-      drone.px += drone.vx * dt;
-      drone.py += drone.vy * dt;
-      drone.pz += drone.vz * dt;
-
-      if (drone.py < 0.25) {
-        drone.py = 0.25;
-        if (drone.vy < -1.5) {
-          drone.vy = -drone.vy * 0.25;
-        } else if (drone.vy < 0) {
-          drone.vy = 0;
+      const navY = Math.abs(hwInput.ly) > Math.abs(hwInput.ry) ? hwInput.ly : hwInput.ry;
+      if (menuCooldown <= 0) {
+        if (navY < -0.45 || hwInput.justPressed('SELECT')) {
+          menuIndex = (menuIndex + 1) % APPS.length;
+          menuCooldown = 0.18;
+          playTone(440, 0.03);
+        } else if (navY > 0.45) {
+          menuIndex = (menuIndex - 1 + APPS.length) % APPS.length;
+          menuCooldown = 0.18;
+          playTone(440, 0.03);
         }
-        drone.vx *= Math.max(0, 1.0 - 3.5 * dt);
-        drone.vz *= Math.max(0, 1.0 - 3.5 * dt);
       }
 
-      checkGateCrossing();
-    }
-
-    /***************************************************************************
-     * 6. CÁMARA FPV + HORIZONTE ARTIFICIAL PROYECTADO EN 3D REAL + 128x64
-     ***************************************************************************/
-    const camMat = new Float32Array(9);
-    let camPosX = 0, camPosY = 0, camPosZ = 0;
-
-    function updateCameraTransform() {
-      const tiltRad = simConfig.camUptiltDeg * DEG2RAD;
-      const cosT = Math.cos(tiltRad);
-      const sinT = Math.sin(tiltRad);
-
-      // Eje X de cámara = Right del dron (R)
-      camMat[0] = drone.rx;
-      camMat[1] = drone.ry;
-      camMat[2] = drone.rz;
-
-      // Eje Y de cámara (CamUp) = cosT * U - sinT * F
-      camMat[3] = cosT * drone.ux - sinT * drone.fx;
-      camMat[4] = cosT * drone.uy - sinT * drone.fy;
-      camMat[5] = cosT * drone.uz - sinT * drone.fz;
-
-      // Eje Z de cámara (CamForward) = sinT * U + cosT * F
-      camMat[6] = sinT * drone.ux + cosT * drone.fx;
-      camMat[7] = sinT * drone.uy + cosT * drone.fy;
-      camMat[8] = sinT * drone.uz + cosT * drone.fz;
-
-      if (!simConfig.chaseCam) {
-        camPosX = drone.px;
-        camPosY = drone.py;
-        camPosZ = drone.pz;
-      } else {
-        camPosX = drone.px - camMat[6] * 3.5 + camMat[3] * 1.1;
-        camPosY = Math.max(0.35, drone.py - camMat[7] * 3.5 + camMat[4] * 1.1);
-        camPosZ = drone.pz - camMat[8] * 3.5 + camMat[5] * 1.1;
-      }
-    }
-
-    function renderLine3D(wx0, wy0, wz0, wx1, wy1, wz1, dashed = false) {
-      const dx0 = wx0 - camPosX, dy0 = wy0 - camPosY, dz0 = wz0 - camPosZ;
-      const dx1 = wx1 - camPosX, dy1 = wy1 - camPosY, dz1 = wz1 - camPosZ;
-
-      let cx0 = dx0 * camMat[0] + dy0 * camMat[1] + dz0 * camMat[2];
-      let cy0 = dx0 * camMat[3] + dy0 * camMat[4] + dz0 * camMat[5];
-      let cz0 = dx0 * camMat[6] + dy0 * camMat[7] + dz0 * camMat[8];
-
-      let cx1 = dx1 * camMat[0] + dy1 * camMat[1] + dz1 * camMat[2];
-      let cy1 = dx1 * camMat[3] + dy1 * camMat[4] + dz1 * camMat[5];
-      let cz1 = dx1 * camMat[6] + dy1 * camMat[7] + dz1 * camMat[8];
-
-      if (cz0 < NEAR_Z && cz1 < NEAR_Z) return;
-      if (cz0 > 80.0 && cz1 > 80.0) return;
-
-      if (cz0 < NEAR_Z) {
-        const t = (NEAR_Z - cz0) / (cz1 - cz0);
-        cx0 += t * (cx1 - cx0);
-        cy0 += t * (cy1 - cy0);
-        cz0 = NEAR_Z;
-      } else if (cz1 < NEAR_Z) {
-        const t = (NEAR_Z - cz1) / (cz0 - cz1);
-        cx1 += t * (cx0 - cx1);
-        cy1 += t * (cy0 - cy1);
-        cz1 = NEAR_Z;
+      if (hwInput.justPressed('A') || hwInput.justPressed('L3') || hwInput.justPressed('R3')) {
+        switchApp(APPS[menuIndex].id);
+        return;
       }
 
-      const invZ0 = FOCAL_LEN / cz0;
-      const invZ1 = FOCAL_LEN / cz1;
-
-      const sx0 = (SCREEN_W * 0.5) + cx0 * invZ0;
-      const sy0 = (SCREEN_H * 0.5) - cy0 * invZ0;
-      const sx1 = (SCREEN_W * 0.5) + cx1 * invZ1;
-      const sy1 = (SCREEN_H * 0.5) - cy1 * invZ1;
-
-      if (dashed) fbDrawDashedLine(sx0, sy0, sx1, sy1, 1);
-      else fbDrawLine(sx0, sy0, sx1, sy1);
-    }
-
-    function renderChaseDroneModel() {
-      if (!simConfig.chaseCam) return;
-      const s = 0.55;
-      const pts = [[-s,0,-s],[s,0,s],[-s,0,s],[s,0,-s]].map(([lx,ly,lz]) => [
-        drone.px + lx * drone.rx + ly * drone.ux + lz * drone.fx,
-        drone.py + lx * drone.ry + ly * drone.uy + lz * drone.fy,
-        drone.pz + lx * drone.rz + ly * drone.uz + lz * drone.fz
-      ]);
-      renderLine3D(pts[0][0], pts[0][1], pts[0][2], pts[1][0], pts[1][1], pts[1][2], false);
-      renderLine3D(pts[2][0], pts[2][1], pts[2][2], pts[3][0], pts[3][1], pts[3][2], false);
-    }
-
-    // HORIZONTE ARTIFICIAL 3D REAL:
-    // Proyectamos el plano horizontal infinito del mundo (Y_mundo = camPosY)
-    // directamente a través de la matriz de cámara `camMat`:
-    // Un punto en el horizonte del mundo en dirección (wx, 0, wz) cumple:
-    //   cx = wx*camMat[0] + wz*camMat[2]
-    //   cy = wx*camMat[3] + wz*camMat[5]
-    //   cz = wx*camMat[6] + wz*camMat[8]
-    // Esto garantiza matemáticamente al 100% que la barra del horizonte artificial
-    // esté SIEMPRE clavada sobre el horizonte real de la cuadrícula 3D en cualquier
-    // combinación de Yaw, Pitch, Roll o vuelo invertido!
-    function renderTrue3DArtificialHorizon() {
-      // Dirección horizontal frontal de la cámara proyectada sobre el suelo XZ
-      let fwdX = camMat[6];
-      let fwdZ = camMat[8];
-      let hNorm = Math.hypot(fwdX, fwdZ);
-      if (hNorm < 1e-4) {
-        fwdX = camMat[3];
-        fwdZ = camMat[5];
-        hNorm = Math.hypot(fwdX, fwdZ) || 1.0;
-      }
-      fwdX /= hNorm;
-      fwdZ /= hNorm;
-
-      // Vector horizontal derecho en el suelo XZ (perpendicular a fwdXZ)
-      const rightX =  fwdZ;
-      const rightZ = -fwdX;
-
-      // Tomamos dos puntos en el horizonte real frente a la cámara (a distancia D = 50m, misma altura Y que la cámara)
-      const D = 50.0;
-      const span = 14.0; // Ancho angular de la barra del horizonte artificial
-      const p0x = camPosX + fwdX * D - rightX * span;
-      const p0y = camPosY;
-      const p0z = camPosZ + fwdZ * D - rightZ * span;
-
-      const p1x = camPosX + fwdX * D + rightX * span;
-      const p1y = camPosY;
-      const p1z = camPosZ + fwdZ * D + rightZ * span;
-
-      renderLine3D(p0x, p0y, p0z, p1x, p1y, p1z, true);
-    }
-
-    function renderOSD() {
-      const barX = 2, barTop = 10, barBot = 54, barH = barBot - barTop;
-      fbDrawLine(barX, barTop, barX, barBot);
-
-      const realHoverThr = Math.min(1.0, simConfig.gravity / simConfig.maxThrustAccel);
-      const hoverY = (barBot - Math.round(realHoverThr * barH)) | 0;
-      fbSetPixel(barX + 2, hoverY);
-      fbSetPixel(barX + 3, hoverY);
-
-      const thrY = (barBot - Math.round(drone.throttleCmd * barH)) | 0;
-      for (let y = thrY; y <= barBot; y += 2) {
-        fbSetPixel(barX + 1, y);
-        fbSetPixel(barX + 2, y);
-      }
-
-      const altBarX = 125;
-      fbDrawLine(altBarX, barTop, altBarX, barBot);
-      const normAlt = Math.min(1.0, Math.max(0.0, drone.py / 15.0));
-      const altY = (barBot - Math.round(normAlt * barH)) | 0;
-      fbDrawLine(altBarX - 3, altY, altBarX, altY);
-
-      // Horizonte Artificial proyectado desde el plano horizontal 3D real del mundo
-      renderTrue3DArtificialHorizon();
-
-      // Retícula central fija de la cámara FPV
-      const cx = 64, cy = 32;
-      fbSetPixel(cx - 2, cy);
-      fbSetPixel(cx + 2, cy);
-      fbSetPixel(cx, cy - 2);
-      fbSetPixel(cx, cy + 2);
-
-      // Indicador superior hacia la siguiente puerta
-      const g = gates[activeGateIdx];
-      const toGx = g.cx - drone.px, toGz = g.cz - drone.pz;
-      const camRightDot = toGx * camMat[0] + toGz * camMat[2];
-      const camFwdDot   = toGx * camMat[6] + toGz * camMat[8];
-      const angleToGate = Math.atan2(camRightDot, camFwdDot);
-      const ptrX = Math.max(18, Math.min(110, Math.round(64 + (angleToGate / (Math.PI * 0.6)) * 46)));
-      fbDrawLine(ptrX - 2, 2, ptrX, 4);
-      fbDrawLine(ptrX + 2, 2, ptrX, 4);
-
-      const totalSpeed = Math.hypot(drone.vx, drone.vy, drone.vz);
-      fbDrawText(simConfig.mode === 'ACRO' ? 'ACR' : 'STB', 2, 2);
-      fbDrawText(`G${activeGateIdx + 1}/${gates.length}`, 104, 2);
-      fbDrawText(`V${Math.round(totalSpeed)}`, 6, 58);
-      fbDrawText(`A${Math.round(drone.py)}`, 108, 58);
-
-      if (gateFlashTimer > 0) {
-        fbDrawLine(0, 0, 127, 0);
-        fbDrawLine(0, 63, 127, 63);
-      }
-    }
-
-    function renderScene() {
+      // Renderizar interfaz estilo Retro-Go en 128x64
       fbClear();
-      updateCameraTransform();
+      // Barra superior invertida
+      fbRect(0, 0, 128, 9, true, 1);
+      fbDrawText('RETRO-GO S3 // 16MB FLASH', 4, 2, 0);
 
-      for (let i = 0; i < worldLines.length; i++) {
-        const l = worldLines[i];
-        renderLine3D(l.x0, l.y0, l.z0, l.x1, l.y1, l.z1, l.dashed);
-      }
-
-      for (let i = 0; i < gates.length; i++) {
-        const g = gates[i];
-        renderLine3D(g.xL, g.yBot, g.zL, g.xL, g.yTop, g.zL, false);
-        renderLine3D(g.xR, g.yBot, g.zR, g.xR, g.yTop, g.zR, false);
-        renderLine3D(g.xL, g.yTop, g.zL, g.xR, g.yTop, g.zR, false);
-        renderLine3D(g.xL, g.yBot, g.zL, g.xR, g.yBot, g.zR, false);
-
-        if (i === activeGateIdx) {
-          const inW = g.hw * 0.85, inH = g.hh * 0.85;
-          const ixL = g.cx - g.rx * inW, izL = g.cz - g.rz * inW;
-          const ixR = g.cx + g.rx * inW, izR = g.cz + g.rz * inW;
-          const iyB = g.cy - inH, iyT = g.cy + inH;
-          renderLine3D(ixL, iyB, izL, ixL, iyT, izL, false);
-          renderLine3D(ixR, iyB, izR, ixR, iyT, izR, false);
-          renderLine3D(ixL, iyT, izL, ixR, iyT, izR, false);
-          renderLine3D(ixL, iyB, izL, ixR, iyB, izR, false);
-          renderLine3D(g.cx, g.yTop + 1.5, g.cz, g.cx - g.rx * 1.0, g.yTop + 2.7, g.cz - g.rz * 1.0, false);
-          renderLine3D(g.cx, g.yTop + 1.5, g.cz, g.cx + g.rx * 1.0, g.yTop + 2.7, g.cz + g.rz * 1.0, false);
+      for (let i = 0; i < APPS.length; i++) {
+        const y = 12 + i * 8;
+        const selected = (i === menuIndex);
+        if (selected) {
+          fbRect(2, y - 1, 124, 7, true, 1);
+          fbDrawText('>' + APPS[i].title, 4, y, 0);
+        } else {
+          fbDrawText(' ' + APPS[i].title, 4, y, 1);
         }
       }
 
-      renderChaseDroneModel();
-      renderOSD();
-      fbPresentToCanvas();
+      // Pie de página con descripción del cartucho seleccionado
+      fbDrawLine(0, 54, 127, 54);
+      fbDrawText(APPS[menuIndex].sub, 4, 57, 1);
+      document.getElementById('uiTelemetryMini').textContent = `SLOT ${menuIndex + 1}/5 READY`;
     }
 
     /***************************************************************************
-     * 7. AUDIO DE MOTORES & UI EVENT HANDLERS
+     * JUEGO 1: FPV DRONE 3D ACRO (Fórmula SO(3) de Rodrigues + Horizonte 3D Real)
      ***************************************************************************/
-    let audioCtx = null, motorOsc1 = null, motorOsc2 = null, motorGain = null, soundEnabled = false;
+    const DEG2RAD = Math.PI / 180.0;
+    const RAD2DEG = 180.0 / Math.PI;
 
-    function toggleMotorAudio() {
-      if (!audioCtx) {
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        motorOsc1 = audioCtx.createOscillator();
-        motorOsc2 = audioCtx.createOscillator();
-        motorGain = audioCtx.createGain();
-        motorOsc1.type = 'sawtooth';
-        motorOsc2.type = 'triangle';
-        motorGain.gain.value = 0.0;
-        motorOsc1.connect(motorGain);
-        motorOsc2.connect(motorGain);
-        motorGain.connect(audioCtx.destination);
-        motorOsc1.start();
-        motorOsc2.start();
+    const fpvGame = {
+      px: 0, py: 2.2, pz: -10,
+      vx: 0, vy: 0, vz: 0,
+      pitchRate: 0, rollRate: 0, yawRate: 0,
+      rx: 1, ry: 0, rz: 0,
+      ux: 0, uy: 1, uz: 0,
+      fx: 0, fy: 0, fz: 1,
+      mode: 'ACRO',
+      chaseCam: false,
+      activeGate: 0,
+      lapTime: 0,
+      gates: [
+        { x:  0, y: 2.5, z:   5, w: 5.0, h: 4.0 },
+        { x:  6, y: 3.0, z:  22, w: 5.0, h: 4.0 },
+        { x: 22, y: 3.2, z:  34, w: 5.0, h: 4.0 },
+        { x: 34, y: 2.5, z:  16, w: 5.0, h: 4.0 },
+        { x: 22, y: 2.5, z:  -6, w: 5.0, h: 4.0 },
+        { x:  0, y: 2.5, z: -18, w: 5.0, h: 4.0 }
+      ],
+      reset() {
+        this.px = 0; this.py = 2.2; this.pz = -10;
+        this.vx = 0; this.vy = 0; this.vz = 0;
+        this.pitchRate = 0; this.rollRate = 0; this.yawRate = 0;
+        this.rx = 1; this.ry = 0; this.rz = 0;
+        this.ux = 0; this.uy = 1; this.uz = 0;
+        this.fx = 0; this.fy = 0; this.fz = 1;
+        this.activeGate = 0; this.lapTime = 0;
+      },
+      step(dt) {
+        if (hwInput.justPressed('Y') || hwInput.justPressed('L3')) {
+          this.mode = this.mode === 'ACRO' ? 'STAB' : 'ACRO';
+          playTone(660, 0.05);
+        }
+        if (hwInput.justPressed('X')) this.reset();
+        if (hwInput.justPressed('B') || hwInput.justPressed('R3')) this.chaseCam = !this.chaseCam;
+
+        const baseThr = 0.36;
+        let thrCmd = hwInput.ly >= 0
+          ? baseThr + hwInput.ly * (1.0 - baseThr)
+          : baseThr * (1.0 + hwInput.ly);
+        if (hwInput.btn.A) thrCmd = Math.min(1.0, thrCmd + 0.25); // Botón A = Boost
+
+        const curPitch = Math.atan2(-this.fy, this.uy);
+        const curRoll  = Math.atan2(-this.ry, this.uy);
+
+        let tPitch = 0, tRoll = 0, tYaw = hwInput.lx * 210 * DEG2RAD;
+        if (this.mode === 'ACRO') {
+          tPitch = hwInput.ry * 300 * DEG2RAD;
+          tRoll  = hwInput.rx * 300 * DEG2RAD;
+        } else {
+          tPitch = ((hwInput.ry * 48 * DEG2RAD) - curPitch) * 7.0;
+          tRoll  = ((hwInput.rx * 48 * DEG2RAD) - curRoll)  * 7.0;
+        }
+
+        const alpha = Math.min(1.0, 20.0 * dt);
+        this.pitchRate += (tPitch - this.pitchRate) * alpha;
+        this.rollRate  += (tRoll  - this.rollRate)  * alpha;
+        this.yawRate   += (tYaw   - this.yawRate)   * alpha;
+
+        // Rodrigues SO(3)
+        const p = this.pitchRate * dt, r = this.rollRate * dt, y = this.yawRate * dt;
+        const thSq = p*p + r*r + y*y;
+        if (thSq > 1e-12) {
+          const th = Math.sqrt(thSq);
+          const c1 = Math.sin(th) / th, c2 = (1 - Math.cos(th)) / thSq;
+          const rx = this.rx, ry = this.ry, rz = this.rz;
+          const ux = this.ux, uy = this.uy, uz = this.uz;
+          const fx = this.fx, fy = this.fy, fz = this.fz;
+
+          const v1Rx = -r*ux - y*fx, v1Ry = -r*uy - y*fy, v1Rz = -r*uz - y*fz;
+          const v1Ux =  r*rx + p*fx, v1Uy =  r*ry + p*fy, v1Uz =  r*rz + p*fz;
+          const v1Fx =  y*rx - p*ux, v1Fy =  y*ry - p*uy, v1Fz =  y*rz - p*uz;
+
+          const v2Rx = -r*v1Ux - y*v1Fx, v2Ry = -r*v1Uy - y*v1Fy, v2Rz = -r*v1Uz - y*v1Fz;
+          const v2Ux =  r*v1Rx + p*v1Fx, v2Uy =  r*v1Ry + p*v1Fy, v2Uz =  r*v1Rz + p*v1Fz;
+          const v2Fx =  y*v1Rx - p*v1Ux, v2Fy =  y*v1Ry - p*v1Uy, v2Fz =  y*v1Rz - p*v1Uz;
+
+          this.rx = rx + c1*v1Rx + c2*v2Rx; this.ry = ry + c1*v1Ry + c2*v2Ry; this.rz = rz + c1*v1Rz + c2*v2Rz;
+          this.ux = ux + c1*v1Ux + c2*v2Ux; this.uy = uy + c1*v1Uy + c2*v2Uy; this.uz = uz + c1*v1Uz + c2*v2Uz;
+          this.fx = fx + c1*v1Fx + c2*v2Fx; this.fy = fy + c1*v1Fy + c2*v2Fy; this.fz = fz + c1*v1Fz + c2*v2Fz;
+
+          const fL = Math.hypot(this.fx, this.fy, this.fz) || 1;
+          this.fx /= fL; this.fy /= fL; this.fz /= fL;
+          const dot = this.ux*this.fx + this.uy*this.fy + this.uz*this.fz;
+          this.ux -= dot*this.fx; this.uy -= dot*this.fy; this.uz -= dot*this.fz;
+          const uL = Math.hypot(this.ux, this.uy, this.uz) || 1;
+          this.ux /= uL; this.uy /= uL; this.uz /= uL;
+          this.rx = this.uy*this.fz - this.uz*this.fy;
+          this.ry = this.uz*this.fx - this.ux*this.fz;
+          this.rz = this.ux*this.fy - this.uy*this.fx;
+        }
+
+        const thrust = thrCmd * 26.0;
+        const spd = Math.hypot(this.vx, this.vy, this.vz);
+        const drag = 0.08 + 0.008 * spd;
+        this.vx += (this.ux * thrust - this.vx * drag) * dt;
+        this.vy += (this.uy * thrust - 9.81 - this.vy * drag) * dt;
+        this.vz += (this.uz * thrust - this.vz * drag) * dt;
+
+        this.px += this.vx * dt;
+        this.py += this.vy * dt;
+        this.pz += this.vz * dt;
+
+        if (this.py < 0.25) {
+          this.py = 0.25;
+          if (this.vy < 0) this.vy = -this.vy * 0.2;
+          this.vx *= 0.92; this.vz *= 0.92;
+        }
+
+        // Check gate
+        const g = this.gates[this.activeGate];
+        if (Math.hypot(this.px - g.x, this.py - g.y, this.pz - g.z) < 3.4) {
+          this.activeGate = (this.activeGate + 1) % this.gates.length;
+          playTone(880, 0.08);
+        }
+        this.lapTime += dt;
+        this.thrCmd = thrCmd;
+      },
+      render() {
+        fbClear();
+        const tilt = 15 * DEG2RAD;
+        const cT = Math.cos(tilt), sT = Math.sin(tilt);
+        const cRx = this.rx, cRy = this.ry, cRz = this.rz;
+        const cUx = cT*this.ux - sT*this.fx, cUy = cT*this.uy - sT*this.fy, cUz = cT*this.uz - sT*this.fz;
+        const cFx = sT*this.ux + cT*this.fx, cFy = sT*this.uy + cT*this.fy, cFz = sT*this.uz + cT*this.fz;
+
+        const camX = this.chaseCam ? this.px - cFx * 3.5 + cUx * 1.0 : this.px;
+        const camY = this.chaseCam ? Math.max(0.3, this.py - cFy * 3.5 + cUy * 1.0) : this.py;
+        const camZ = this.chaseCam ? this.pz - cFz * 3.5 + cUz * 1.0 : this.pz;
+
+        const projLine = (x0, y0, z0, x1, y1, z1, dash = 0) => {
+          const dx0 = x0 - camX, dy0 = y0 - camY, dz0 = z0 - camZ;
+          const dx1 = x1 - camX, dy1 = y1 - camY, dz1 = z1 - camZ;
+          let cx0 = dx0*cRx + dy0*cRy + dz0*cRz, cy0 = dx0*cUx + dy0*cUy + dz0*cUz, cz0 = dx0*cFx + dy0*cFy + dz0*cFz;
+          let cx1 = dx1*cRx + dy1*cRy + dz1*cRz, cy1 = dx1*cUx + dy1*cUy + dz1*cUz, cz1 = dx1*cFx + dy1*cFy + dz1*cFz;
+          if (cz0 < 0.15 && cz1 < 0.15) return;
+          if (cz0 > 75 && cz1 > 75) return;
+          if (cz0 < 0.15) { const t = (0.15 - cz0)/(cz1 - cz0); cx0 += t*(cx1 - cx0); cy0 += t*(cy1 - cy0); cz0 = 0.15; }
+          else if (cz1 < 0.15) { const t = (0.15 - cz1)/(cz0 - cz1); cx1 += t*(cx0 - cx1); cy1 += t*(cy0 - cy1); cz1 = 0.15; }
+          const f = 68.0;
+          fbDrawLine(64 + cx0*f/cz0, 32 - cy0*f/cz0, 64 + cx1*f/cz1, 32 - cy1*f/cz1, dash);
+        };
+
+        // Cuadrícula suelo
+        for (let i = -48; i <= 48; i += 8) {
+          projLine(i, 0, -48, i, 0, 48, 1);
+          projLine(-48, 0, i, 48, 0, i, 1);
+        }
+
+        // Puertas
+        for (let i = 0; i < this.gates.length; i++) {
+          const g = this.gates[i];
+          const hw = g.w * 0.5, hh = g.h * 0.5;
+          projLine(g.x - hw, 0, g.z, g.x - hw, g.y + hh, g.z, 0);
+          projLine(g.x + hw, 0, g.z, g.x + hw, g.y + hh, g.z, 0);
+          projLine(g.x - hw, g.y + hh, g.z, g.x + hw, g.y + hh, g.z, 0);
+          projLine(g.x - hw, g.y - hh, g.z, g.x + hw, g.y - hh, g.z, 0);
+          if (i === this.activeGate) {
+            projLine(g.x, g.y + hh + 1.2, g.z, g.x - 1, g.y + hh + 2.4, g.z, 0);
+            projLine(g.x, g.y + hh + 1.2, g.z, g.x + 1, g.y + hh + 2.4, g.z, 0);
+          }
+        }
+
+        // Horizonte 3D real
+        let hFx = cFx, hFz = cFz, hN = Math.hypot(hFx, hFz) || 1;
+        hFx /= hN; hFz /= hN;
+        const hRx = hFz, hRz = -hFx;
+        projLine(camX + hFx*45 - hRx*14, camY, camZ + hFz*45 - hRz*14,
+                 camX + hFx*45 + hRx*14, camY, camZ + hFz*45 + hRz*14, 1);
+
+        // OSD
+        fbDrawText(this.mode, 2, 2);
+        fbDrawText(`G${this.activeGate + 1}/6`, 104, 2);
+        const spd = Math.hypot(this.vx, this.vy, this.vz);
+        fbDrawText(`V${Math.round(spd)}`, 2, 58);
+        fbDrawText(`A${this.py.toFixed(1)}`, 100, 58);
+        document.getElementById('uiTelemetryMini').textContent =
+          `${this.mode} | THR ${Math.round(this.thrCmd*100)}%`;
       }
-      soundEnabled = !soundEnabled;
-      const btn = document.getElementById('btnSound');
-      if (soundEnabled) {
-        audioCtx.resume();
-        btn.textContent = '🔊 Audio';
-        btn.classList.add('active');
-      } else {
-        motorGain.gain.setTargetAtTime(0.0, audioCtx.currentTime, 0.05);
-        btn.textContent = '🔇 Audio';
-        btn.classList.remove('active');
+    };
+
+    /***************************************************************************
+     * JUEGO 2: RALLY STAGE 3D WRC (Carreras Wireframe + Física de Derrape/Drift)
+     ***************************************************************************/
+    const rallyGame = {
+      trackZ: 0,
+      playerX: 0,      // Posición lateral (-1..+1 es dentro del asfalto)
+      lateralVel: 0,
+      speed: 0,        // km/h (0..220)
+      steerAngle: 0,
+      driftAngle: 0,
+      stageTime: 0,
+      distance: 0,
+      camChase: true,
+      reset() {
+        this.trackZ = 0; this.playerX = 0; this.lateralVel = 0;
+        this.speed = 0; this.steerAngle = 0; this.driftAngle = 0;
+        this.stageTime = 0; this.distance = 0;
+      },
+      // Curvatura y elevación de la pista en función de Z
+      getCurveAt(z) {
+        return Math.sin(z * 0.035) * 1.4 + Math.cos(z * 0.08) * 0.9;
+      },
+      getHillAt(z) {
+        return Math.sin(z * 0.05) * 1.8;
+      },
+      step(dt) {
+        if (hwInput.justPressed('X')) this.reset();
+        if (hwInput.justPressed('Y') || hwInput.justPressed('L3')) this.camChase = !this.camChase;
+
+        // Dirección con Stick Izquierdo X (o Derecho X)
+        const steerInput = Math.abs(hwInput.lx) > Math.abs(hwInput.rx) ? hwInput.lx : hwInput.rx;
+        // Acelerador con Stick Derecho Y hacia arriba o Botón A
+        const gasInput = Math.max(hwInput.btn.A ? 1.0 : 0.0, Math.max(0, hwInput.ry), Math.max(0, hwInput.ly));
+        // Freno / Freno de mano (Drift) con Botón B, R3 o Stick hacia abajo
+        const brakeInput = Math.max(hwInput.btn.B || hwInput.btn.R3 ? 1.0 : 0.0, Math.max(0, -hwInput.ry));
+
+        const offRoad = Math.abs(this.playerX) > 1.05;
+        const maxSpd = offRoad ? 105 : 215;
+
+        if (gasInput > 0.05) {
+          this.speed += gasInput * 75 * dt;
+        } else {
+          this.speed -= 22 * dt;
+        }
+
+        if (brakeInput > 0.05) {
+          this.speed -= brakeInput * 95 * dt;
+        }
+        if (offRoad) {
+          this.speed -= 45 * dt;
+        }
+        this.speed = Math.max(0, Math.min(maxSpd, this.speed));
+
+        const spdNorm = this.speed / 180.0;
+        const dz = (this.speed * 0.28) * dt;
+        this.trackZ += dz;
+        this.distance += dz;
+        this.stageTime += dt;
+
+        // Fuerza centrífuga de la curva actual + giro del volante + ángulo de derrape (Drift)
+        const roadCurve = this.getCurveAt(this.trackZ);
+        const isDrifting = brakeInput > 0.2 && Math.abs(steerInput) > 0.25 && this.speed > 60;
+
+        const targetDrift = isDrifting ? steerInput * 0.85 : steerInput * 0.25;
+        this.driftAngle += (targetDrift - this.driftAngle) * Math.min(1, 8 * dt);
+
+        // Desplazamiento lateral en la carretera
+        const turnRate = steerInput * (isDrifting ? 2.3 : 1.75) * Math.min(1.0, this.speed / 45.0);
+        const centrifugal = roadCurve * spdNorm * spdNorm * 1.15;
+
+        this.playerX += (turnRate - centrifugal) * dt;
+        this.playerX = Math.max(-2.2, Math.min(2.2, this.playerX));
+
+        if (this.speed > 5 && soundEnabled && (Math.random() < 0.25)) {
+          playTone(65 + this.speed * 1.3, 0.03, 'sawtooth', 0.015);
+        }
+      },
+      render() {
+        fbClear();
+
+        // Horizonte montañoso wireframe que rota con la curva de la pista
+        const bgOffset = ((this.trackZ * 2) | 0) % 32;
+        fbDrawLine(0, 21, 127, 21, 1);
+        fbDrawLine(0, 21, 24 - (bgOffset >> 2), 11);
+        fbDrawLine(24 - (bgOffset >> 2), 11, 52 - (bgOffset >> 2), 21);
+        fbDrawLine(60, 21, 88, 9);
+        fbDrawLine(88, 9, 120, 21);
+
+        // Renderizado de segmentos 3D de la etapa de Rally (de cerca a lejos)
+        const numSegs = 26;
+        const segLen = 2.2;
+        const baseZ = Math.floor(this.trackZ / segLen) * segLen;
+        const fracZ = (this.trackZ - baseZ) / segLen;
+
+        let prevLeftX = 0, prevRightX = 0, prevY = 0;
+        let accumCurve = 0;
+        let curveVel = 0;
+
+        for (let i = 1; i <= numSegs; i++) {
+          const worldZ = baseZ + i * segLen;
+          const relZ = (i - fracZ) * segLen;
+          if (relZ < 0.5) continue;
+
+          const c = this.getCurveAt(worldZ);
+          curveVel += c * 0.14;
+          accumCurve += curveVel;
+
+          const hill = this.getHillAt(worldZ) - this.getHillAt(this.trackZ);
+          const scale = 38.0 / relZ;
+
+          const roadCenterX = 64 + (accumCurve - this.playerX * 3.4) * scale;
+          const roadHalfW   = 3.2 * scale;
+          const sy = Math.max(21, Math.min(63, Math.round(22 + (1.45 - hill * 0.15) * scale)));
+
+          const lx = roadCenterX - roadHalfW;
+          const rx = roadCenterX + roadHalfW;
+
+          if (i > 1) {
+            // Bordes de la pista (pianos alternados)
+            fbDrawLine(prevLeftX, prevY, lx, sy);
+            fbDrawLine(prevRightX, prevY, rx, sy);
+
+            // Líneas transversales del asfalto cada 2 segmentos para sensación de velocidad
+            const segIdx = Math.floor(worldZ / segLen);
+            if (segIdx % 2 === 0) {
+              fbDrawLine(lx, sy, rx, sy, 1);
+              // Postes/Árboles laterales de referencia en el tramo de rally
+              if (segIdx % 4 === 0 && i < 18) {
+                const postH = Math.max(2, Math.round(2.0 * scale));
+                const pLx = lx - 1.2 * scale;
+                const pRx = rx + 1.2 * scale;
+                fbDrawLine(pLx, sy, pLx, sy - postH);
+                fbDrawLine(pRx, sy, pRx, sy - postH);
+              }
+            }
+          }
+
+          prevLeftX = lx;
+          prevRightX = rx;
+          prevY = sy;
+        }
+
+        // Dibujar coche de Rally en vista Chase (con ángulo de derrape visual)
+        if (this.camChase) {
+          const carCx = 64 + Math.round(this.driftAngle * 10);
+          const carCy = 55;
+          const skew = Math.round(this.driftAngle * 7);
+
+          // Carrocería hatchback WRC wireframe
+          fbRect(carCx - 11 + skew, carCy - 5, 22, 6, false);
+          // Techo / Cabina
+          fbDrawLine(carCx - 7 + skew, carCy - 9, carCx + 7 + skew, carCy - 9);
+          fbDrawLine(carCx - 11 + skew, carCy - 5, carCx - 7 + skew, carCy - 9);
+          fbDrawLine(carCx + 11 + skew, carCy - 5, carCx + 7 + skew, carCy - 9);
+          // Alerón trasero + Ruedas
+          fbRect(carCx - 13 + skew, carCy - 2, 4, 4, true);
+          fbRect(carCx + 9 + skew,  carCy - 2, 4, 4, true);
+
+          // Partículas de tierra/humo al derrapar
+          if (Math.abs(this.driftAngle) > 0.35 && this.speed > 60) {
+            fbSetPixel(carCx - 14, carCy + 2);
+            fbSetPixel(carCx + 14, carCy + 2);
+            fbSetPixel(carCx - 16, carCy + 3);
+            fbSetPixel(carCx + 16, carCy + 3);
+          }
+        }
+
+        // HUD del Rally
+        fbDrawText(`${Math.round(this.speed)}KMH`, 2, 2);
+        const gear = this.speed < 5 ? 'N' : Math.min(6, Math.ceil(this.speed / 36));
+        fbDrawText(`G:${gear}`, 54, 2);
+        fbDrawText(`${(this.distance / 100).toFixed(1)}KM`, 92, 2);
+
+        document.getElementById('uiTelemetryMini').textContent =
+          `WRC ${Math.round(this.speed)} KM/H | GEAR ${gear}`;
       }
+    };
+
+    /***************************************************************************
+     * JUEGO 3: STARFIGHTER 3D (Combate Espacial 6-DOF Wireframe + Láseres)
+     ***************************************************************************/
+    const spaceGame = {
+      score: 0,
+      shield: 100,
+      speed: 22,
+      enemies: [],
+      stars: [],
+      lasers: [],
+      cooldown: 0,
+      reset() {
+        this.score = 0;
+        this.shield = 100;
+        this.enemies = [];
+        this.lasers = [];
+        this.stars = [];
+        for (let i = 0; i < 35; i++) {
+          this.stars.push({
+            x: (Math.random() - 0.5) * 90,
+            y: (Math.random() - 0.5) * 50,
+            z: Math.random() * 60 + 2
+          });
+        }
+        for (let i = 0; i < 4; i++) {
+          this.spawnEnemy(25 + i * 14);
+        }
+      },
+      spawnEnemy(zDist = 55) {
+        this.enemies.push({
+          x: (Math.random() - 0.5) * 32,
+          y: (Math.random() - 0.5) * 18,
+          z: zDist,
+          vx: (Math.random() - 0.5) * 6,
+          vy: (Math.random() - 0.5) * 4
+        });
+      },
+      step(dt) {
+        if (hwInput.justPressed('X')) this.reset();
+        if (this.cooldown > 0) this.cooldown -= dt;
+
+        // Stick Derecho (o Izquierdo) gira la nave (Pitch / Yaw) y desplaza el campo 3D
+        const yawIn   = Math.abs(hwInput.rx) > Math.abs(hwInput.lx) ? hwInput.rx : hwInput.lx;
+        const pitchIn = Math.abs(hwInput.ry) > Math.abs(hwInput.ly) ? hwInput.ry : hwInput.ly;
+        const rollIn  = hwInput.lx;
+
+        const boost = hwInput.btn.B ? 42 : (20 + Math.max(0, hwInput.ly) * 18);
+        this.speed = boost;
+
+        // Disparo láser con Botón A o Click R3/L3
+        if ((hwInput.btn.A || hwInput.btn.R3 || hwInput.btn.L3) && this.cooldown <= 0) {
+          this.lasers.push({ x: 0, y: -1.2, z: 2.0 });
+          this.cooldown = 0.16;
+          playTone(920, 0.05, 'sawtooth', 0.04);
+        }
+
+        const rotCos = Math.cos(-rollIn * 2.2 * dt);
+        const rotSin = Math.sin(-rollIn * 2.2 * dt);
+
+        // Mover estrellas
+        for (const s of this.stars) {
+          s.x -= yawIn * 26 * dt;
+          s.y -= pitchIn * 18 * dt;
+          const nx = s.x * rotCos - s.y * rotSin;
+          const ny = s.x * rotSin + s.y * rotCos;
+          s.x = nx; s.y = ny;
+          s.z -= this.speed * dt;
+          if (s.z < 1) {
+            s.z = 60;
+            s.x = (Math.random() - 0.5) * 90;
+            s.y = (Math.random() - 0.5) * 50;
+          }
+        }
+
+        // Mover láseres
+        for (let i = this.lasers.length - 1; i >= 0; i--) {
+          this.lasers[i].z += 85 * dt;
+          if (this.lasers[i].z > 65) this.lasers.splice(i, 1);
+        }
+
+        // Mover cazas enemigos TIE/Wireframe
+        for (let i = this.enemies.length - 1; i >= 0; i--) {
+          const e = this.enemies[i];
+          e.x += (e.vx - yawIn * 22) * dt;
+          e.y += (e.vy - pitchIn * 16) * dt;
+          e.z -= (this.speed * 0.65) * dt;
+
+          // Comprobar impacto de láser
+          let hit = false;
+          for (let j = this.lasers.length - 1; j >= 0; j--) {
+            const l = this.lasers[j];
+            if (Math.abs(l.z - e.z) < 4.5 && Math.hypot(e.x, e.y) < 4.8) {
+              hit = true;
+              this.lasers.splice(j, 1);
+              break;
+            }
+          }
+
+          if (hit) {
+            this.score += 100;
+            playTone(220, 0.12, 'square', 0.06);
+            this.enemies.splice(i, 1);
+            this.spawnEnemy(58);
+          } else if (e.z < 1.5) {
+            if (Math.hypot(e.x, e.y) < 4.5) {
+              this.shield = Math.max(0, this.shield - 15);
+              playTone(110, 0.15, 'sawtooth', 0.07);
+            }
+            this.enemies.splice(i, 1);
+            this.spawnEnemy(58);
+          }
+        }
+      },
+      render() {
+        fbClear();
+        const f = 58.0;
+
+        // Estrellas 3D
+        for (const s of this.stars) {
+          const sx = 64 + (s.x * f) / s.z;
+          const sy = 32 - (s.y * f) / s.z;
+          fbSetPixel(sx, sy);
+        }
+
+        // Cazas enemigos Wireframe (Hexágono + Alas tipo TIE)
+        for (const e of this.enemies) {
+          const sx = 64 + (e.x * f) / e.z;
+          const sy = 32 - (e.y * f) / e.z;
+          const r = Math.max(2, Math.round((2.2 * f) / e.z));
+          fbCircle(sx, sy, r);
+          fbDrawLine(sx - r * 1.6, sy - r * 1.4, sx - r * 1.6, sy + r * 1.4);
+          fbDrawLine(sx + r * 1.6, sy - r * 1.4, sx + r * 1.6, sy + r * 1.4);
+          fbDrawLine(sx - r * 1.6, sy, sx + r * 1.6, sy);
+        }
+
+        // Rayos láser dobles desde las alas de la cabina
+        for (const l of this.lasers) {
+          const z0 = Math.max(1, l.z);
+          const z1 = l.z + 6;
+          fbDrawLine(20, 56, 64 - (8 * f) / z1, 32 + (2 * f) / z1);
+          fbDrawLine(108, 56, 64 + (8 * f) / z1, 32 + (2 * f) / z1);
+        }
+
+        // Mira central y cabina espacial
+        fbCircle(64, 32, 6);
+        fbSetPixel(64, 32);
+        fbDrawLine(0, 63, 28, 48);
+        fbDrawLine(127, 63, 99, 48);
+        fbDrawLine(28, 48, 99, 48);
+
+        fbDrawText(`SCR:${this.score}`, 2, 2);
+        fbDrawText(`SHD:${this.shield}%`, 88, 2);
+        document.getElementById('uiTelemetryMini').textContent =
+          `SCORE ${this.score} | SHIELD ${this.shield}%`;
+      }
+    };
+
+    /***************************************************************************
+     * JUEGO 4: TWIN-STICK ARENA (Prueba ideal de los 2 Joysticks Simultáneos)
+     *          - Stick Izquierdo: Mueve tu nave en el mapa 128x64
+     *          - Stick Derecho: Apunta y dispara automáticamente en 360°
+     ***************************************************************************/
+    const arenaGame = {
+      px: 64, py: 32,
+      aimX: 1, aimY: 0,
+      bullets: [],
+      foes: [],
+      score: 0,
+      lives: 3,
+      bombs: 3,
+      fireTimer: 0,
+      spawnTimer: 0,
+      reset() {
+        this.px = 64; this.py = 32;
+        this.bullets = []; this.foes = [];
+        this.score = 0; this.lives = 3; this.bombs = 3;
+      },
+      step(dt) {
+        if (hwInput.justPressed('X')) this.reset();
+
+        // Movimiento con Stick Izquierdo
+        this.px = Math.max(6, Math.min(121, this.px + hwInput.lx * 52 * dt));
+        this.py = Math.max(10, Math.min(59, this.py - hwInput.ly * 52 * dt));
+
+        // Bomba EMP con Botón B o Click L3
+        if ((hwInput.justPressed('B') || hwInput.justPressed('L3')) && this.bombs > 0) {
+          this.bombs--;
+          this.score += this.foes.length * 10;
+          this.foes.length = 0;
+          playTone(180, 0.18, 'sawtooth', 0.07);
+        }
+
+        // Apuntado y disparo 360 con Stick Derecho (o Botón A / R3)
+        const rMag = Math.hypot(hwInput.rx, hwInput.ry);
+        if (rMag > 0.2) {
+          this.aimX = hwInput.rx / rMag;
+          this.aimY = -hwInput.ry / rMag;
+        }
+
+        this.fireTimer -= dt;
+        if ((rMag > 0.25 || hwInput.btn.A || hwInput.btn.R3) && this.fireTimer <= 0) {
+          this.bullets.push({
+            x: this.px + this.aimX * 4,
+            y: this.py + this.aimY * 4,
+            vx: this.aimX * 115,
+            vy: this.aimY * 115
+          });
+          this.fireTimer = 0.11;
+          playTone(760, 0.03, 'square', 0.03);
+        }
+
+        for (let i = this.bullets.length - 1; i >= 0; i--) {
+          const b = this.bullets[i];
+          b.x += b.vx * dt;
+          b.y += b.vy * dt;
+          if (b.x < 2 || b.x > 125 || b.y < 9 || b.y > 62) {
+            this.bullets.splice(i, 1);
+          }
+        }
+
+        // Generar enemigos geométricos
+        this.spawnTimer -= dt;
+        if (this.spawnTimer <= 0 && this.foes.length < 14) {
+          const edge = (Math.random() * 4) | 0;
+          const fx = edge === 0 ? 4 : (edge === 1 ? 123 : Math.random() * 120 + 4);
+          const fy = edge === 2 ? 10 : (edge === 3 ? 60 : Math.random() * 50 + 10);
+          this.foes.push({ x: fx, y: fy });
+          this.spawnTimer = 0.65;
+        }
+
+        for (let i = this.foes.length - 1; i >= 0; i--) {
+          const f = this.foes[i];
+          const dx = this.px - f.x, dy = this.py - f.y;
+          const dist = Math.hypot(dx, dy) || 1;
+          f.x += (dx / dist) * 24 * dt;
+          f.y += (dy / dist) * 24 * dt;
+
+          if (dist < 4.5) {
+            this.lives = Math.max(0, this.lives - 1);
+            this.foes.splice(i, 1);
+            playTone(130, 0.15, 'sawtooth', 0.07);
+            if (this.lives === 0) this.reset();
+            continue;
+          }
+
+          for (let j = this.bullets.length - 1; j >= 0; j--) {
+            const b = this.bullets[j];
+            if (Math.hypot(b.x - f.x, b.y - f.y) < 4.0) {
+              this.score += 25;
+              this.foes.splice(i, 1);
+              this.bullets.splice(j, 1);
+              playTone(480, 0.04);
+              break;
+            }
+          }
+        }
+      },
+      render() {
+        fbClear();
+        fbRect(0, 8, 128, 56, false);
+
+        // Jugador + cañón direccional
+        fbCircle(this.px, this.py, 3);
+        fbDrawLine(this.px, this.py, this.px + this.aimX * 7, this.py + this.aimY * 7);
+
+        // Balas
+        for (const b of this.bullets) {
+          fbRect(b.x - 1, b.y - 1, 2, 2, true);
+        }
+
+        // Enemigos (rombos wireframe)
+        for (const f of this.foes) {
+          fbDrawLine(f.x, f.y - 3, f.x + 3, f.y);
+          fbDrawLine(f.x + 3, f.y, f.x, f.y + 3);
+          fbDrawLine(f.x, f.y + 3, f.x - 3, f.y);
+          fbDrawLine(f.x - 3, f.y, f.x, f.y - 3);
+        }
+
+        fbDrawText(`PTS:${this.score}`, 2, 1);
+        fbDrawText(`HP:${this.lives}`, 62, 1);
+        fbDrawText(`EMP:${this.bombs}`, 96, 1);
+        document.getElementById('uiTelemetryMini').textContent =
+          `TWIN-STICK | PTS ${this.score}`;
+      }
+    };
+
+    /***************************************************************************
+     * JUEGO 5: HARDWARE & ADC DIAGNOSTIC (Utilidad de Firmware ESP32-S3)
+     ***************************************************************************/
+    function renderHwDiagnostic() {
+      fbClear();
+      fbRect(0, 0, 128, 8, true, 1);
+      fbDrawText('ESP32-S3 ADC & GPIO TEST', 4, 2, 0);
+
+      // Visualizador Stick Izquierdo en OLED
+      fbRect(6, 12, 34, 34, false);
+      fbSetPixel(23, 29);
+      const lxPx = 23 + Math.round(hwInput.lx * 14);
+      const lyPx = 29 - Math.round(hwInput.ly * 14);
+      fbDrawLine(23, 29, lxPx, lyPx);
+      fbRect(lxPx - 1, lyPx - 1, 3, 3, true);
+      fbDrawText(`L3:${hwInput.btn.L3 ? 1 : 0}`, 8, 48);
+
+      // Visualizador Stick Derecho en OLED
+      fbRect(88, 12, 34, 34, false);
+      fbSetPixel(105, 29);
+      const rxPx = 105 + Math.round(hwInput.rx * 14);
+      const ryPx = 29 - Math.round(hwInput.ry * 14);
+      fbDrawLine(105, 29, rxPx, ryPx);
+      fbRect(rxPx - 1, ryPx - 1, 3, 3, true);
+      fbDrawText(`R3:${hwInput.btn.R3 ? 1 : 0}`, 90, 48);
+
+      // Estado de los 4 botones de acción + SELECT/MENU en el centro
+      const btns = ['Y', 'X', 'B', 'A'];
+      for (let i = 0; i < 4; i++) {
+        const bx = 46 + i * 9;
+        const pressed = hwInput.btn[btns[i]];
+        fbRect(bx, 16, 7, 9, pressed, 1);
+        fbDrawText(btns[i], bx + 2, 18, pressed ? 0 : 1);
+      }
+
+      // Simulación de lectura ADC de 12 bits (0..4095) del ESP32-S3
+      const adcLX = Math.round((hwInput.lx + 1) * 2047.5);
+      const adcRX = Math.round((hwInput.rx + 1) * 2047.5);
+      fbDrawText(`ADC L:${adcLX}`, 44, 30);
+      fbDrawText(`ADC R:${adcRX}`, 44, 38);
+      fbDrawText('16MB FLASH OK', 38, 57);
+
+      document.getElementById('uiTelemetryMini').textContent =
+        `ADC12: ${adcLX} / ${adcRX}`;
     }
 
-    function updateMotorAudio() {
-      if (!soundEnabled || !audioCtx) return;
-      const baseFreq = 120 + drone.throttleCmd * 450;
-      motorOsc1.frequency.setTargetAtTime(baseFreq, audioCtx.currentTime, 0.03);
-      motorOsc2.frequency.setTargetAtTime(baseFreq * 1.49, audioCtx.currentTime, 0.03);
-      motorGain.gain.setTargetAtTime(0.025 + drone.throttleCmd * 0.05, audioCtx.currentTime, 0.04);
-    }
-
-    function playGateBeep(freq = 800) {
-      if (!soundEnabled || !audioCtx) return;
-      const osc = audioCtx.createOscillator();
-      const g = audioCtx.createGain();
-      osc.type = 'square';
-      osc.frequency.value = freq;
-      g.gain.value = 0.06;
-      osc.connect(g);
-      g.connect(audioCtx.destination);
-      osc.start();
-      g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.14);
-      osc.stop(audioCtx.currentTime + 0.15);
-    }
-
-    function resetDrone() {
-      drone.px = 0.0; drone.py = 2.2; drone.pz = -10.0;
-      drone.vx = 0.0; drone.vy = 0.0; drone.vz = 0.0;
-      drone.pitchRate = 0.0; drone.rollRate = 0.0; drone.yawRate = 0.0;
-      drone.rx = 1.0; drone.ry = 0.0; drone.rz = 0.0;
-      drone.ux = 0.0; drone.uy = 1.0; drone.uz = 0.0;
-      drone.fx = 0.0; drone.fy = 0.0; drone.fz = 1.0;
-      drone.prevPx = drone.px; drone.prevPy = drone.py; drone.prevPz = drone.pz;
-      activeGateIdx = 0;
-      lapRunning = false;
-      document.getElementById('uiLapTime').textContent = '00:00.0';
-    }
-
-    document.getElementById('btnResetDrone').addEventListener('click', resetDrone);
-    document.getElementById('btnSound').addEventListener('click', toggleMotorAudio);
-
-    document.getElementById('btnFlightMode').addEventListener('click', (e) => {
-      simConfig.mode = simConfig.mode === 'ACRO' ? 'STAB' : 'ACRO';
-      e.currentTarget.textContent = `Modo: ${simConfig.mode}`;
-      e.currentTarget.classList.toggle('active', simConfig.mode === 'ACRO');
+    /***************************************************************************
+     * 5. BUCLE PRINCIPAL DEL FIRMWARE (60 FPS)
+     ***************************************************************************/
+    document.getElementById('btnColorCycle').addEventListener('click', () => {
+      currentPaletteIdx = (currentPaletteIdx + 1) % OLED_PALETTES.length;
     });
 
-    document.getElementById('btnCamView').addEventListener('click', (e) => {
-      simConfig.chaseCam = !simConfig.chaseCam;
-      e.currentTarget.textContent = simConfig.chaseCam ? '🎥 3raP' : '🎥 FPV';
-      e.currentTarget.classList.toggle('active', simConfig.chaseCam);
+    document.getElementById('btnAudioToggle').addEventListener('click', (e) => {
+      soundEnabled = !soundEnabled;
+      e.currentTarget.textContent = soundEnabled ? '🔊 Audio' : '🔇 Audio';
+      e.currentTarget.classList.toggle('active', soundEnabled);
+      if (soundEnabled) playTone(660, 0.06);
     });
 
     document.getElementById('btnGridToggle').addEventListener('click', (e) => {
-      const c = document.getElementById('canvasContainer');
-      c.classList.toggle('pixel-grid');
-      e.currentTarget.classList.toggle('active', c.classList.contains('pixel-grid'));
+      const vp = document.getElementById('oledViewport');
+      vp.classList.toggle('pixel-grid');
+      e.currentTarget.classList.toggle('active', vp.classList.contains('pixel-grid'));
     });
 
-    document.getElementById('btnFullscreen').addEventListener('click', async () => {
-      try {
-        if (!document.fullscreenElement) {
-          await document.documentElement.requestFullscreen();
-          if (screen.orientation && screen.orientation.lock) {
-            screen.orientation.lock('landscape').catch(() => {});
-          }
-        } else {
-          await document.exitFullscreen();
-        }
-      } catch (_) {}
-    });
-
-    const backdrop = document.getElementById('settingsBackdrop');
-    document.getElementById('btnOpenSettings').addEventListener('click', () => backdrop.classList.add('open'));
-    document.getElementById('btnCloseSettings').addEventListener('click', () => backdrop.classList.remove('open'));
-    backdrop.addEventListener('click', (e) => {
-      if (e.target === backdrop) backdrop.classList.remove('open');
-    });
-
-    document.querySelectorAll('.swatch').forEach((sw) => {
-      sw.addEventListener('click', () => {
-        document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
-        sw.classList.add('active');
-        const num = parseInt(sw.getAttribute('data-color').slice(1), 16);
-        oledColorRGB = { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
-      });
-    });
-
-    function bindSlider(id, valId, key, fmt) {
-      const el = document.getElementById(id);
-      const vEl = document.getElementById(valId);
-      el.addEventListener('input', () => {
-        const v = parseFloat(el.value);
-        simConfig[key] = key === 'neutralThrottle' ? v / 100.0 : v;
-        vEl.textContent = fmt(v);
-      });
-    }
-
-    bindSlider('slUptilt',   'valUptilt',   'camUptiltDeg',    v => `${v}°`);
-    bindSlider('slHover',    'valHover',    'neutralThrottle', v => `${v}%`);
-    bindSlider('slThrust',   'valThrust',   'maxThrustAccel',  v => v.toFixed(1));
-    bindSlider('slGravity',  'valGravity',  'gravity',         v => v.toFixed(2));
-    bindSlider('slDrag',     'valDrag',     'dragLinear',      v => v.toFixed(2));
-    bindSlider('slRatePR',   'valRatePR',   'ratePitchRoll',   v => `${v}°/s`);
-    bindSlider('slRateYaw',  'valRateYaw',  'rateYaw',         v => `${v}°/s`);
-    bindSlider('slExpo',     'valExpo',     'expo',            v => v.toFixed(2));
-    bindSlider('slDeadzone', 'valDeadzone', 'deadzone',        v => v.toFixed(2));
-
-    document.getElementById('btnResetParams').addEventListener('click', () => {
-      document.getElementById('slUptilt').value = 15;
-      document.getElementById('slHover').value = 36;
-      document.getElementById('slThrust').value = 26.0;
-      document.getElementById('slGravity').value = 9.81;
-      document.getElementById('slDrag').value = 0.08;
-      document.getElementById('slRatePR').value = 300;
-      document.getElementById('slRateYaw').value = 200;
-      document.getElementById('slExpo').value = 0.35;
-      document.getElementById('slDeadzone').value = 0.04;
-      ['slUptilt','slHover','slThrust','slGravity','slDrag','slRatePR','slRateYaw','slExpo','slDeadzone']
-        .forEach(id => document.getElementById(id).dispatchEvent(new Event('input')));
-    });
-
-    /***************************************************************************
-     * 8. BUCLE PRINCIPAL A 60 FPS
-     ***************************************************************************/
     let lastTime = performance.now();
     let fpsFrames = 0;
     let fpsClock = performance.now();
 
-    function mainLoop(now) {
-      requestAnimationFrame(mainLoop);
+    function firmwareMainLoop(now) {
+      requestAnimationFrame(firmwareMainLoop);
 
-      const dtRaw = Math.min(0.05, (now - lastTime) / 1000.0);
+      const dt = Math.min(0.05, (now - lastTime) / 1000.0);
       lastTime = now;
 
-      pollInputs();
+      updateInputPolling();
 
-      const subSteps = 4;
-      const subDt = dtRaw / subSteps;
-      for (let s = 0; s < subSteps; s++) {
-        stepPhysics(subDt);
+      // El botón físico MENU regresa en cualquier momento al Launcher Retro-Go
+      if (currentApp !== 'launcher' && hwInput.justPressed('MENU')) {
+        switchApp('launcher');
       }
 
-      if (gateFlashTimer > 0) gateFlashTimer -= dtRaw;
-      if (lapRunning) {
-        document.getElementById('uiLapTime').textContent = formatTimeShort(now - lapStartTime);
+      if (currentApp === 'launcher') {
+        updateAndRenderLauncher(dt);
+      } else if (currentApp === 'fpv') {
+        for (let s = 0; s < 4; s++) fpvGame.step(dt / 4);
+        fpvGame.render();
+      } else if (currentApp === 'rally') {
+        rallyGame.step(dt);
+        rallyGame.render();
+      } else if (currentApp === 'space') {
+        spaceGame.step(dt);
+        spaceGame.render();
+      } else if (currentApp === 'arena') {
+        arenaGame.step(dt);
+        arenaGame.render();
+      } else if (currentApp === 'hwtest') {
+        renderHwDiagnostic();
       }
-      updateMotorAudio();
 
-      renderScene();
-
-      const speed = Math.hypot(drone.vx, drone.vy, drone.vz);
-      document.getElementById('uiGate').textContent = `${activeGateIdx + 1}/${gates.length}`;
-      document.getElementById('uiSpeed').textContent = `${speed.toFixed(1)}m/s`;
-      document.getElementById('uiAlt').textContent = `${drone.py.toFixed(1)}m`;
-      document.getElementById('uiAttitude').textContent =
-        `${Math.round(drone.pitchDeg)}°/${Math.round(drone.rollDeg)}°/${Math.round(drone.yawDeg)}°`;
+      fbPresentToCanvas();
+      snapshotPrevButtons();
 
       fpsFrames++;
       if (now - fpsClock >= 500) {
         const fps = Math.round((fpsFrames * 1000) / (now - fpsClock));
-        document.getElementById('fpsCounter').textContent = `${fps} FPS`;
+        document.getElementById('uiFpsCounter').textContent = `${fps} FPS | 1KB VRAM`;
         fpsFrames = 0;
         fpsClock = now;
       }
     }
 
-    requestAnimationFrame(mainLoop);
+    switchApp('launcher');
+    requestAnimationFrame(firmwareMainLoop);
   </script>
 </body>
 </html>
