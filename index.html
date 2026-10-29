@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="theme-color" content="#181a22" />
-  <title>RETRO-GO // ESP32-S3 N16R8 Handheld Console v9</title>
+  <title>RETRO-GO // ESP32-S3 + 2.8" ILI9341V IPS 320x240 RGB565 v10</title>
   <style>
     :root {
       --case-main: #222530;
@@ -176,12 +176,16 @@
     }
 
     .oled-container {
-      width: 100%;
-      aspect-ratio: 2 / 1;
+      width: min(100%, 42cqh);
+      aspect-ratio: 4 / 3;
+      margin: 0 auto;
       background: #040609;
-      border: 1px solid #222630;
+      border: 2px solid #2b3344;
+      border-radius: 6px;
       position: relative;
       overflow: hidden;
+      touch-action: none;
+      cursor: pointer;
     }
 
     #oledCanvas {
@@ -197,9 +201,8 @@
       position: absolute;
       inset: 0;
       background-image:
-        linear-gradient(to right, rgba(0, 0, 0, 0.25) 1px, transparent 1px),
-        linear-gradient(to bottom, rgba(0, 0, 0, 0.25) 1px, transparent 1px);
-      background-size: calc(100% / 128) calc(100% / 64);
+        linear-gradient(to bottom, rgba(0, 0, 0, 0.18) 50%, transparent 50%);
+      background-size: 100% 2px;
       pointer-events: none;
     }
 
@@ -468,18 +471,18 @@
         <span class="led" title="Power ON"></span>
         <span>PWR</span>
         <span id="sdLed" class="led sd-act" title="Flash / SD Activity"></span>
-        <span>ROM</span>
-        <span style="color:#828c9e;margin-left:3px;">ESP32-S3 N16R8 (v9)</span>
+        <span>SPI</span>
+        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + ILI9341V (v10)</span>
       </div>
       <div class="top-hw-pills">
-        <button id="btnPalette" class="pill-btn">🎨 PAL</button>
+        <button id="btnPalette" class="pill-btn">🎨 IPS 60MHz</button>
         <button id="btnAudio" class="pill-btn">🔇 SND</button>
-        <button id="btnGrid" class="pill-btn active">GRID</button>
+        <button id="btnGrid" class="pill-btn active">SCAN</button>
         <button id="btnFull" class="pill-btn">⛶</button>
       </div>
     </header>
 
-    <!-- 2. Retro-Go 128x64 Native OLED Screen Lens -->
+    <!-- 2. Retro-Go 2.8" 320x240 IPS RGB565 ILI9341V + Capacitive Touch Screen Lens -->
     <section class="screen-lens">
       <div class="lens-header">
         <div class="rg-stripe">
@@ -487,18 +490,18 @@
           <i style="background:#ffb300"></i>
           <i style="background:#00e676"></i>
           <i style="background:#00e5ff"></i>
-          <span style="margin-left:4px;">DOT MATRIX 128×64</span>
+          <span style="margin-left:4px;">2.8" IPS 320×240 RGB565 (ILI9341V + TOUCH)</span>
         </div>
-        <span id="uiFpsBattery">60FPS | BAT 98%</span>
+        <span id="uiFpsBattery">60FPS | DMA 60MHz</span>
       </div>
 
       <div id="oledContainer" class="oled-container pixel-grid">
-        <canvas id="oledCanvas" width="128" height="64"></canvas>
+        <canvas id="oledCanvas" width="320" height="240"></canvas>
       </div>
 
       <div class="lens-branding">
-        <div class="rg-logo-text">RETRO<span>-GO</span> <small style="font-size:0.50rem;color:#8b9bb4;font-style:normal;">FW v1.42-S3</small></div>
-        <div id="uiHintBar" class="rg-sub-status">D-PAD/STICK:NAV | A:RUN | MENU:OSD</div>
+        <div class="rg-logo-text">RETRO<span>-GO</span> <small style="font-size:0.55em;color:#8b9bb4;font-style:normal;">ILI9341V + FT6336</small></div>
+        <div id="uiHintBar" class="rg-sub-status">TOUCH/DPAD/STICK:NAV | A:RUN | MENU:OSD</div>
       </div>
     </section>
 
@@ -562,27 +565,87 @@
 
   <script>
     /***************************************************************************
-     * 1. HARDWARE ABSTRACTION LAYER (HAL) — 128x64 1-BIT (1024 BYTES VRAM)
-     *    - Con protección anti-bucle infinito en Bresenham y Cohen-Sutherland
-     *      para que el simulador JAMÁS se congele aunque haya proyecciones extremas.
+     * 1. HARDWARE ABSTRACTION LAYER (HAL) — 2.8" ILI9341V IPS 320x240 RGB565
+     *    - Framebuffer real de 16 bits RGB565: 320 x 240 x 2 = 153,600 Bytes (150 KB)
+     *    - Compatible con doble buffer DMA en SRAM del ESP32-S3 (LovyanGFX / esp_lcd)
+     *    - Rasterizador Bresenham en resolución nativa 320x240 blindado contra bloqueos
      ***************************************************************************/
+    const DISP_W = 320;
+    const DISP_H = 240;
+    const VRAM_PIXELS = DISP_W * DISP_H; // 76,800 píxeles
+    const VRAM_BYTES  = VRAM_PIXELS * 2; // 153,600 bytes (150 KB RGB565)
+    const vram565 = new Uint16Array(VRAM_PIXELS);
+
+    // Coordenadas lógicas base (128x64 -> escaladas en hardware a 320x240 = x2.5, x3.75)
     const SCREEN_W = 128;
     const SCREEN_H = 64;
-    const FB_BYTES = 1024;
-    const frameBuffer = new Uint8Array(FB_BYTES);
+    const SCALE_X = DISP_W / SCREEN_W; // 2.5
+    const SCALE_Y = DISP_H / SCREEN_H; // 3.75
 
     const oledCanvas = document.getElementById('oledCanvas');
     const oledCtx = oledCanvas.getContext('2d', { alpha: false });
-    const oledImgData = oledCtx.createImageData(SCREEN_W, SCREEN_H);
+    const oledImgData = oledCtx.createImageData(DISP_W, DISP_H);
     const rgbaPixels = oledImgData.data;
 
-    const PALETTES = [
-      { name: 'OLED WHITE', r: 235, g: 250, b: 255, bgR: 4,  bgG: 6,  bgB: 9  },
-      { name: 'RETRO AMBER',r: 255, g: 179, b: 0,   bgR: 10, bgG: 6,  bgB: 2  },
-      { name: 'DMG GREEN',  r: 155, g: 188, b: 15,  bgR: 15, bgG: 56, bgB: 15 },
-      { name: 'SSD CYAN',   r: 0,   g: 229, b: 255, bgR: 3,  bgG: 8,  bgB: 14 }
+    function rgb565(r, g, b) {
+      return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | ((b & 0xF8) >> 3);
+    }
+
+    // Tabla LUT precalculada para convertir RGB565 -> RGBA8888 en <0.3ms
+    const LUT_R = new Uint8Array(65536);
+    const LUT_G = new Uint8Array(65536);
+    const LUT_B = new Uint8Array(65536);
+    for (let c = 0; c < 65536; c++) {
+      const r5 = (c >> 11) & 0x1F;
+      const g6 = (c >> 5)  & 0x3F;
+      const b5 =  c        & 0x1F;
+      LUT_R[c] = (r5 << 3) | (r5 >> 2);
+      LUT_G[c] = (g6 << 2) | (g6 >> 4);
+      LUT_B[c] = (b5 << 3) | (b5 >> 2);
+    }
+
+    // Paleta de índices rápidos RGB565 (además de aceptar cualquier color 16-bit directo)
+    const C565 = {
+      BG:      rgb565(8, 12, 22),     // 0: Fondo oscuro IPS
+      WHITE:   rgb565(240, 250, 255), // 1: Blanco brillante
+      GOLD:    rgb565(255, 190, 0),   // 2: Retro-Go Gold / Ámbar
+      GREEN:   rgb565(0, 235, 118),   // 3: Verde Neón
+      RED:     rgb565(245, 55, 65),   // 4: Rojo Carmesí
+      CYAN:    rgb565(0, 229, 255),   // 5: Cian HUD
+      GREY:    rgb565(90, 102, 125),  // 6: Gris Asfalto / UI
+      DARKGRN: rgb565(18, 85, 48),    // 7: Verde Terreno
+      NAVY:    rgb565(20, 34, 68),    // 8: Azul Retro-Go Header
+      ORANGE:  rgb565(255, 120, 20),  // 9: Naranja Rally / Fuego
+      MAGENTA: rgb565(245, 60, 210),  // 10: Magenta Gate Activo
+      SKYTOP:  rgb565(12, 24, 58),    // 11: Cielo Superior
+      SKYBOT:  rgb565(38, 78, 138),   // 12: Horizonte Cielo
+      GNDTOP:  rgb565(18, 46, 30),    // 13: Suelo Horizonte
+      GNDBOT:  rgb565(10, 24, 18)     // 14: Suelo Cercano
+    };
+
+    const INDEX_PALETTE = [
+      C565.BG, C565.WHITE, C565.GOLD, C565.GREEN,
+      C565.RED, C565.CYAN, C565.GREY, C565.DARKGRN,
+      C565.NAVY, C565.ORANGE, C565.MAGENTA, C565.SKYTOP,
+      C565.SKYBOT, C565.GNDTOP, C565.GNDBOT
+    ];
+
+    // Modos de bus SPI en el ESP32-S3 + ILI9341V
+    const SPI_MODES = [
+      { name: 'IPS 60MHz DMA', spiMhz: 60, mono: false, targetFps: 60 },
+      { name: 'IPS 80MHz QIO', spiMhz: 80, mono: false, targetFps: 60 },
+      { name: 'IPS 40MHz SPI', spiMhz: 40, mono: false, targetFps: 45 },
+      { name: '1-BIT MONO SIM',spiMhz: 40, mono: true,  targetFps: 60 }
     ];
     let paletteIdx = 0;
+
+    function resolveColor565(color) {
+      if (SPI_MODES[paletteIdx].mono) {
+        return color === 0 ? rgb565(6, 10, 14) : rgb565(0, 235, 130);
+      }
+      if (color >= 0 && color < INDEX_PALETTE.length) return INDEX_PALETTE[color];
+      return color & 0xFFFF;
+    }
 
     function blinkSdLed() {
       const el = document.getElementById('sdLed');
@@ -590,46 +653,103 @@
       setTimeout(() => el.classList.remove('blink'), 120);
     }
 
-    function fbClear() {
-      frameBuffer.fill(0);
+    function fbClear(bgColor = 0) {
+      vram565.fill(resolveColor565(bgColor));
+    }
+
+    // Relleno rápido de cielo y tierra en 320x240 para juegos 3D
+    function fbFillHorizon320(horizonY240, skyTop, skyBot, gndTop, gndBot) {
+      if (SPI_MODES[paletteIdx].mono) {
+        fbClear(0);
+        return;
+      }
+      const hy = Math.max(0, Math.min(DISP_H, horizonY240 | 0));
+      for (let y = 0; y < DISP_H; y++) {
+        const c = y < hy
+          ? (y < (hy >> 1) ? skyTop : skyBot)
+          : (y < hy + ((DISP_H - hy) >> 1) ? gndTop : gndBot);
+        vram565.fill(c, y * DISP_W, (y + 1) * DISP_W);
+      }
+    }
+
+    // Relleno de trapecio horizontal (para asfalto y pianos en WRC Rally a 320x240)
+    function fbFillQuadScanline(x0Top, x1Top, yTop, x0Bot, x1Bot, yBot, color565) {
+      if (SPI_MODES[paletteIdx].mono) return;
+      const c = resolveColor565(color565);
+      let ya = Math.round(yTop * SCALE_Y);
+      let yb = Math.round(yBot * SCALE_Y);
+      let xa0 = x0Top * SCALE_X, xa1 = x1Top * SCALE_X;
+      let xb0 = x0Bot * SCALE_X, xb1 = x1Bot * SCALE_X;
+      if (ya > yb) {
+        [ya, yb] = [yb, ya];
+        [xa0, xb0] = [xb0, xa0];
+        [xa1, xb1] = [xb1, xa1];
+      }
+      const span = Math.max(1, yb - ya);
+      const yStart = Math.max(0, ya), yEnd = Math.min(DISP_H - 1, yb);
+      for (let y = yStart; y <= yEnd; y++) {
+        const t = (y - ya) / span;
+        const lx = Math.max(0, Math.min(DISP_W - 1, Math.round(xa0 + (xb0 - xa0) * t)));
+        const rx = Math.max(0, Math.min(DISP_W - 1, Math.round(xa1 + (xb1 - xa1) * t)));
+        if (rx >= lx) vram565.fill(c, y * DISP_W + lx, y * DISP_W + rx + 1);
+      }
+    }
+
+    function fbSetPixel320(px, py, c565) {
+      const ix = px | 0, iy = py | 0;
+      if (ix < 0 || ix >= DISP_W || iy < 0 || iy >= DISP_H) return;
+      vram565[iy * DISP_W + ix] = c565;
     }
 
     function fbSetPixel(x, y, color = 1) {
-      const ix = x | 0, iy = y | 0;
-      if (ix < 0 || ix >= SCREEN_W || iy < 0 || iy >= SCREEN_H) return;
-      const bitIndex = (iy << 7) + ix;
-      if (color) frameBuffer[bitIndex >> 3] |= (1 << (bitIndex & 7));
-      else frameBuffer[bitIndex >> 3] &= ~(1 << (bitIndex & 7));
+      const c = resolveColor565(color);
+      const px = Math.round(x * SCALE_X);
+      const py = Math.round(y * SCALE_Y);
+      fbSetPixel320(px, py, c);
+      fbSetPixel320(px + 1, py, c);
+      fbSetPixel320(px, py + 1, c);
+      fbSetPixel320(px + 1, py + 1, c);
     }
 
     function fbRect(x, y, w, h, fill = false, color = 1) {
-      const x0 = Math.max(0, x | 0), y0 = Math.max(0, y | 0);
-      const x1 = Math.min(SCREEN_W - 1, ((x + w) | 0) - 1);
-      const y1 = Math.min(SCREEN_H - 1, ((y + h) | 0) - 1);
+      const c = resolveColor565(color);
+      const x0 = Math.max(0, Math.round(x * SCALE_X));
+      const y0 = Math.max(0, Math.round(y * SCALE_Y));
+      const x1 = Math.min(DISP_W - 1, Math.round((x + w) * SCALE_X) - 1);
+      const y1 = Math.min(DISP_H - 1, Math.round((y + h) * SCALE_Y) - 1);
       if (x1 < x0 || y1 < y0) return;
 
       if (fill) {
         for (let py = y0; py <= y1; py++) {
-          for (let px = x0; px <= x1; px++) fbSetPixel(px, py, color);
+          vram565.fill(c, py * DISP_W + x0, py * DISP_W + x1 + 1);
         }
       } else {
-        fbDrawLine(x0, y0, x1, y0, 0, color);
-        fbDrawLine(x0, y1, x1, y1, 0, color);
-        fbDrawLine(x0, y0, x0, y1, 0, color);
-        fbDrawLine(x1, y0, x1, y1, 0, color);
+        for (let px = x0; px <= x1; px++) {
+          fbSetPixel320(px, y0, c); fbSetPixel320(px, y0 + 1, c);
+          fbSetPixel320(px, y1, c); fbSetPixel320(px, y1 - 1, c);
+        }
+        for (let py = y0; py <= y1; py++) {
+          fbSetPixel320(x0, py, c); fbSetPixel320(x0 + 1, py, c);
+          fbSetPixel320(x1, py, c); fbSetPixel320(x1 - 1, py, c);
+        }
       }
     }
 
     function fbCircle(cx, cy, r, color = 1) {
       if (!Number.isFinite(cx) || !Number.isFinite(cy) || !Number.isFinite(r)) return;
-      let x = Math.min(128, Math.max(0, r | 0)), y = 0, err = 0;
-      const x0 = cx | 0, y0 = cy | 0;
+      const c = resolveColor565(color);
+      const x0 = Math.round(cx * SCALE_X), y0 = Math.round(cy * SCALE_Y);
+      let x = Math.min(280, Math.max(1, Math.round(r * ((SCALE_X + SCALE_Y) * 0.5)))), y = 0, err = 0;
       let guard = 0;
-      while (x >= y && ++guard < 256) {
-        fbSetPixel(x0 + x, y0 + y, color); fbSetPixel(x0 + y, y0 + x, color);
-        fbSetPixel(x0 - y, y0 + x, color); fbSetPixel(x0 - x, y0 + y, color);
-        fbSetPixel(x0 - x, y0 - y, color); fbSetPixel(x0 - y, y0 - x, color);
-        fbSetPixel(x0 + y, y0 - x, color); fbSetPixel(x0 + x, y0 - y, color);
+      while (x >= y && ++guard < 400) {
+        const pts = [
+          [x0 + x, y0 + y], [x0 + y, y0 + x], [x0 - y, y0 + x], [x0 - x, y0 + y],
+          [x0 - x, y0 - y], [x0 - y, y0 - x], [x0 + y, y0 - x], [x0 + x, y0 - y]
+        ];
+        for (let i = 0; i < 8; i++) {
+          fbSetPixel320(pts[i][0], pts[i][1], c);
+          fbSetPixel320(pts[i][0] + 1, pts[i][1], c);
+        }
         y += 1;
         if (err <= 0) err += 2 * y + 1;
         if (err > 0) { x -= 1; err -= 2 * x + 1; }
@@ -637,18 +757,21 @@
     }
 
     const CLIP_LEFT = 1, CLIP_RIGHT = 2, CLIP_BOTTOM = 4, CLIP_TOP = 8;
-    function computeOutCode(x, y) {
+    function computeOutCode320(x, y) {
       let c = 0;
-      if (x < 0) c |= CLIP_LEFT; else if (x >= SCREEN_W) c |= CLIP_RIGHT;
-      if (y < 0) c |= CLIP_TOP;  else if (y >= SCREEN_H) c |= CLIP_BOTTOM;
+      if (x < 0) c |= CLIP_LEFT; else if (x >= DISP_W) c |= CLIP_RIGHT;
+      if (y < 0) c |= CLIP_TOP;  else if (y >= DISP_H) c |= CLIP_BOTTOM;
       return c;
     }
 
-    // Bresenham blindado contra NaN, Infinity o divisiones por cero (causa del congelamiento anterior)
-    function fbDrawLine(x0, y0, x1, y1, dashedMask = 0, color = 1) {
-      if (!Number.isFinite(x0) || !Number.isFinite(y0) || !Number.isFinite(x1) || !Number.isFinite(y1)) return;
+    // Bresenham en resolución nativa 320x240 con clipping Cohen-Sutherland blindado
+    function fbDrawLine(lx0, ly0, lx1, ly1, dashedMask = 0, color = 1) {
+      if (!Number.isFinite(lx0) || !Number.isFinite(ly0) || !Number.isFinite(lx1) || !Number.isFinite(ly1)) return;
+      let x0 = lx0 * SCALE_X, y0 = ly0 * SCALE_Y;
+      let x1 = lx1 * SCALE_X, y1 = ly1 * SCALE_Y;
+      const c = resolveColor565(color);
 
-      let out0 = computeOutCode(x0, y0), out1 = computeOutCode(x1, y1), accept = false;
+      let out0 = computeOutCode320(x0, y0), out1 = computeOutCode320(x1, y1), accept = false;
       let clipIter = 0;
 
       while (++clipIter <= 12) {
@@ -657,43 +780,44 @@
         else {
           let x = 0, y = 0;
           const out = out0 ? out0 : out1;
-          const dx = x1 - x0;
-          const dy = y1 - y0;
+          const dx = x1 - x0, dy = y1 - y0;
 
           if (out & CLIP_BOTTOM) {
-            x = Math.abs(dy) > 1e-6 ? x0 + dx * (SCREEN_H - 1 - y0) / dy : x0;
-            y = SCREEN_H - 1;
+            x = Math.abs(dy) > 1e-6 ? x0 + dx * (DISP_H - 1 - y0) / dy : x0;
+            y = DISP_H - 1;
           } else if (out & CLIP_TOP) {
             x = Math.abs(dy) > 1e-6 ? x0 + dx * (0 - y0) / dy : x0;
             y = 0;
           } else if (out & CLIP_RIGHT) {
-            y = Math.abs(dx) > 1e-6 ? y0 + dy * (SCREEN_W - 1 - x0) / dx : y0;
-            x = SCREEN_W - 1;
+            y = Math.abs(dx) > 1e-6 ? y0 + dy * (DISP_W - 1 - x0) / dx : y0;
+            x = DISP_W - 1;
           } else if (out & CLIP_LEFT) {
             y = Math.abs(dx) > 1e-6 ? y0 + dy * (0 - x0) / dx : y0;
             x = 0;
           }
 
           if (!Number.isFinite(x) || !Number.isFinite(y)) return;
-
-          if (out === out0) { x0 = x; y0 = y; out0 = computeOutCode(x0, y0); }
-          else { x1 = x; y1 = y; out1 = computeOutCode(x1, y1); }
+          if (out === out0) { x0 = x; y0 = y; out0 = computeOutCode320(x0, y0); }
+          else { x1 = x; y1 = y; out1 = computeOutCode320(x1, y1); }
         }
       }
 
       if (!accept) return;
 
-      let ix0 = Math.max(0, Math.min(SCREEN_W - 1, Math.round(x0)));
-      let iy0 = Math.max(0, Math.min(SCREEN_H - 1, Math.round(y0)));
-      const ix1 = Math.max(0, Math.min(SCREEN_W - 1, Math.round(x1)));
-      const iy1 = Math.max(0, Math.min(SCREEN_H - 1, Math.round(y1)));
+      let ix0 = Math.max(0, Math.min(DISP_W - 1, Math.round(x0)));
+      let iy0 = Math.max(0, Math.min(DISP_H - 1, Math.round(y0)));
+      const ix1 = Math.max(0, Math.min(DISP_W - 1, Math.round(x1)));
+      const iy1 = Math.max(0, Math.min(DISP_H - 1, Math.round(y1)));
 
       const dx = Math.abs(ix1 - ix0), sx = ix0 < ix1 ? 1 : -1;
       const dy = -Math.abs(iy1 - iy0), sy = iy0 < iy1 ? 1 : -1;
       let err = dx + dy, step = 0;
 
-      while (step < 260) {
-        if (!dashedMask || (step & dashedMask) === 0) fbSetPixel(ix0, iy0, color);
+      while (step < 640) {
+        if (!dashedMask || ((step >> 1) & dashedMask) === 0) {
+          fbSetPixel320(ix0, iy0, c);
+          if (ix0 + 1 < DISP_W) fbSetPixel320(ix0 + 1, iy0, c);
+        }
         if (ix0 === ix1 && iy0 === iy1) break;
         const e2 = err << 1;
         if (e2 >= dy) { err += dy; ix0 += sx; }
@@ -715,46 +839,45 @@
       'Y': [5,5,2,2,2], 'Z': [7,1,2,4,7],
       ':': [0,2,0,2,0], '-': [0,0,7,0,0], '/': [1,1,2,4,4], '.': [0,0,0,0,2],
       '+': [0,2,7,2,0], '>': [4,2,1,2,4], '<': [1,2,4,2,1], '%': [5,1,2,4,5],
-      '[': [7,4,4,4,7], ']': [7,1,1,1,7], '*': [5,2,7,2,5]
+      '[': [7,4,4,4,7], ']': [7,1,1,1,7], '*': [5,2,7,2,5], '(': [2,4,4,4,2],
+      ')': [2,1,1,1,2], '|': [2,2,2,2,2], ',': [0,0,0,2,4], '=': [0,7,0,7,0]
     };
 
     function fbDrawText(str, x, y, color = 1) {
       const s = String(str).toUpperCase();
-      let cx = x | 0;
-      const cy = y | 0;
+      const c = resolveColor565(color);
+      let cx = Math.round(x * SCALE_X);
+      const cy = Math.round(y * SCALE_Y);
       for (let i = 0; i < s.length; i++) {
         const g = FONT_3X5[s[i]];
         if (g) {
           for (let r = 0; r < 5; r++) {
             const b = g[r];
-            if (b & 4) fbSetPixel(cx, cy + r, color);
-            if (b & 2) fbSetPixel(cx + 1, cy + r, color);
-            if (b & 1) fbSetPixel(cx + 2, cy + r, color);
+            for (let col = 0; col < 3; col++) {
+              if (b & (4 >> col)) {
+                const px = cx + col * 2;
+                const py = cy + r * 3;
+                for (let dy = 0; dy < 3; dy++) {
+                  fbSetPixel320(px, py + dy, c);
+                  fbSetPixel320(px + 1, py + dy, c);
+                }
+              }
+            }
           }
         }
-        cx += 4;
+        cx += 10;
       }
     }
 
     function fbPresentToCanvas() {
-      const pal = PALETTES[paletteIdx];
       let pIdx = 0;
-      for (let byteIdx = 0; byteIdx < FB_BYTES; byteIdx++) {
-        const b = frameBuffer[byteIdx];
-        for (let bit = 0; bit < 8; bit++) {
-          if ((b >> bit) & 1) {
-            rgbaPixels[pIdx]     = pal.r;
-            rgbaPixels[pIdx + 1] = pal.g;
-            rgbaPixels[pIdx + 2] = pal.b;
-            rgbaPixels[pIdx + 3] = 255;
-          } else {
-            rgbaPixels[pIdx]     = pal.bgR;
-            rgbaPixels[pIdx + 1] = pal.bgG;
-            rgbaPixels[pIdx + 2] = pal.bgB;
-            rgbaPixels[pIdx + 3] = 255;
-          }
-          pIdx += 4;
-        }
+      for (let i = 0; i < VRAM_PIXELS; i++) {
+        const c = vram565[i];
+        rgbaPixels[pIdx]     = LUT_R[c];
+        rgbaPixels[pIdx + 1] = LUT_G[c];
+        rgbaPixels[pIdx + 2] = LUT_B[c];
+        rgbaPixels[pIdx + 3] = 255;
+        pIdx += 4;
       }
       oledCtx.putImageData(oledImgData, 0, 0);
     }
@@ -1059,7 +1182,7 @@
       { id: 'rally',  sys: 'S3-3D', name: 'WRC RALLY STAGE', size: '96KB', fav: true  },
       { id: 'space',  sys: 'S3-3D', name: 'STARFIGHTER 3D',  size: '80KB', fav: false },
       { id: 'arena',  sys: 'ARCDE', name: 'TWIN-STICK ARENA',size: '48KB', fav: true  },
-      { id: 'hwtest', sys: 'TOOLS', name: 'ADC & GPIO DIAG', size: '32KB', fav: false }
+      { id: 'hwtest', sys: 'TOOLS', name: 'SPI & TOUCH DIAG',size: '32KB', fav: false }
     ];
 
     let osState = 'boot';
@@ -1069,6 +1192,50 @@
     let rgCursor = 0;
     let navCooldown = 0;
     let previewAnimT = 0;
+
+    // Emulación del controlador táctil capacitivo FT6336U (I2C) integrado en la pantalla IPS 2.8"
+    const capTouch = {
+      active: false,
+      x320: 160,
+      y240: 120,
+      lx128: 64,
+      ly64: 32,
+      justTapped: false
+    };
+
+    function handleOledTouchPoint(clientX, clientY, isStart) {
+      const rect = oledCanvas.getBoundingClientRect();
+      const nx = Math.max(0, Math.min(1, (clientX - rect.left) / (rect.width || 1)));
+      const ny = Math.max(0, Math.min(1, (clientY - rect.top) / (rect.height || 1)));
+      capTouch.x320 = Math.round(nx * (DISP_W - 1));
+      capTouch.y240 = Math.round(ny * (DISP_H - 1));
+      capTouch.lx128 = nx * SCREEN_W;
+      capTouch.ly64  = ny * SCREEN_H;
+      capTouch.active = true;
+      if (isStart) capTouch.justTapped = true;
+    }
+
+    oledCanvas.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      const t = e.changedTouches[0];
+      handleOledTouchPoint(t.clientX, t.clientY, true);
+    }, { passive: false });
+    oledCanvas.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      const t = e.changedTouches[0];
+      handleOledTouchPoint(t.clientX, t.clientY, false);
+    }, { passive: false });
+    oledCanvas.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      capTouch.active = false;
+    }, { passive: false });
+    oledCanvas.addEventListener('mousedown', (e) => {
+      handleOledTouchPoint(e.clientX, e.clientY, true);
+    });
+    window.addEventListener('mousemove', (e) => {
+      if (capTouch.active && e.buttons === 1) handleOledTouchPoint(e.clientX, e.clientY, false);
+    });
+    window.addEventListener('mouseup', () => { capTouch.active = false; });
 
     let rgOverlayOpen = false;
     let rgOverlayCursor = 0;
@@ -1109,64 +1276,68 @@
         setFaceLabels('EMP', 'RST', 'BOMB', 'FIRE', 'L/DPAD:MOVER R:APUNTAR 360');
         arenaGame.reset();
       } else if (romId === 'hwtest') {
-        setFaceLabels('Y', 'X', 'B', 'A', 'PULSA ★ MENU PARA SALIR');
+        setFaceLabels('Y', 'X', 'B', 'A', 'TOCA LA PANTALLA IPS O PULSA ★ MENU');
       }
     }
 
     function drawRomBoxArt(romId, t) {
       const bx = 86, by = 13, bw = 39, bh = 37;
-      fbRect(bx, by, bw, bh, false, 1);
+      fbRect(bx, by, bw, bh, true, 8);
+      fbRect(bx, by, bw, bh, false, 2);
 
       if (romId === 'fpv') {
-        fbRect(bx + 11, by + 8, 17, 14, false, 1);
+        fbRect(bx + 11, by + 7, 17, 14, false, 10);
         const dy = Math.round(Math.sin(t * 4) * 3);
-        const cx = bx + 19, cy = by + 22 + dy;
-        fbDrawLine(cx - 8, cy - 3, cx + 8, cy + 3);
-        fbDrawLine(cx - 8, cy + 3, cx + 8, cy - 3);
-        fbCircle(cx - 8, cy - 3, 2);
-        fbCircle(cx + 8, cy - 3, 2);
-        fbDrawText('ACRO', bx + 11, by + 29);
+        const cx = bx + 19, cy = by + 21 + dy;
+        fbDrawLine(cx - 8, cy - 3, cx + 8, cy + 3, 0, 5);
+        fbDrawLine(cx - 8, cy + 3, cx + 8, cy - 3, 0, 5);
+        fbCircle(cx - 8, cy - 3, 2, 3);
+        fbCircle(cx + 8, cy - 3, 2, 3);
+        fbDrawText('ACRO', bx + 11, by + 29, 2);
       } else if (romId === 'rally') {
-        fbDrawLine(bx + 19, by + 4, bx + 4, by + 28);
-        fbDrawLine(bx + 19, by + 4, bx + 34, by + 28);
-        fbRect(bx + 12, by + 20, 15, 7, false);
-        fbDrawText('WRC', bx + 14, by + 29);
+        fbDrawLine(bx + 19, by + 4, bx + 4, by + 28, 0, 4);
+        fbDrawLine(bx + 19, by + 4, bx + 34, by + 28, 0, 4);
+        fbRect(bx + 12, by + 19, 15, 7, true, 9);
+        fbDrawText('WRC', bx + 14, by + 29, 2);
       } else if (romId === 'space') {
         const cx = bx + 19, cy = by + 16;
-        fbCircle(cx, cy, 5);
-        fbDrawLine(cx - 10, cy - 8, cx - 10, cy + 8);
-        fbDrawLine(cx + 10, cy - 8, cx + 10, cy + 8);
-        fbDrawLine(cx - 10, cy, cx + 10, cy);
-        fbDrawText('3D', bx + 16, by + 29);
+        fbCircle(cx, cy, 5, 4);
+        fbDrawLine(cx - 10, cy - 8, cx - 10, cy + 8, 0, 5);
+        fbDrawLine(cx + 10, cy - 8, cx + 10, cy + 8, 0, 5);
+        fbDrawLine(cx - 10, cy, cx + 10, cy, 0, 1);
+        fbDrawText('3D', bx + 16, by + 29, 3);
       } else if (romId === 'arena') {
         const cx = bx + 19, cy = by + 16;
-        fbCircle(cx, cy, 4);
+        fbCircle(cx, cy, 4, 5);
         const ang = t * 3;
-        fbDrawLine(cx, cy, cx + Math.cos(ang) * 11, cy + Math.sin(ang) * 11);
-        fbDrawText('360', bx + 14, by + 29);
+        fbDrawLine(cx, cy, cx + Math.cos(ang) * 11, cy + Math.sin(ang) * 11, 0, 2);
+        fbDrawText('360', bx + 14, by + 29, 5);
       } else {
-        fbRect(bx + 11, by + 7, 16, 16, false);
-        fbDrawText('ADC', bx + 14, by + 29);
+        fbRect(bx + 9, by + 6, 20, 18, false, 3);
+        fbDrawLine(bx + 12, by + 15, bx + 26, by + 15, 0, 2);
+        fbDrawLine(bx + 19, by + 9, bx + 19, by + 21, 0, 2);
+        fbDrawText('IPS', bx + 14, by + 29, 3);
       }
     }
 
     function updateAndRenderRetroGoBoot(dt) {
       bootTimer -= dt;
-      fbClear();
-      fbRect(2, 2, 124, 60, false);
-      fbDrawText('RETRO-GO BOOTLOADER', 24, 10);
-      fbDrawLine(10, 18, 118, 18);
-      fbDrawText('MCU : ESP32-S3 LX7 240MHZ', 12, 23);
-      fbDrawText('MEM : 16MB FLASH / 8MB PSRAM', 12, 31);
-      fbDrawText('PART: RETRO-GO + 5 ROMS', 12, 39);
+      fbClear(0);
+      fbRect(2, 2, 124, 60, false, 5);
+      fbRect(3, 3, 122, 11, true, 8);
+      fbDrawText('RETRO-GO S3 // ILI9341V IPS', 10, 6, 2);
+      fbDrawText('MCU : ESP32-S3 LX7 240MHZ', 8, 18, 1);
+      fbDrawText('MEM : 16MB FLASH / 8MB PSRAM', 8, 26, 3);
+      fbDrawText('LCD : 2.8" 320X240 RGB565 DMA', 8, 34, 5);
+      fbDrawText('TCH : FT6336 CAPACITIVE I2C', 8, 42, 2);
 
       const pct = Math.min(1.0, (1.0 - bootTimer) / 0.85);
-      fbRect(12, 49, 104, 6, false);
-      fbRect(14, 51, Math.round(pct * 100), 2, true);
+      fbRect(12, 51, 104, 6, false, 1);
+      fbRect(14, 53, Math.round(pct * 100), 2, true, 3);
 
-      if (bootTimer <= 0 || hwInput.justPressed('A') || hwInput.justPressed('MENU')) {
+      if (bootTimer <= 0 || hwInput.justPressed('A') || hwInput.justPressed('MENU') || capTouch.justTapped) {
         osState = 'launcher';
-        setFaceLabels('FAV*', 'INFO', 'TAB', 'RUN', 'DPAD/STICK:NAV | A:RUN | SEL:TAB');
+        setFaceLabels('FAV*', 'INFO', 'TAB', 'RUN', 'TOUCH/DPAD/STICK:NAV | A:RUN');
       }
     }
 
@@ -1176,6 +1347,28 @@
 
       const filteredRoms = rgTabIdx === 1 ? ROM_LIST.filter(r => r.fav) : ROM_LIST;
       if (rgCursor >= filteredRoms.length) rgCursor = Math.max(0, filteredRoms.length - 1);
+
+      // Soporte Touch Capacitivo directo sobre la pantalla 2.8" IPS en el Launcher
+      if (capTouch.justTapped) {
+        if (capTouch.ly64 <= 11) {
+          if (capTouch.lx128 < 32) rgTabIdx = 0;
+          else if (capTouch.lx128 < 60) rgTabIdx = 1;
+          else rgTabIdx = 2;
+          playTone(620, 0.03);
+        } else if (rgTabIdx !== 2 && capTouch.ly64 >= 12 && capTouch.ly64 <= 52) {
+          const idx = Math.floor((capTouch.ly64 - 12) / 8);
+          if (idx >= 0 && idx < filteredRoms.length) {
+            if (rgCursor === idx || capTouch.lx128 > 82) {
+              launchRom(filteredRoms[idx].id);
+              capTouch.justTapped = false;
+              return;
+            } else {
+              rgCursor = idx;
+              playTone(480, 0.025);
+            }
+          }
+        }
+      }
 
       const navY = Math.abs(hwInput.ly) > Math.abs(hwInput.ry) ? hwInput.ly : hwInput.ry;
       const navX = Math.abs(hwInput.lx) > Math.abs(hwInput.rx) ? hwInput.lx : hwInput.rx;
@@ -1219,29 +1412,29 @@
         }
       }
 
-      fbClear();
-      fbRect(0, 0, 128, 10, true, 1);
+      fbClear(0);
+      fbRect(0, 0, 128, 10, true, 8);
       const tabs = ['[ROMS]', '[FAV]', '[S3-FW]'];
       let tx = 2;
       for (let i = 0; i < tabs.length; i++) {
         if (i === rgTabIdx) {
-          fbRect(tx - 1, 1, tabs[i].length * 4 + 2, 8, true, 0);
-          fbDrawText(tabs[i], tx, 2, 1);
-        } else {
+          fbRect(tx - 1, 1, tabs[i].length * 4 + 2, 8, true, 2);
           fbDrawText(tabs[i], tx, 2, 0);
+        } else {
+          fbDrawText(tabs[i], tx, 2, 1);
         }
         tx += tabs[i].length * 4 + 5;
       }
-      fbDrawText('98%', 110, 2, 0);
+      fbDrawText('320X240', 98, 2, 3);
 
       if (rgTabIdx === 2) {
-        fbDrawText('TARGET: ESP32-S3-WROOM-1', 4, 14);
-        fbDrawText('FLASH : 16MB QIO 80MHZ', 4, 22);
-        fbDrawText('PSRAM : 8MB OPI PSRAM', 4, 30);
-        fbDrawText('VRAM  : 1024B STATIC DMA', 4, 38);
-        fbDrawText('INPUT : 2X ADC + DPAD + 6B', 4, 46);
-        fbDrawLine(0, 54, 127, 54);
-        fbDrawText('SELECT/B: VOLVER A ROMS', 4, 57);
+        fbDrawText('LCD : 2.8" ILI9341V IPS SPI', 4, 13, 5);
+        fbDrawText('RES : 320X240 RGB565 (150KB)', 4, 21, 2);
+        fbDrawText('SPI : 60-80MHZ DUAL-CORE DMA', 4, 29, 3);
+        fbDrawText('FPS : 48-60 FPS CONTINUOS', 4, 37, 1);
+        fbDrawText('TCH : FT6336 CAPACITIVE I2C', 4, 45, 9);
+        fbDrawLine(0, 53, 127, 53, 0, 6);
+        fbDrawText('TOCA TAB O PULSA B PARA ROMS', 4, 56, 2);
         return;
       }
 
@@ -1251,23 +1444,31 @@
         const sel = (i === rgCursor);
         const label = (rom.fav ? '*' : ' ') + rom.name.slice(0, 18);
         if (sel) {
-          fbRect(1, y - 1, 82, 7, true, 1);
-          fbDrawText('>' + label, 2, y, 0);
+          fbRect(1, y - 1, 82, 7, true, 4);
+          fbDrawText('>' + label, 2, y, 1);
         } else {
-          fbDrawText(' ' + label, 2, y, 1);
+          fbDrawText(' ' + label, 2, y, rom.fav ? 2 : 1);
         }
       }
 
       const currentRom = filteredRoms[rgCursor];
       if (currentRom) {
         drawRomBoxArt(currentRom.id, previewAnimT);
-        fbDrawLine(0, 53, 127, 53);
-        fbDrawText(`${currentRom.sys} | ${currentRom.size} | A:BOOT`, 2, 56);
+        fbRect(0, 53, 128, 11, true, 8);
+        fbDrawText(`${currentRom.sys} | ${currentRom.size} | A/TOUCH:RUN`, 2, 56, 3);
       }
     }
 
     function updateAndRenderRetroGoOverlay(dt) {
       if (navCooldown > 0) navCooldown -= dt;
+
+      if (capTouch.justTapped && capTouch.ly64 >= 16 && capTouch.ly64 <= 54) {
+        const idx = Math.floor((capTouch.ly64 - 17) / 7);
+        if (idx >= 0 && idx < RG_OVERLAY_ITEMS.length) {
+          rgOverlayCursor = idx;
+          hwInput.btn.A = true;
+        }
+      }
 
       const navY = Math.abs(hwInput.ly) > Math.abs(hwInput.ry) ? hwInput.ly : hwInput.ry;
       if (navCooldown <= 0) {
@@ -1288,6 +1489,7 @@
       }
 
       if (hwInput.justPressed('A')) {
+        hwInput.btn.A = false;
         playTone(740, 0.05);
         if (rgOverlayCursor === 0) {
           rgOverlayOpen = false;
@@ -1313,20 +1515,20 @@
         } else if (rgOverlayCursor === 4) {
           rgOverlayOpen = false;
           osState = 'launcher';
-          setFaceLabels('FAV*', 'INFO', 'TAB', 'RUN', 'DPAD/STICK:NAV | A:RUN | SEL:TAB');
+          setFaceLabels('FAV*', 'INFO', 'TAB', 'RUN', 'TOUCH/DPAD/STICK:NAV | A:RUN');
         }
         return;
       }
 
       fbRect(16, 6, 96, 52, true, 0);
-      fbRect(16, 6, 96, 52, false, 1);
-      fbRect(16, 6, 96, 9, true, 1);
-      fbDrawText('RETRO-GO IN-GAME MENU', 22, 8, 0);
+      fbRect(16, 6, 96, 52, false, 2);
+      fbRect(16, 6, 96, 9, true, 4);
+      fbDrawText('RETRO-GO IN-GAME MENU', 22, 8, 1);
 
       for (let i = 0; i < RG_OVERLAY_ITEMS.length; i++) {
         const y = 18 + i * 7;
         if (i === rgOverlayCursor) {
-          fbRect(19, y - 1, 90, 7, true, 1);
+          fbRect(19, y - 1, 90, 7, true, 2);
           fbDrawText('>' + RG_OVERLAY_ITEMS[i], 21, y, 0);
         } else {
           fbDrawText(' ' + RG_OVERLAY_ITEMS[i], 21, y, 1);
@@ -1455,18 +1657,20 @@
         }
       },
       render() {
-        fbClear();
         const tilt = 15 * DEG2RAD;
         const cT = Math.cos(tilt), sT = Math.sin(tilt);
         const cRx = this.rx, cRy = this.ry, cRz = this.rz;
         const cUx = cT*this.ux - sT*this.fx, cUy = cT*this.uy - sT*this.fy, cUz = cT*this.uz - sT*this.fz;
         const cFx = sT*this.ux + cT*this.fx, cFy = sT*this.uy + cT*this.fy, cFz = sT*this.uz + cT*this.fz;
 
+        const horizonY240 = Math.round(120 + (cFy / Math.max(0.25, Math.abs(cUy))) * 140);
+        fbFillHorizon320(horizonY240, C565.SKYTOP, C565.SKYBOT, C565.GNDTOP, C565.GNDBOT);
+
         const camX = this.chaseCam ? this.px - cFx * 3.5 + cUx * 1.0 : this.px;
         const camY = this.chaseCam ? Math.max(0.3, this.py - cFy * 3.5 + cUy * 1.0) : this.py;
         const camZ = this.chaseCam ? this.pz - cFz * 3.5 + cUz * 1.0 : this.pz;
 
-        const projLine = (x0, y0, z0, x1, y1, z1, dash = 0) => {
+        const projLine = (x0, y0, z0, x1, y1, z1, dash = 0, col = 1) => {
           const dx0 = x0 - camX, dy0 = y0 - camY, dz0 = z0 - camZ;
           const dx1 = x1 - camX, dy1 = y1 - camY, dz1 = z1 - camZ;
           let cx0 = dx0*cRx + dy0*cRy + dz0*cRz, cy0 = dx0*cUx + dy0*cUy + dz0*cUz, cz0 = dx0*cFx + dy0*cFy + dz0*cFz;
@@ -1476,42 +1680,49 @@
           if (cz0 < 0.2) { const t = (0.2 - cz0)/(cz1 - cz0); cx0 += t*(cx1 - cx0); cy0 += t*(cy1 - cy0); cz0 = 0.2; }
           else if (cz1 < 0.2) { const t = (0.2 - cz1)/(cz0 - cz1); cx1 += t*(cx0 - cx1); cy1 += t*(cy0 - cy1); cz1 = 0.2; }
           const f = 68.0;
-          fbDrawLine(64 + cx0*f/cz0, 32 - cy0*f/cz0, 64 + cx1*f/cz1, 32 - cy1*f/cz1, dash);
+          fbDrawLine(64 + cx0*f/cz0, 32 - cy0*f/cz0, 64 + cx1*f/cz1, 32 - cy1*f/cz1, dash, col);
         };
 
         for (let i = -48; i <= 48; i += 8) {
-          projLine(i, 0, -48, i, 0, 48, 1);
-          projLine(-48, 0, i, 48, 0, i, 1);
+          projLine(i, 0, -48, i, 0, 48, 1, 7);
+          projLine(-48, 0, i, 48, 0, i, 1, 7);
         }
 
         for (let i = 0; i < this.gates.length; i++) {
           const g = this.gates[i];
           const hw = g.w * 0.5, hh = g.h * 0.5;
-          projLine(g.x - hw, 0, g.z, g.x - hw, g.y + hh, g.z, 0);
-          projLine(g.x + hw, 0, g.z, g.x + hw, g.y + hh, g.z, 0);
-          projLine(g.x - hw, g.y + hh, g.z, g.x + hw, g.y + hh, g.z, 0);
-          projLine(g.x - hw, g.y - hh, g.z, g.x + hw, g.y - hh, g.z, 0);
-          if (i === this.activeGate) {
-            projLine(g.x, g.y + hh + 1.2, g.z, g.x - 1, g.y + hh + 2.4, g.z, 0);
-            projLine(g.x, g.y + hh + 1.2, g.z, g.x + 1, g.y + hh + 2.4, g.z, 0);
+          const isAct = (i === this.activeGate);
+          const col = isAct ? 10 : 5;
+          projLine(g.x - hw, 0, g.z, g.x - hw, g.y + hh, g.z, 0, col);
+          projLine(g.x + hw, 0, g.z, g.x + hw, g.y + hh, g.z, 0, col);
+          projLine(g.x - hw, g.y + hh, g.z, g.x + hw, g.y + hh, g.z, 0, isAct ? 2 : col);
+          projLine(g.x - hw, g.y - hh, g.z, g.x + hw, g.y - hh, g.z, 0, col);
+          if (isAct) {
+            projLine(g.x, g.y + hh + 1.2, g.z, g.x - 1, g.y + hh + 2.4, g.z, 0, 2);
+            projLine(g.x, g.y + hh + 1.2, g.z, g.x + 1, g.y + hh + 2.4, g.z, 0, 2);
           }
         }
 
         let hFx = cFx, hFz = cFz, hN = Math.hypot(hFx, hFz) || 1;
         hFx /= hN; hFz /= hN;
         const hRx = hFz, hRz = -hFx;
-        projLine(camX + hFx*45 - hRx*14, camY, camZ + hFz*45 - hRz*14,
-                 camX + hFx*45 + hRx*14, camY, camZ + hFz*45 + hRz*14, 1);
+        projLine(camX + hFx*45 - hRx*14, camY, camZ + hFx*45 - hRz*14,
+                 camX + hFx*45 + hRx*14, camY, camZ + hFz*45 + hRz*14, 0, 3);
 
-        fbDrawText(this.mode, 2, 2);
-        fbDrawText(`G${this.activeGate + 1}/6`, 104, 2);
+        fbRect(0, 0, 128, 8, true, 0);
+        fbDrawText(this.mode, 2, 2, this.mode === 'ACRO' ? 2 : 3);
+        fbDrawText('16.4V', 48, 2, 5);
+        fbDrawText(`G${this.activeGate + 1}/6`, 104, 2, 10);
+
         const spd = Math.hypot(this.vx, this.vy, this.vz);
-        fbDrawText(`V${Math.round(spd)}`, 2, 58);
-        fbDrawText(`A${this.py.toFixed(1)}`, 100, 58);
+        fbRect(0, 56, 128, 8, true, 0);
+        fbDrawText(`V:${Math.round(spd)}M/S`, 2, 58, 1);
+        fbDrawText(`THR:${Math.round(this.thrCmd * 100)}%`, 48, 58, 2);
+        fbDrawText(`A:${this.py.toFixed(1)}M`, 96, 58, 3);
       }
     };
 
-    // CARTUCHO 2: RALLY STAGE 3D WRC
+    // CARTUCHO 2: RALLY STAGE 3D WRC (ASFALTO + PIANOS ROJOS/BLANCOS + COCHE WRC RGB565)
     const rallyGame = {
       trackZ: 0, playerX: 0, speed: 0, driftAngle: 0, distance: 0, camChase: true,
       reset() { this.trackZ = 0; this.playerX = 0; this.speed = 0; this.driftAngle = 0; this.distance = 0; },
@@ -1552,13 +1763,13 @@
         this.playerX = Math.max(-2.2, Math.min(2.2, this.playerX + (turnRate - centrifugal) * dt));
       },
       render() {
-        fbClear();
+        fbFillHorizon320(82, C565.SKYTOP, C565.SKYBOT, C565.GNDTOP, C565.GNDBOT);
         const bgOffset = ((this.trackZ * 2) | 0) % 32;
-        fbDrawLine(0, 21, 127, 21, 1);
-        fbDrawLine(0, 21, 24 - (bgOffset >> 2), 11);
-        fbDrawLine(24 - (bgOffset >> 2), 11, 52 - (bgOffset >> 2), 21);
-        fbDrawLine(60, 21, 88, 9);
-        fbDrawLine(88, 9, 120, 21);
+        fbDrawLine(0, 21, 127, 21, 0, 5);
+        fbDrawLine(0, 21, 24 - (bgOffset >> 2), 11, 0, 9);
+        fbDrawLine(24 - (bgOffset >> 2), 11, 52 - (bgOffset >> 2), 21, 0, 9);
+        fbDrawLine(60, 21, 88, 9, 0, 10);
+        fbDrawLine(88, 9, 120, 21, 0, 10);
 
         const numSegs = 26, segLen = 2.2;
         const baseZ = Math.floor(this.trackZ / segLen) * segLen;
@@ -1581,15 +1792,21 @@
           const lx = roadCenterX - roadHalfW, rx = roadCenterX + roadHalfW;
 
           if (i > 1) {
-            fbDrawLine(prevLeftX, prevY, lx, sy);
-            fbDrawLine(prevRightX, prevY, rx, sy);
             const segIdx = Math.floor(worldZ / segLen);
+            const roadCol = (segIdx & 1) ? rgb565(46, 52, 66) : rgb565(36, 42, 54);
+            fbFillQuadScanline(lx, rx, sy, prevLeftX, prevRightX, prevY, roadCol);
+
+            const kerbCol = (segIdx & 1) ? 4 : 1;
+            fbDrawLine(prevLeftX, prevY, lx, sy, 0, kerbCol);
+            fbDrawLine(prevRightX, prevY, rx, sy, 0, kerbCol);
+
             if (segIdx % 2 === 0) {
-              fbDrawLine(lx, sy, rx, sy, 1);
+              const cx0 = (prevLeftX + prevRightX) * 0.5, cx1 = (lx + rx) * 0.5;
+              fbDrawLine(cx0, prevY, cx1, sy, 0, 2);
               if (segIdx % 4 === 0 && i < 18) {
                 const postH = Math.max(2, Math.round(2.0 * scale));
-                fbDrawLine(lx - 1.2 * scale, sy, lx - 1.2 * scale, sy - postH);
-                fbDrawLine(rx + 1.2 * scale, sy, rx + 1.2 * scale, sy - postH);
+                fbDrawLine(lx - 1.2 * scale, sy, lx - 1.2 * scale, sy - postH, 0, 2);
+                fbDrawLine(rx + 1.2 * scale, sy, rx + 1.2 * scale, sy - postH, 0, 2);
               }
             }
           }
@@ -1599,27 +1816,31 @@
         if (this.camChase) {
           const carCx = 64 + Math.round(this.driftAngle * 10), carCy = 55;
           const skew = Math.round(this.driftAngle * 7);
-          fbRect(carCx - 11 + skew, carCy - 5, 22, 6, false);
-          fbDrawLine(carCx - 7 + skew, carCy - 9, carCx + 7 + skew, carCy - 9);
-          fbDrawLine(carCx - 11 + skew, carCy - 5, carCx - 7 + skew, carCy - 9);
-          fbDrawLine(carCx + 11 + skew, carCy - 5, carCx + 7 + skew, carCy - 9);
-          fbRect(carCx - 13 + skew, carCy - 2, 4, 4, true);
-          fbRect(carCx + 9 + skew,  carCy - 2, 4, 4, true);
+          fbRect(carCx - 11 + skew, carCy - 5, 22, 6, true, 4);
+          fbRect(carCx - 11 + skew, carCy - 5, 22, 6, false, 1);
+          fbDrawLine(carCx - 7 + skew, carCy - 9, carCx + 7 + skew, carCy - 9, 0, 5);
+          fbDrawLine(carCx - 11 + skew, carCy - 5, carCx - 7 + skew, carCy - 9, 0, 1);
+          fbDrawLine(carCx + 11 + skew, carCy - 5, carCx + 7 + skew, carCy - 9, 0, 1);
+          fbRect(carCx - 9 + skew, carCy - 4, 4, 2, true, 2);
+          fbRect(carCx + 5 + skew, carCy - 4, 4, 2, true, 2);
+          fbRect(carCx - 13 + skew, carCy - 2, 4, 4, true, 0);
+          fbRect(carCx + 9 + skew,  carCy - 2, 4, 4, true, 0);
         }
 
-        fbDrawText(`${Math.round(this.speed)}KMH`, 2, 2);
+        fbRect(0, 0, 128, 8, true, 0);
+        fbDrawText(`${Math.round(this.speed)}KMH`, 2, 2, 3);
         const gear = this.speed < 5 ? 'N' : Math.min(6, Math.ceil(this.speed / 36));
-        fbDrawText(`G:${gear}`, 54, 2);
-        fbDrawText(`${(this.distance / 100).toFixed(1)}KM`, 92, 2);
+        fbDrawText(`G:${gear}`, 54, 2, 2);
+        fbDrawText(`${(this.distance / 100).toFixed(1)}KM`, 90, 2, 5);
       }
     };
 
-    // CARTUCHO 3: STARFIGHTER 3D
+    // CARTUCHO 3: STARFIGHTER 3D (RGB565 SPACE COMBAT)
     const spaceGame = {
       score: 0, shield: 100, speed: 22, enemies: [], stars: [], lasers: [], cooldown: 0,
       reset() {
         this.score = 0; this.shield = 100; this.enemies = []; this.lasers = []; this.stars = [];
-        for (let i = 0; i < 35; i++) this.stars.push({ x: (Math.random() - 0.5) * 90, y: (Math.random() - 0.5) * 50, z: Math.random() * 60 + 2 });
+        for (let i = 0; i < 40; i++) this.stars.push({ x: (Math.random() - 0.5) * 90, y: (Math.random() - 0.5) * 50, z: Math.random() * 60 + 2, c: (i % 3 === 0) ? 5 : 1 });
         for (let i = 0; i < 4; i++) this.spawnEnemy(25 + i * 14);
       },
       spawnEnemy(zDist = 55) {
@@ -1665,29 +1886,30 @@
         }
       },
       render() {
-        fbClear();
+        fbClear(0);
         const f = 58.0;
-        for (const s of this.stars) fbSetPixel(64 + (s.x * f) / s.z, 32 - (s.y * f) / s.z);
+        for (const s of this.stars) fbSetPixel(64 + (s.x * f) / s.z, 32 - (s.y * f) / s.z, s.c || 1);
         for (const e of this.enemies) {
           const sx = 64 + (e.x * f) / e.z, sy = 32 - (e.y * f) / e.z;
           const r = Math.max(2, Math.round((2.2 * f) / e.z));
-          fbCircle(sx, sy, r);
-          fbDrawLine(sx - r * 1.6, sy - r * 1.4, sx - r * 1.6, sy + r * 1.4);
-          fbDrawLine(sx + r * 1.6, sy - r * 1.4, sx + r * 1.6, sy + r * 1.4);
-          fbDrawLine(sx - r * 1.6, sy, sx + r * 1.6, sy);
+          fbCircle(sx, sy, r, 4);
+          fbDrawLine(sx - r * 1.6, sy - r * 1.4, sx - r * 1.6, sy + r * 1.4, 0, 9);
+          fbDrawLine(sx + r * 1.6, sy - r * 1.4, sx + r * 1.6, sy + r * 1.4, 0, 9);
+          fbDrawLine(sx - r * 1.6, sy, sx + r * 1.6, sy, 0, 2);
         }
         for (const l of this.lasers) {
           const z1 = l.z + 6;
-          fbDrawLine(20, 56, 64 - (8 * f) / z1, 32 + (2 * f) / z1);
-          fbDrawLine(108, 56, 64 + (8 * f) / z1, 32 + (2 * f) / z1);
+          fbDrawLine(20, 56, 64 - (8 * f) / z1, 32 + (2 * f) / z1, 0, 3);
+          fbDrawLine(108, 56, 64 + (8 * f) / z1, 32 + (2 * f) / z1, 0, 3);
         }
-        fbCircle(64, 32, 6); fbSetPixel(64, 32);
-        fbDrawText(`SCR:${this.score}`, 2, 2);
-        fbDrawText(`SHD:${this.shield}%`, 88, 2);
+        fbCircle(64, 32, 6, 5); fbSetPixel(64, 32, 2);
+        fbRect(0, 0, 128, 8, true, 8);
+        fbDrawText(`SCR:${this.score}`, 2, 2, 2);
+        fbDrawText(`SHD:${this.shield}%`, 86, 2, this.shield > 30 ? 3 : 4);
       }
     };
 
-    // CARTUCHO 4: TWIN-STICK ARENA
+    // CARTUCHO 4: TWIN-STICK ARENA (RGB565 GEOMETRY WARS STYLE)
     const arenaGame = {
       px: 64, py: 32, aimX: 1, aimY: 0, bullets: [], foes: [], score: 0, lives: 3, bombs: 3, fireTimer: 0, spawnTimer: 0,
       reset() { this.px = 64; this.py = 32; this.bullets = []; this.foes = []; this.score = 0; this.lives = 3; this.bombs = 3; },
@@ -1743,67 +1965,79 @@
         }
       },
       render() {
-        fbClear();
-        fbRect(0, 8, 128, 56, false);
-        fbCircle(this.px, this.py, 3);
-        fbDrawLine(this.px, this.py, this.px + this.aimX * 7, this.py + this.aimY * 7);
-        for (const b of this.bullets) fbRect(b.x - 1, b.y - 1, 2, 2, true);
+        fbClear(0);
+        for (let gx = 16; gx < 128; gx += 16) fbDrawLine(gx, 8, gx, 63, 1, 8);
+        for (let gy = 16; gy < 64; gy += 12) fbDrawLine(0, gy, 127, gy, 1, 8);
+        fbRect(0, 8, 128, 56, false, 5);
+        fbCircle(this.px, this.py, 3, 3);
+        fbDrawLine(this.px, this.py, this.px + this.aimX * 8, this.py + this.aimY * 8, 0, 5);
+        for (const b of this.bullets) fbRect(b.x - 1, b.y - 1, 2, 2, true, 2);
         for (const f of this.foes) {
-          fbDrawLine(f.x, f.y - 3, f.x + 3, f.y); fbDrawLine(f.x + 3, f.y, f.x, f.y + 3);
-          fbDrawLine(f.x, f.y + 3, f.x - 3, f.y); fbDrawLine(f.x - 3, f.y, f.x, f.y - 3);
+          fbDrawLine(f.x, f.y - 3, f.x + 3, f.y, 0, 4); fbDrawLine(f.x + 3, f.y, f.x, f.y + 3, 0, 4);
+          fbDrawLine(f.x, f.y + 3, f.x - 3, f.y, 0, 10); fbDrawLine(f.x - 3, f.y, f.x, f.y - 3, 0, 10);
         }
-        fbDrawText(`PTS:${this.score}`, 2, 1);
-        fbDrawText(`HP:${this.lives}`, 62, 1);
-        fbDrawText(`EMP:${this.bombs}`, 96, 1);
+        fbRect(0, 0, 128, 8, true, 8);
+        fbDrawText(`PTS:${this.score}`, 2, 1, 2);
+        fbDrawText(`HP:${this.lives}`, 60, 1, 3);
+        fbDrawText(`EMP:${this.bombs}`, 94, 1, 5);
       }
     };
 
-    // CARTUCHO 5: HARDWARE & ADC DIAGNOSTIC
+    // CARTUCHO 5: ILI9341V SPI + FT6336 TOUCH + ADC DIAGNOSTIC
     function renderHwDiagnostic() {
-      fbClear();
-      fbRect(0, 0, 128, 8, true, 1);
-      fbDrawText('RETRO-GO HW & ADC TEST', 4, 2, 0);
+      fbClear(0);
+      fbRect(0, 0, 128, 8, true, 8);
+      fbDrawText('S3 ILI9341V + FT6336 + ADC', 4, 2, 2);
 
-      fbRect(6, 12, 34, 34, false);
-      const lxPx = 23 + Math.round(hwInput.lx * 14), lyPx = 29 - Math.round(hwInput.ly * 14);
-      fbDrawLine(23, 29, lxPx, lyPx);
-      fbRect(lxPx - 1, lyPx - 1, 3, 3, true);
-      fbDrawText(`L3:${hwInput.btn.L3 ? 1 : 0}`, 8, 48);
+      fbRect(4, 11, 34, 34, false, 5);
+      const lxPx = 21 + Math.round(hwInput.lx * 14), lyPx = 28 - Math.round(hwInput.ly * 14);
+      fbDrawLine(21, 28, lxPx, lyPx, 0, 3);
+      fbRect(lxPx - 1, lyPx - 1, 3, 3, true, 2);
+      fbDrawText(`L3:${hwInput.btn.L3 ? 1 : 0}`, 6, 47, hwInput.btn.L3 ? 3 : 1);
 
-      fbRect(88, 12, 34, 34, false);
-      const rxPx = 105 + Math.round(hwInput.rx * 14), ryPx = 29 - Math.round(hwInput.ry * 14);
-      fbDrawLine(105, 29, rxPx, ryPx);
-      fbRect(rxPx - 1, ryPx - 1, 3, 3, true);
-      fbDrawText(`R3:${hwInput.btn.R3 ? 1 : 0}`, 90, 48);
+      fbRect(90, 11, 34, 34, false, 5);
+      const rxPx = 107 + Math.round(hwInput.rx * 14), ryPx = 28 - Math.round(hwInput.ry * 14);
+      fbDrawLine(107, 28, rxPx, ryPx, 0, 3);
+      fbRect(rxPx - 1, ryPx - 1, 3, 3, true, 2);
+      fbDrawText(`R3:${hwInput.btn.R3 ? 1 : 0}`, 92, 47, hwInput.btn.R3 ? 3 : 1);
 
       const btns = ['Y', 'X', 'B', 'A'];
       for (let i = 0; i < 4; i++) {
-        const bx = 46 + i * 9, pressed = hwInput.btn[btns[i]];
-        fbRect(bx, 14, 7, 9, pressed, 1);
-        fbDrawText(btns[i], bx + 2, 16, pressed ? 0 : 1);
+        const bx = 44 + i * 10, pressed = hwInput.btn[btns[i]];
+        fbRect(bx, 12, 8, 9, pressed, pressed ? 2 : 5);
+        fbDrawText(btns[i], bx + 2, 14, pressed ? 0 : 1);
       }
 
       const dpad = ['UP', 'DOWN', 'LEFT', 'RIGHT'];
       const dLbl = ['U', 'D', 'L', 'R'];
       for (let i = 0; i < 4; i++) {
-        const bx = 46 + i * 9, pressed = hwInput.btn[dpad[i]];
-        fbRect(bx, 25, 7, 9, pressed, 1);
-        fbDrawText(dLbl[i], bx + 2, 27, pressed ? 0 : 1);
+        const bx = 44 + i * 10, pressed = hwInput.btn[dpad[i]];
+        fbRect(bx, 23, 8, 9, pressed, pressed ? 3 : 5);
+        fbDrawText(dLbl[i], bx + 2, 25, pressed ? 0 : 1);
       }
 
-      const adcLX = Math.round((hwInput.lx + 1) * 2047.5);
-      const adcRX = Math.round((hwInput.rx + 1) * 2047.5);
-      fbDrawText(`ADC L:${adcLX}`, 44, 38);
-      fbDrawText(`ADC R:${adcRX}`, 44, 46);
-      fbDrawText('N16R8 PSRAM OK', 36, 57);
+      const mode = SPI_MODES[paletteIdx];
+      const dmaMs = (1228800 / (mode.spiMhz * 1e6) * 1000).toFixed(1);
+      fbDrawText(`SPI:${mode.spiMhz}MHZ (${dmaMs}MS)`, 40, 35, 3);
+      fbDrawText(`TCH:${capTouch.x320},${capTouch.y240}`, 40, 43, capTouch.active ? 2 : 5);
+      fbRect(0, 55, 128, 9, true, 8);
+      fbDrawText('150KB RGB565 DMA | 45-60FPS OK', 4, 57, 3);
+
+      if (capTouch.active) {
+        fbCircle(capTouch.lx128, capTouch.ly64, 5, 4);
+        fbDrawLine(capTouch.lx128 - 8, capTouch.ly64, capTouch.lx128 + 8, capTouch.ly64, 0, 2);
+        fbDrawLine(capTouch.lx128, capTouch.ly64 - 8, capTouch.lx128, capTouch.ly64 + 8, 0, 2);
+      }
     }
 
     /***************************************************************************
-     * 6. BUCLE PRINCIPAL DE SISTEMA RETRO-GO (60 FPS CON WATCHDOG TRY/CATCH)
+     * 6. BUCLE PRINCIPAL DE SISTEMA RETRO-GO (CON SIMULADOR SPI DMA ILI9341V)
      ***************************************************************************/
-    document.getElementById('btnPalette').addEventListener('click', () => {
-      paletteIdx = (paletteIdx + 1) % PALETTES.length;
-      showToast(PALETTES[paletteIdx].name);
+    document.getElementById('btnPalette').addEventListener('click', (e) => {
+      paletteIdx = (paletteIdx + 1) % SPI_MODES.length;
+      const m = SPI_MODES[paletteIdx];
+      e.currentTarget.textContent = `🎨 ${m.name}`;
+      showToast(m.name);
     });
 
     document.getElementById('btnAudio').addEventListener('click', (e) => {
@@ -1879,17 +2113,20 @@
         if (toastTimer > 0) {
           toastTimer -= dt;
           const tw = toastMsg.length * 4 + 6;
-          fbRect(64 - (tw >> 1), 1, tw, 9, true, 1);
+          fbRect(64 - (tw >> 1), 1, tw, 9, true, 2);
           fbDrawText(toastMsg, 64 - (tw >> 1) + 3, 3, 0);
         }
 
         fbPresentToCanvas();
         snapshotPrevButtons();
+        capTouch.justTapped = false;
 
         fpsFrames++;
         if (now - fpsClock >= 500) {
-          const fps = Math.round((fpsFrames * 1000) / (now - fpsClock));
-          document.getElementById('uiFpsBattery').textContent = `${fps}FPS | BAT 98%`;
+          const rawFps = Math.round((fpsFrames * 1000) / (now - fpsClock));
+          const mode = SPI_MODES[paletteIdx];
+          const dispFps = Math.min(rawFps, mode.targetFps);
+          document.getElementById('uiFpsBattery').textContent = `${dispFps}FPS | SPI ${mode.spiMhz}MHz`;
           fpsFrames = 0;
           fpsClock = now;
         }
