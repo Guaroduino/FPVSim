@@ -472,12 +472,12 @@
         <span>PWR</span>
         <span id="sdLed" class="led sd-act" title="Flash / SD Activity"></span>
         <span>SPI</span>
-        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + ILI9341V (v10)</span>
+        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + ILI9341V (v11)</span>
       </div>
       <div class="top-hw-pills">
         <button id="btnPalette" class="pill-btn">🎨 IPS 60MHz</button>
         <button id="btnAudio" class="pill-btn">🔇 SND</button>
-        <button id="btnGrid" class="pill-btn active">SCAN</button>
+        <button id="btnGrid" class="pill-btn">SCAN</button>
         <button id="btnFull" class="pill-btn">⛶</button>
       </div>
     </header>
@@ -495,7 +495,7 @@
         <span id="uiFpsBattery">60FPS | DMA 60MHz</span>
       </div>
 
-      <div id="oledContainer" class="oled-container pixel-grid">
+      <div id="oledContainer" class="oled-container">
         <canvas id="oledCanvas" width="320" height="240"></canvas>
       </div>
 
@@ -657,19 +657,15 @@
       vram565.fill(resolveColor565(bgColor));
     }
 
-    // Relleno rápido de cielo y tierra en 320x240 para juegos 3D
-    function fbFillHorizon320(horizonY240, skyTop, skyBot, gndTop, gndBot) {
+    // Relleno uniforme de cielo y tierra en 320x240 (sin sub-bandas artificiales)
+    function fbFillHorizon320(horizonY240, skyCol, gndCol) {
       if (SPI_MODES[paletteIdx].mono) {
         fbClear(0);
         return;
       }
       const hy = Math.max(0, Math.min(DISP_H, horizonY240 | 0));
-      for (let y = 0; y < DISP_H; y++) {
-        const c = y < hy
-          ? (y < (hy >> 1) ? skyTop : skyBot)
-          : (y < hy + ((DISP_H - hy) >> 1) ? gndTop : gndBot);
-        vram565.fill(c, y * DISP_W, (y + 1) * DISP_W);
-      }
+      if (hy > 0) vram565.fill(skyCol, 0, hy * DISP_W);
+      if (hy < DISP_H) vram565.fill(gndCol, hy * DISP_W, DISP_H * DISP_W);
     }
 
     // Relleno de trapecio horizontal (para asfalto y pianos en WRC Rally a 320x240)
@@ -1657,14 +1653,13 @@
         }
       },
       render() {
+        fbClear(0);
+
         const tilt = 15 * DEG2RAD;
         const cT = Math.cos(tilt), sT = Math.sin(tilt);
         const cRx = this.rx, cRy = this.ry, cRz = this.rz;
         const cUx = cT*this.ux - sT*this.fx, cUy = cT*this.uy - sT*this.fy, cUz = cT*this.uz - sT*this.fz;
         const cFx = sT*this.ux + cT*this.fx, cFy = sT*this.uy + cT*this.fy, cFz = sT*this.uz + cT*this.fz;
-
-        const horizonY240 = Math.round(120 + (cFy / Math.max(0.25, Math.abs(cUy))) * 140);
-        fbFillHorizon320(horizonY240, C565.SKYTOP, C565.SKYBOT, C565.GNDTOP, C565.GNDBOT);
 
         const camX = this.chaseCam ? this.px - cFx * 3.5 + cUx * 1.0 : this.px;
         const camY = this.chaseCam ? Math.max(0.3, this.py - cFy * 3.5 + cUy * 1.0) : this.py;
@@ -1763,7 +1758,7 @@
         this.playerX = Math.max(-2.2, Math.min(2.2, this.playerX + (turnRate - centrifugal) * dt));
       },
       render() {
-        fbFillHorizon320(82, C565.SKYTOP, C565.SKYBOT, C565.GNDTOP, C565.GNDBOT);
+        fbFillHorizon320(Math.round(21 * SCALE_Y), C565.SKYTOP, C565.GNDBOT);
         const bgOffset = ((this.trackZ * 2) | 0) % 32;
         fbDrawLine(0, 21, 127, 21, 0, 5);
         fbDrawLine(0, 21, 24 - (bgOffset >> 2), 11, 0, 9);
