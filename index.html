@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="theme-color" content="#070a0f" />
-  <title>FPVSim 128×64 — Consola Portátil ESP32-S3</title>
+  <title>FPVSim 128×64 v4 — Consola Portátil ESP32-S3</title>
   <style>
     :root {
       --bg-body: #070a0f;
@@ -93,9 +93,9 @@
     .hud-stats {
       display: flex;
       align-items: center;
-      gap: 9px;
+      gap: 8px;
       overflow-x: auto;
-      font-size: 0.68rem;
+      font-size: 0.67rem;
       white-space: nowrap;
     }
 
@@ -127,7 +127,7 @@
       border-radius: 5px;
       padding: 4px 7px;
       font-family: inherit;
-      font-size: 0.66rem;
+      font-size: 0.65rem;
       font-weight: 600;
       cursor: pointer;
       white-space: nowrap;
@@ -145,7 +145,7 @@
       flex: 1;
       min-height: 0;
       display: grid;
-      grid-template-columns: minmax(140px, 27vw) 1fr minmax(140px, 27vw);
+      grid-template-columns: minmax(138px, 27vw) 1fr minmax(138px, 27vw);
       align-items: center;
       justify-items: center;
       gap: 6px;
@@ -184,83 +184,34 @@
     }
 
     .gimbal-label {
-      font-size: 0.60rem;
+      font-size: 0.58rem;
       color: var(--text-muted);
-      letter-spacing: 0.4px;
+      letter-spacing: 0.3px;
       text-align: center;
     }
 
-    .gimbal-pad {
-      width: min(100%, 200px, 66dvh);
+    /* Canvas-rendered Interactive Gimbal Pad */
+    .gimbal-canvas {
+      width: min(100%, 195px, 65dvh);
       aspect-ratio: 1 / 1;
-      background: radial-gradient(circle at center, #131c2e 0%, #090d14 100%);
-      border: 2px solid #2c3e5a;
       border-radius: 16px;
-      position: relative;
+      border: 2px solid #2c3e5a;
+      background: #0a0f18;
       touch-action: none;
-      box-shadow: inset 0 0 22px rgba(0, 0, 0, 0.9), 0 4px 14px rgba(0, 0, 0, 0.5);
+      display: block;
+      box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.9), 0 4px 12px rgba(0, 0, 0, 0.5);
     }
 
-    .gimbal-pad.engaged {
+    .gimbal-canvas.engaged {
       border-color: var(--accent);
-      box-shadow: inset 0 0 22px rgba(0, 229, 255, 0.18), 0 0 12px rgba(0, 229, 255, 0.3);
-    }
-
-    .gimbal-axis-h,
-    .gimbal-axis-v {
-      position: absolute;
-      background: rgba(139, 155, 180, 0.22);
-      pointer-events: none;
-    }
-
-    .gimbal-axis-h {
-      top: 50%;
-      left: 8%;
-      right: 8%;
-      height: 1px;
-    }
-
-    .gimbal-axis-v {
-      left: 50%;
-      top: 8%;
-      bottom: 8%;
-      width: 1px;
-    }
-
-    .gimbal-ring-outer {
-      position: absolute;
-      inset: 12%;
-      border: 1px dashed rgba(139, 155, 180, 0.22);
-      border-radius: 50%;
-      pointer-events: none;
-    }
-
-    .gimbal-ring-inner {
-      position: absolute;
-      inset: 32%;
-      border: 1px solid rgba(139, 155, 180, 0.14);
-      border-radius: 50%;
-      pointer-events: none;
-    }
-
-    .gimbal-knob {
-      width: 44px;
-      height: 44px;
-      border-radius: 50%;
-      background: radial-gradient(circle at 35% 35%, #5ff4ff, #0088aa 70%, #004d66 100%);
-      border: 2px solid #ffffff;
-      box-shadow: 0 3px 12px rgba(0, 229, 255, 0.6);
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      pointer-events: none;
+      box-shadow: 0 0 14px rgba(0, 229, 255, 0.35);
     }
 
     .gimbal-readout {
       font-size: 0.60rem;
-      color: var(--text-muted);
+      color: var(--accent);
       font-variant-numeric: tabular-nums;
+      font-weight: 700;
     }
 
     /* Center OLED 128x64 Screen Column */
@@ -441,11 +392,12 @@
     <!-- Top Compact HUD Bar -->
     <header class="hud-topbar">
       <div class="hud-stats">
+        <span class="hud-metric"><b style="color:#00e676">v4</b></span>
         <span class="hud-metric">GATE <b id="uiGate">1/8</b></span>
         <span class="hud-metric">LAP <b id="uiLapTime" class="amber">00:00.0</b></span>
         <span class="hud-metric">VEL <b id="uiSpeed">0.0m/s</b></span>
-        <span class="hud-metric">ALT <b id="uiAlt">1.8m</b></span>
-        <span class="hud-metric">P/R <b id="uiAttitude">0° / 0°</b></span>
+        <span class="hud-metric">ALT <b id="uiAlt">2.0m</b></span>
+        <span class="hud-metric">P/R/Y <b id="uiAttitude">0°/0°/0°</b></span>
       </div>
 
       <div class="hud-actions">
@@ -461,15 +413,9 @@
     <main class="cockpit-body">
       <!-- Left Self-Centering Gimbal (Throttle + Yaw) -->
       <div class="gimbal-col left">
-        <span class="gimbal-label">IZQ: EMPUJE (ARRIBA/ABAJO) + YAW</span>
-        <div id="stickLeft" class="gimbal-pad">
-          <div class="gimbal-axis-h"></div>
-          <div class="gimbal-axis-v"></div>
-          <div class="gimbal-ring-outer"></div>
-          <div class="gimbal-ring-inner"></div>
-          <div id="knobLeft" class="gimbal-knob"></div>
-        </div>
-        <span id="readoutLeft" class="gimbal-readout">THR: 35% | YAW: 0.00</span>
+        <span class="gimbal-label">STICK IZQ: THR (↕) + YAW (↔)</span>
+        <canvas id="stickLeft" class="gimbal-canvas" width="220" height="220"></canvas>
+        <span id="readoutLeft" class="gimbal-readout">THR: 35% | YAW: +0.00</span>
       </div>
 
       <!-- Center 128x64 Native Monochrome OLED -->
@@ -487,23 +433,17 @@
         <div class="quick-flight-bar">
           <button id="btnSound" class="btn-hud">🔇 Audio</button>
           <button id="btnGridToggle" class="btn-hud active">Grid OLED</button>
-          <span id="touchStatus" style="font-size:0.60rem;color:var(--text-muted);">
-            Toca o arrastra ambos joysticks
+          <span id="touchStatus" style="font-size:0.60rem;color:var(--amber);">
+            Listo (v4 Multitouch)
           </span>
         </div>
       </div>
 
       <!-- Right Self-Centering Gimbal (Pitch + Roll) -->
       <div class="gimbal-col right">
-        <span class="gimbal-label">DER: PITCH (INCLINAR) + ROLL (ALABEO)</span>
-        <div id="stickRight" class="gimbal-pad">
-          <div class="gimbal-axis-h"></div>
-          <div class="gimbal-axis-v"></div>
-          <div class="gimbal-ring-outer"></div>
-          <div class="gimbal-ring-inner"></div>
-          <div id="knobRight" class="gimbal-knob"></div>
-        </div>
-        <span id="readoutRight" class="gimbal-readout">PIT: 0.00 | ROL: 0.00</span>
+        <span class="gimbal-label">STICK DER: PITCH (↕) + ROLL (↔)</span>
+        <canvas id="stickRight" class="gimbal-canvas" width="220" height="220"></canvas>
+        <span id="readoutRight" class="gimbal-readout">PIT: +0.00 | ROL: +0.00</span>
       </div>
     </main>
   </div>
@@ -512,7 +452,7 @@
   <div id="settingsBackdrop" class="settings-backdrop">
     <aside class="settings-drawer">
       <div class="drawer-header">
-        <span class="drawer-title">⚙️ Física FPV & Rates</span>
+        <span class="drawer-title">⚙️ Física FPV & Rates (v4)</span>
         <button id="btnCloseSettings" class="btn-hud">✕ Cerrar</button>
       </div>
 
@@ -550,7 +490,7 @@
         </div>
 
         <div class="slider-item">
-          <div class="slider-label"><span>Resistencia Aire (Drag / Inercia)</span><b id="valDrag">0.08</b></div>
+          <div class="slider-label"><span>Resistencia Aire (Drag)</span><b id="valDrag">0.08</b></div>
           <input id="slDrag" type="range" min="0.01" max="0.40" step="0.01" value="0.08" />
         </div>
       </div>
@@ -559,23 +499,23 @@
         <span class="group-title">Rates Acro & Sticks</span>
 
         <div class="slider-item">
-          <div class="slider-label"><span>Rate Pitch / Roll (°/s)</span><b id="valRatePR">360°/s</b></div>
-          <input id="slRatePR" type="range" min="120" max="900" step="10" value="360" />
+          <div class="slider-label"><span>Rate Pitch / Roll (°/s)</span><b id="valRatePR">380°/s</b></div>
+          <input id="slRatePR" type="range" min="120" max="900" step="10" value="380" />
         </div>
 
         <div class="slider-item">
-          <div class="slider-label"><span>Rate Yaw (°/s)</span><b id="valRateYaw">240°/s</b></div>
-          <input id="slRateYaw" type="range" min="90" max="720" step="10" value="240" />
+          <div class="slider-label"><span>Rate Yaw (°/s)</span><b id="valRateYaw">260°/s</b></div>
+          <input id="slRateYaw" type="range" min="90" max="720" step="10" value="260" />
         </div>
 
         <div class="slider-item">
-          <div class="slider-label"><span>Curva Expo</span><b id="valExpo">0.20</b></div>
-          <input id="slExpo" type="range" min="0.0" max="0.80" step="0.05" value="0.20" />
+          <div class="slider-label"><span>Curva Expo</span><b id="valExpo">0.15</b></div>
+          <input id="slExpo" type="range" min="0.0" max="0.80" step="0.05" value="0.15" />
         </div>
 
         <div class="slider-item">
-          <div class="slider-label"><span>Zona Muerta (Deadzone)</span><b id="valDeadzone">0.03</b></div>
-          <input id="slDeadzone" type="range" min="0.00" max="0.20" step="0.01" value="0.03" />
+          <div class="slider-label"><span>Zona Muerta (Deadzone)</span><b id="valDeadzone">0.02</b></div>
+          <input id="slDeadzone" type="range" min="0.00" max="0.20" step="0.01" value="0.02" />
         </div>
       </div>
 
@@ -612,7 +552,6 @@
       frameBuffer[bitIndex >> 3] |= (1 << (bitIndex & 7));
     }
 
-    // Cohen-Sutherland 2D Line Clipping + Bresenham Entero
     const CLIP_LEFT = 1, CLIP_RIGHT = 2, CLIP_BOTTOM = 4, CLIP_TOP = 8;
     function computeOutCode(x, y) {
       let code = 0;
@@ -735,14 +674,22 @@
     }
 
     /***************************************************************************
-     * 2. MODELO FÍSICO DE VUELO ACRO REAL (GRAVEDAD + INERCIA + CUATERNIONES)
-     *    - Convención mano derecha estándar:
-     *      • +X = Derecha
-     *      • +Y = Arriba
-     *      • -Z = Adelante (Mirando hacia el circuito)
-     *      • Pitch adelante (nariz abajo) = Rotación -X
-     *      • Roll derecha (ala derecha abajo) = Rotación +Z (sobre -Z forward)
-     *      • Yaw derecha = Rotación -Y
+     * 2. MODELO FÍSICO DE VUELO ACRO (MATRIZ DE ORIENTACIÓN 3x3 ORTONORMAL)
+     *    - En lugar de depender de signos ambiguos en cuaterniones, integramos
+     *      explícitamente los 3 vectores unitarios del chasis del dron:
+     *        • R (Right / Derecha del dron)
+     *        • U (Up    / Eje normal +Y de empuje de las hélices)
+     *        • F (Fwd   / Nariz del dron)
+     *    - Así garantizamos al 100% qué hace cada eje:
+     *        • Pitch adelante (Stick Der ARRIBA, pitch > 0):
+     *          La nariz (F) rota hacia abajo (-U), y el vector de empuje (U)
+     *          se inclina hacia adelante (+F).
+     *        • Roll derecha (Stick Der DERECHA, roll > 0):
+     *          El ala derecha (R) rota hacia abajo (-U), y el vector de empuje (U)
+     *          se inclina hacia la derecha (+R).
+     *        • Yaw derecha (Stick Izq DERECHA, yaw > 0):
+     *          La nariz (F) rota hacia la derecha (+R), y el ala derecha (R)
+     *          rota hacia atrás (-F).
      ***************************************************************************/
     const DEG2RAD = Math.PI / 180.0;
     const RAD2DEG = 180.0 / Math.PI;
@@ -751,84 +698,78 @@
 
     const simConfig = {
       camUptiltDeg: 20.0,
-      neutralThrottle: 0.35, // 35% en centro (ligeramente menor que hover 37.7% -> siente gravedad real!)
-      maxThrustAccel: 26.0,  // m/s^2 a 100% throttle (Hover real = 9.81 / 26 = 37.7%)
-      gravity: 9.81,         // m/s^2 constante hacia abajo (-Y)
-      dragLinear: 0.08,      // Bajo drag = alta inercia y planeo realista
+      neutralThrottle: 0.35, // 35% en centro (ligeramente menor que hover 37.7% -> cae suavemente por gravedad)
+      maxThrustAccel: 26.0,  // m/s^2 a 100% throttle (Hover exacto = 9.81 / 26 = 37.7%)
+      gravity: 9.81,         // m/s^2
+      dragLinear: 0.08,      // Bajo drag para sentir toda la inercia
       dragQuad: 0.008,
-      ratePitchRoll: 360.0,  // deg/s en Acro
-      rateYaw: 240.0,        // deg/s
-      expo: 0.20,
-      deadzone: 0.03,
-      mode: 'ACRO',          // 'ACRO' por defecto (según especificación del Brief) o 'STAB'
+      ratePitchRoll: 380.0,  // deg/s
+      rateYaw: 260.0,        // deg/s
+      expo: 0.15,
+      deadzone: 0.02,
+      mode: 'ACRO',
       chaseCam: false
     };
 
     const drone = {
       px: 0.0, py: 2.2, pz: -10.0,
       vx: 0.0, vy: 0.0, vz: 0.0,
-      // Velocidades angulares del chasis con inercia rotacional (rad/s)
-      wx: 0.0, wy: 0.0, wz: 0.0,
-      // Cuaternión de orientación del dron respecto al mundo
-      qx: 0.0, qy: 0.0, qz: 0.0, qw: 1.0,
+      // Velocidades angulares del cuerpo (rad/s) con inercia rotacional
+      pitchRate: 0.0,
+      rollRate: 0.0,
+      yawRate: 0.0,
+      // Vectores ortonormales del chasis en coordenadas del mundo:
+      // Right (R), Up (U = Empuje), Forward (F = Nariz)
+      rx: 1.0, ry: 0.0, rz: 0.0,
+      ux: 0.0, uy: 1.0, uz: 0.0,
+      fx: 0.0, fy: 0.0, fz: 1.0,
       throttleCmd: 0.35,
       pitchDeg: 0.0,
       rollDeg: 0.0,
+      yawDeg: 0.0,
       prevPx: 0.0, prevPy: 2.2, prevPz: -10.0
     };
 
-    function quatNormalize(q) {
-      const m = Math.hypot(q.qx, q.qy, q.qz, q.qw) || 1.0;
-      q.qx /= m; q.qy /= m; q.qz /= m; q.qw /= m;
+    // Re-ortonormalización de Gram-Schmidt para mantener la matriz 3x3 perfecta sin gimbal lock
+    function orthonormalizeDroneBasis() {
+      // 1. Normalizar Forward (F)
+      let fLen = Math.hypot(drone.fx, drone.fy, drone.fz) || 1.0;
+      drone.fx /= fLen; drone.fy /= fLen; drone.fz /= fLen;
+
+      // 2. Hacer Up (U) ortogonal a Forward (F) y normalizar
+      const dotUF = drone.ux * drone.fx + drone.uy * drone.fy + drone.uz * drone.fz;
+      drone.ux -= dotUF * drone.fx;
+      drone.uy -= dotUF * drone.fy;
+      drone.uz -= dotUF * drone.fz;
+      let uLen = Math.hypot(drone.ux, drone.uy, drone.uz) || 1.0;
+      drone.ux /= uLen; drone.uy /= uLen; drone.uz /= uLen;
+
+      // 3. Right (R) = Up x Forward (en nuestro sistema +X=Right, +Y=Up, +Z=Forward: U x F = R)
+      drone.rx = drone.uy * drone.fz - drone.uz * drone.fy;
+      drone.ry = drone.uz * drone.fx - drone.ux * drone.fz;
+      drone.rz = drone.ux * drone.fy - drone.uy * drone.fx;
     }
 
-    // Multiplicación q = q * deltaQ(wx, wy, wz, dt) en espacio local del dron
-    function quatIntegrateBodyRates(q, wx, wy, wz, dt) {
-      const hx = 0.5 * wx * dt;
-      const hy = 0.5 * wy * dt;
-      const hz = 0.5 * wz * dt;
-      const dqW = 1.0 - 0.5 * (hx * hx + hy * hy + hz * hz);
+    // Rota dos vectores ortogonales (A, B) un ángulo theta:
+    // A_new = cos(t)*A + sin(t)*B
+    // B_new = cos(t)*B - sin(t)*A
+    function rotateBasisPair(axKey, ayKey, azKey, bxKey, byKey, bzKey, angleRad) {
+      const c = Math.cos(angleRad);
+      const s = Math.sin(angleRad);
+      const ax = drone[axKey], ay = drone[ayKey], az = drone[azKey];
+      const bx = drone[bxKey], by = drone[byKey], bz = drone[bzKey];
 
-      const nqx = q.qw * hx + q.qy * hz - q.qz * hy;
-      const nqy = q.qw * hy + q.qz * hx - q.qx * hz;
-      const nqz = q.qw * hz + q.qx * hy - q.qy * hx;
-      const nqw = q.qw * dqW - q.qx * hx - q.qy * hy - q.qz * hz;
+      drone[axKey] = c * ax + s * bx;
+      drone[ayKey] = c * ay + s * by;
+      drone[azKey] = c * az + s * bz;
 
-      q.qx = nqx; q.qy = nqy; q.qz = nqz; q.qw = nqw;
-      quatNormalize(q);
-    }
-
-    // Matriz 3x3: Columnas son los ejes locales del dron expresados en el mundo:
-    // Col 0 (0,1,2) = Right (+X local)
-    // Col 1 (3,4,5) = Up    (+Y local = Vector de Empuje de las hélices)
-    // Col 2 (6,7,8) = Back  (+Z local; Forward es -Col 2, pero usamos +Z mundo hacia adelante)
-    const bodyMat = new Float32Array(9);
-    function quatToMatrix(q, out) {
-      const x = q.qx, y = q.qy, z = q.qz, w = q.qw;
-      const x2 = x + x, y2 = y + y, z2 = z + z;
-      const xx = x * x2, xy = x * y2, xz = x * z2;
-      const yy = y * y2, yz = y * z2, zz = z * z2;
-      const wx = w * x2, wy = w * y2, wz = w * z2;
-
-      // Columna 0: Right (+X)
-      out[0] = 1.0 - (yy + zz);
-      out[1] = xy + wz;
-      out[2] = xz - wy;
-
-      // Columna 1: Up (+Y = Empuje)
-      out[3] = xy - wz;
-      out[4] = 1.0 - (xx + zz);
-      out[5] = yz + wx;
-
-      // Columna 2: Forward (+Z)
-      out[6] = xz + wy;
-      out[7] = yz - wx;
-      out[8] = 1.0 - (xx + yy);
+      drone[bxKey] = c * bx - s * ax;
+      drone[byKey] = c * by - s * ay;
+      drone[bzKey] = c * bz - s * az;
     }
 
     /***************************************************************************
-     * 3. ESCENARIO 3D WIREFRAME: CUADRÍCULA DENSA, PUERTAS Y PILARES CERCANOS
-     *    (Para percibir de inmediato la caída por gravedad, la inercia y el giro)
+     * 3. ESCENARIO 3D WIREFRAME: CUADRÍCULA DENSA, PUERTAS Y PILARES
      ***************************************************************************/
     const worldLines = [];
     const gates = [];
@@ -841,7 +782,6 @@
       worldLines.length = 0;
       gates.length = 0;
 
-      // Cuadrícula de suelo cada 5 metros para fuerte sensación de velocidad y altura
       const gridRange = 60;
       const gridStep = 6;
       for (let i = -gridRange; i <= gridRange; i += gridStep) {
@@ -849,13 +789,12 @@
         addLine(-gridRange, 0, i, gridRange, 0, i, true);
       }
 
-      // Pista de despegue bajo el dron (Z = -10)
+      // Helipuerto de salida
       addLine(-2, 0.02, -8,  2, 0.02, -8, false);
       addLine(-2, 0.02, -12, 2, 0.02, -12, false);
       addLine(-2, 0.02, -12, -2, 0.02, -8, false);
       addLine( 2, 0.02, -12,  2, 0.02, -8, false);
 
-      // Circuito de 8 puertas
       const gateDefs = [
         { x:   0, y: 2.5, z:   4, yaw:   0, w: 5.0, h: 4.0 },
         { x:   4, y: 3.2, z:  22, yaw:  20, w: 5.0, h: 4.0 },
@@ -891,7 +830,6 @@
         });
       }
 
-      // Cubos/Torres de referencia espacial cerca del corredor de salida
       const pillars = [
         { x: -6, z: -2, h: 5 },
         { x:  6, z: -2, h: 5 },
@@ -950,26 +888,28 @@
     }
 
     /***************************************************************************
-     * 4. JOYSTICKS MULTITOUCH DIRECTOS AL CENTRO DEL PAD (RESPUESTA INMEDIATA)
-     *    - Tocar cualquier punto del joystick mueve el stick DE INMEDIATO a esa
-     *      posición respecto al centro geométrico del pad (sin tener que arrastrar
-     *      desde cero).
-     *    - Usa un manejador global de Touch + Pointer unificado a prueba de fallos
-     *      para que el stick izquierdo y el derecho funcionen a la vez o por separado.
+     * 4. JOYSTICKS EN CANVAS 2D CON EVENTOS DIRECTOS (TOUCH + POINTER + MOUSE)
+     *    - Cada stick es un <canvas> independiente que dibuja sus propios ejes,
+     *      vector de fuerza y posición del knob en cada frame.
+     *    - Escucha eventos directamente sobre cada canvas Y a nivel global por
+     *      mitad de pantalla (Izquierda < 50% ancho, Derecha > 50% ancho),
+     *      garantizando que ambos ejes (X e Y) de AMBOS sticks funcionen siempre.
      ***************************************************************************/
-    const padLeftEl = document.getElementById('stickLeft');
-    const padRightEl = document.getElementById('stickRight');
-    const knobLeftEl = document.getElementById('knobLeft');
-    const knobRightEl = document.getElementById('knobRight');
+    const stickLeftCanvas = document.getElementById('stickLeft');
+    const stickRightCanvas = document.getElementById('stickRight');
+    const ctxLeft = stickLeftCanvas.getContext('2d');
+    const ctxRight = stickRightCanvas.getContext('2d');
 
-    let touchLeftX = 0.0, touchLeftY = 0.0;
-    let touchRightX = 0.0, touchRightY = 0.0;
+    const stickState = {
+      left:  { x: 0.0, y: 0.0, active: false, touchId: null },
+      right: { x: 0.0, y: 0.0, active: false, touchId: null }
+    };
 
-    function computePadDeflection(padEl, clientX, clientY) {
-      const rect = padEl.getBoundingClientRect();
+    function updateStickFromClientXY(side, canvasEl, clientX, clientY) {
+      const rect = canvasEl.getBoundingClientRect();
       const cx = rect.left + rect.width * 0.5;
       const cy = rect.top + rect.height * 0.5;
-      const maxR = Math.max(28, rect.width * 0.42);
+      const maxR = Math.max(24, rect.width * 0.40);
 
       const dx = clientX - cx;
       const dy = clientY - cy;
@@ -977,137 +917,152 @@
       const dist = Math.hypot(dx, dy);
       const scale = dist > maxR ? (maxR / dist) : 1.0;
 
-      const nx = (dx * scale) / maxR;
-      const ny = (-dy * scale) / maxR; // +1 arriba, -1 abajo
-      return { nx, ny };
+      stickState[side].x = (dx * scale) / maxR;   // -1 (Izquierda) a +1 (Derecha)
+      stickState[side].y = (-dy * scale) / maxR;  // -1 (Abajo)     a +1 (Arriba)
+      stickState[side].active = true;
     }
 
-    function updateKnobVisual(padEl, knobEl, nx, ny, engaged) {
-      knobEl.style.left = `${50 + nx * 38}%`;
-      knobEl.style.top  = `${50 - ny * 38}%`;
-      padEl.classList.toggle('engaged', engaged);
+    function resetStick(side) {
+      stickState[side].x = 0.0;
+      stickState[side].y = 0.0;
+      stickState[side].active = false;
+      stickState[side].touchId = null;
     }
 
-    // Seguimiento multitouch global: evalúa todos los dedos activos en pantalla
-    // y los asigna al stick izquierdo o derecho según su posición o inicio de toque
-    const touchAssignment = new Map(); // identifier -> 'left' | 'right'
+    // Dibuja el estado del gimbal en su propio Canvas 2D
+    function drawGimbalCanvas(ctxG, canvasEl, state, labelX, labelY) {
+      const w = canvasEl.width;
+      const h = canvasEl.height;
+      const cx = w * 0.5;
+      const cy = h * 0.5;
+      const maxR = w * 0.38;
 
-    function processAllTouches(e) {
-      // Si el toque ocurre en botones del HUD o en el panel de ajustes, no interceptar
+      ctxG.clearRect(0, 0, w, h);
+
+      // Anillos guía
+      ctxG.strokeStyle = state.active ? 'rgba(0, 229, 255, 0.35)' : 'rgba(139, 155, 180, 0.2)';
+      ctxG.lineWidth = 1.5;
+      ctxG.beginPath();
+      ctxG.arc(cx, cy, maxR, 0, Math.PI * 2);
+      ctxG.stroke();
+
+      ctxG.beginPath();
+      ctxG.arc(cx, cy, maxR * 0.5, 0, Math.PI * 2);
+      ctxG.stroke();
+
+      // Ejes cruzados
+      ctxG.beginPath();
+      ctxG.moveTo(cx - maxR * 1.1, cy);
+      ctxG.lineTo(cx + maxR * 1.1, cy);
+      ctxG.moveTo(cx, cy - maxR * 1.1);
+      ctxG.lineTo(cx, cy + maxR * 1.1);
+      ctxG.stroke();
+
+      // Posición actual del stick
+      const kx = cx + state.x * maxR;
+      const ky = cy - state.y * maxR;
+
+      // Vector desde el centro al stick
+      ctxG.strokeStyle = '#00e5ff';
+      ctxG.lineWidth = 3;
+      ctxG.beginPath();
+      ctxG.moveTo(cx, cy);
+      ctxG.lineTo(kx, ky);
+      ctxG.stroke();
+
+      // Knob circular
+      ctxG.fillStyle = state.active ? '#00e5ff' : '#0088aa';
+      ctxG.beginPath();
+      ctxG.arc(kx, ky, 24, 0, Math.PI * 2);
+      ctxG.fill();
+
+      ctxG.lineWidth = 2.5;
+      ctxG.strokeStyle = '#ffffff';
+      ctxG.stroke();
+
+      // Texto de coordenadas dentro del propio canvas para verificación visual instantánea
+      ctxG.fillStyle = '#8b9bb4';
+      ctxG.font = 'bold 12px monospace';
+      ctxG.fillText(`${labelX}:${state.x >= 0 ? '+' : ''}${state.x.toFixed(2)}`, 10, 18);
+      ctxG.fillText(`${labelY}:${state.y >= 0 ? '+' : ''}${state.y.toFixed(2)}`, 10, 34);
+
+      canvasEl.classList.toggle('engaged', state.active);
+    }
+
+    // Manejador Multitouch Unificado para toda la zona de vuelo
+    function handleTouchEvents(e) {
       if (e.target && (e.target.closest('.hud-topbar') || e.target.closest('.settings-backdrop') || e.target.closest('.quick-flight-bar'))) {
         return;
       }
       e.preventDefault();
 
-      // Registrar nuevos toques según en qué mitad de la pantalla o pad cayeron
-      for (let i = 0; i < e.changedTouches.length; i++) {
-        const t = e.changedTouches[i];
-        if (e.type === 'touchstart' && !touchAssignment.has(t.identifier)) {
-          const rL = padLeftEl.getBoundingClientRect();
-          const rR = padRightEl.getBoundingClientRect();
-          const margin = 35;
+      const midX = window.innerWidth * 0.5;
+      let leftMatched = false;
+      let rightMatched = false;
 
-          if (t.clientX >= rL.left - margin && t.clientX <= rL.right + margin &&
-              t.clientY >= rL.top - margin  && t.clientY <= rL.bottom + margin) {
-            touchAssignment.set(t.identifier, 'left');
-          } else if (t.clientX >= rR.left - margin && t.clientX <= rR.right + margin &&
-                     t.clientY >= rR.top - margin  && t.clientY <= rR.bottom + margin) {
-            touchAssignment.set(t.identifier, 'right');
-          } else if (t.clientX < window.innerWidth * 0.42) {
-            touchAssignment.set(t.identifier, 'left');
-          } else if (t.clientX > window.innerWidth * 0.58) {
-            touchAssignment.set(t.identifier, 'right');
-          }
-        }
-      }
-
-      // Limpiar toques que terminaron
-      if (e.type === 'touchend' || e.type === 'touchcancel') {
-        for (let i = 0; i < e.changedTouches.length; i++) {
-          touchAssignment.delete(e.changedTouches[i].identifier);
-        }
-      }
-
-      let leftFound = false;
-      let rightFound = false;
-
+      // Evaluar todos los toques activos en pantalla (`e.touches`)
       for (let i = 0; i < e.touches.length; i++) {
         const t = e.touches[i];
-        const side = touchAssignment.get(t.identifier);
-        if (side === 'left' && !leftFound) {
-          leftFound = true;
-          const { nx, ny } = computePadDeflection(padLeftEl, t.clientX, t.clientY);
-          touchLeftX = nx;
-          touchLeftY = ny;
-          updateKnobVisual(padLeftEl, knobLeftEl, nx, ny, true);
-        } else if (side === 'right' && !rightFound) {
-          rightFound = true;
-          const { nx, ny } = computePadDeflection(padRightEl, t.clientX, t.clientY);
-          touchRightX = nx;
-          touchRightY = ny;
-          updateKnobVisual(padRightEl, knobRightEl, nx, ny, true);
+
+        // Si este touchId ya estaba asignado a un lado, mantenerlo; si no, asignar según mitad de pantalla
+        let side = null;
+        if (stickState.left.touchId === t.identifier) {
+          side = 'left';
+        } else if (stickState.right.touchId === t.identifier) {
+          side = 'right';
+        } else if (t.clientX < midX && !leftMatched) {
+          side = 'left';
+          stickState.left.touchId = t.identifier;
+        } else if (t.clientX >= midX && !rightMatched) {
+          side = 'right';
+          stickState.right.touchId = t.identifier;
+        }
+
+        if (side === 'left') {
+          leftMatched = true;
+          updateStickFromClientXY('left', stickLeftCanvas, t.clientX, t.clientY);
+        } else if (side === 'right') {
+          rightMatched = true;
+          updateStickFromClientXY('right', stickRightCanvas, t.clientX, t.clientY);
         }
       }
 
-      if (!leftFound) {
-        touchLeftX = 0.0;
-        touchLeftY = 0.0;
-        updateKnobVisual(padLeftEl, knobLeftEl, 0, 0, false);
-      }
-      if (!rightFound) {
-        touchRightX = 0.0;
-        touchRightY = 0.0;
-        updateKnobVisual(padRightEl, knobRightEl, 0, 0, false);
-      }
+      if (!leftMatched) resetStick('left');
+      if (!rightMatched) resetStick('right');
 
       document.getElementById('touchStatus').textContent =
-        `Touch L:${leftFound ? 'ON' : 'OFF'} R:${rightFound ? 'ON' : 'OFF'}`;
+        `L(${stickState.left.x.toFixed(1)},${stickState.left.y.toFixed(1)}) R(${stickState.right.x.toFixed(1)},${stickState.right.y.toFixed(1)})`;
     }
 
-    window.addEventListener('touchstart',  processAllTouches, { passive: false });
-    window.addEventListener('touchmove',   processAllTouches, { passive: false });
-    window.addEventListener('touchend',    processAllTouches, { passive: false });
-    window.addEventListener('touchcancel', processAllTouches, { passive: false });
+    window.addEventListener('touchstart',  handleTouchEvents, { passive: false });
+    window.addEventListener('touchmove',   handleTouchEvents, { passive: false });
+    window.addEventListener('touchend',    handleTouchEvents, { passive: false });
+    window.addEventListener('touchcancel', handleTouchEvents, { passive: false });
 
-    // Soporte de Mouse en PC para probar cualquiera de los dos sticks con clic y arrastrar
-    let activeMouseSide = null;
-    padLeftEl.addEventListener('mousedown', (e) => {
+    // Soporte de Mouse en PC para ambos canvases
+    let mouseActiveSide = null;
+    stickLeftCanvas.addEventListener('mousedown', (e) => {
       e.preventDefault();
-      activeMouseSide = 'left';
-      const { nx, ny } = computePadDeflection(padLeftEl, e.clientX, e.clientY);
-      touchLeftX = nx; touchLeftY = ny;
-      updateKnobVisual(padLeftEl, knobLeftEl, nx, ny, true);
+      mouseActiveSide = 'left';
+      updateStickFromClientXY('left', stickLeftCanvas, e.clientX, e.clientY);
     });
-
-    padRightEl.addEventListener('mousedown', (e) => {
+    stickRightCanvas.addEventListener('mousedown', (e) => {
       e.preventDefault();
-      activeMouseSide = 'right';
-      const { nx, ny } = computePadDeflection(padRightEl, e.clientX, e.clientY);
-      touchRightX = nx; touchRightY = ny;
-      updateKnobVisual(padRightEl, knobRightEl, nx, ny, true);
+      mouseActiveSide = 'right';
+      updateStickFromClientXY('right', stickRightCanvas, e.clientX, e.clientY);
     });
-
     window.addEventListener('mousemove', (e) => {
-      if (activeMouseSide === 'left') {
-        const { nx, ny } = computePadDeflection(padLeftEl, e.clientX, e.clientY);
-        touchLeftX = nx; touchLeftY = ny;
-        updateKnobVisual(padLeftEl, knobLeftEl, nx, ny, true);
-      } else if (activeMouseSide === 'right') {
-        const { nx, ny } = computePadDeflection(padRightEl, e.clientX, e.clientY);
-        touchRightX = nx; touchRightY = ny;
-        updateKnobVisual(padRightEl, knobRightEl, nx, ny, true);
+      if (mouseActiveSide === 'left') {
+        updateStickFromClientXY('left', stickLeftCanvas, e.clientX, e.clientY);
+      } else if (mouseActiveSide === 'right') {
+        updateStickFromClientXY('right', stickRightCanvas, e.clientX, e.clientY);
       }
     });
-
     window.addEventListener('mouseup', () => {
-      if (activeMouseSide === 'left') {
-        touchLeftX = 0; touchLeftY = 0;
-        updateKnobVisual(padLeftEl, knobLeftEl, 0, 0, false);
-      } else if (activeMouseSide === 'right') {
-        touchRightX = 0; touchRightY = 0;
-        updateKnobVisual(padRightEl, knobRightEl, 0, 0, false);
+      if (mouseActiveSide) {
+        resetStick(mouseActiveSide);
+        mouseActiveSide = null;
       }
-      activeMouseSide = null;
     });
 
     const keyState = {};
@@ -1130,10 +1085,10 @@
     }
 
     function pollInputs() {
-      let lx = touchLeftX;
-      let ly = touchLeftY;
-      let rx = touchRightX;
-      let ry = touchRightY;
+      let lx = stickState.left.x;
+      let ly = stickState.left.y;
+      let rx = stickState.right.x;
+      let ry = stickState.right.y;
 
       const pads = navigator.getGamepads ? navigator.getGamepads() : [];
       for (let i = 0; i < pads.length; i++) {
@@ -1166,14 +1121,17 @@
       rawStick.rightX = rx;
       rawStick.rightY = ry;
 
+      drawGimbalCanvas(ctxLeft, stickLeftCanvas, { x: lx, y: ly, active: stickState.left.active || Math.hypot(lx, ly) > 0.01 }, 'YAW', 'THR');
+      drawGimbalCanvas(ctxRight, stickRightCanvas, { x: rx, y: ry, active: stickState.right.active || Math.hypot(rx, ry) > 0.01 }, 'ROL', 'PIT');
+
       document.getElementById('readoutLeft').textContent =
-        `THR:${Math.round(drone.throttleCmd * 100)}% Y:${lx >= 0 ? '+' : ''}${lx.toFixed(2)}`;
+        `THR: ${Math.round(drone.throttleCmd * 100)}% | YAW: ${lx >= 0 ? '+' : ''}${lx.toFixed(2)}`;
       document.getElementById('readoutRight').textContent =
-        `PIT:${ry >= 0 ? '+' : ''}${ry.toFixed(2)} ROL:${rx >= 0 ? '+' : ''}${rx.toFixed(2)}`;
+        `PIT: ${ry >= 0 ? '+' : ''}${ry.toFixed(2)} | ROL: ${rx >= 0 ? '+' : ''}${rx.toFixed(2)}`;
     }
 
     /***************************************************************************
-     * 5. PASO DE FÍSICA ACRO REAL CON INERCIA TRASLACIONAL Y ROTACIONAL
+     * 5. PASO DE FÍSICA ACRO EXPLICITA (ROTACIÓN DE VECTORES DE BASE + INERCIA)
      ***************************************************************************/
     function stepPhysics(dt) {
       drone.prevPx = drone.px;
@@ -1184,12 +1142,11 @@
       const expo = simConfig.expo;
 
       const yawCmd   = applyDeadzoneAndExpo(rawStick.leftX, dz, expo);
-      const thrStick = applyDeadzoneAndExpo(rawStick.leftY, dz, 0.15);
+      const thrStick = applyDeadzoneAndExpo(rawStick.leftY, dz, 0.10);
       const rollCmd  = applyDeadzoneAndExpo(rawStick.rightX, dz, expo);
       const pitchCmd = applyDeadzoneAndExpo(rawStick.rightY, dz, expo);
 
       // Mapeo de mando autocentrado para el acelerador:
-      // Centro = neutralThrottle (35%), Arriba = 100%, Abajo = 0% (caída libre por gravedad!)
       const baseThr = simConfig.neutralThrottle;
       if (thrStick >= 0) {
         drone.throttleCmd = baseThr + thrStick * (1.0 - baseThr);
@@ -1197,93 +1154,74 @@
         drone.throttleCmd = baseThr * (1.0 + thrStick);
       }
 
-      quatToMatrix(drone, bodyMat);
-
-      // Cálculo de tasas angulares objetivo (rad/s)
-      let targetWx = 0, targetWy = 0, targetWz = 0;
+      let targetPitchRate = 0.0;
+      let targetRollRate  = 0.0;
+      let targetYawRate   = 0.0;
 
       if (simConfig.mode === 'ACRO') {
-        // Modo ACRO puro: el stick derecho comanda velocidad angular de Pitch y Roll directamente.
-        // - Pitch adelante (pitchCmd > 0): inclina nariz (+Z) hacia abajo (-Y) -> wx positivo en nuestra matriz
-        //   Verificación matemática: Con q = (sin(a/2), 0, 0, cos(a/2)):
-        //   Columna 1 (Up)     = (0, cos(a), -sin(a))
-        //   Columna 2 (Forward)= (0, sin(a),  cos(a))
-        //   Para que la nariz (+Z) baje (Forward.y < 0) y el vector Up apunte hacia adelante (+Z, Up.z > 0),
-        //   necesitamos sin(a) < 0, es decir, rotación wx NEGATIVA: wx = -pitchCmd * rate.
-        // - Roll derecha (rollCmd > 0): inclina ala derecha (+X) hacia abajo (-Y).
-        //   Con q = (0, 0, sin(b/2), cos(b/2)):
-        //   Columna 0 (Right) = (cos(b), sin(b), 0)
-        //   Columna 1 (Up)    = (-sin(b), cos(b), 0)
-        //   Para que Right.y < 0 (ala derecha baje) y Up.x > 0 (empuje hacia +X derecha),
-        //   necesitamos sin(b) < 0, es decir, rotación wz NEGATIVA: wz = -rollCmd * rate.
-        // - Yaw derecha (yawCmd > 0): gira nariz (+Z) hacia la derecha (+X).
-        //   Con q = (0, sin(c/2), 0, cos(c/2)):
-        //   Columna 2 (Forward) = (sin(c), 0, cos(c)).
-        //   Para que Forward.x > 0, necesitamos sin(c) > 0 -> wy POSITIVA: wy = +yawCmd * rate.
-        targetWx = -pitchCmd * simConfig.ratePitchRoll * DEG2RAD;
-        targetWy =  yawCmd   * simConfig.rateYaw       * DEG2RAD;
-        targetWz = -rollCmd  * simConfig.ratePitchRoll * DEG2RAD;
+        targetPitchRate = pitchCmd * simConfig.ratePitchRoll * DEG2RAD;
+        targetRollRate  = rollCmd  * simConfig.ratePitchRoll * DEG2RAD;
+        targetYawRate   = yawCmd   * simConfig.rateYaw       * DEG2RAD;
       } else {
-        // Modo STAB (Auto-Level con límite de 50 grados)
-        const curRoll  = Math.atan2(bodyMat[3], bodyMat[4]); // + cuando Up.x > 0 (inclinado a la derecha)
-        const curPitch = Math.atan2(bodyMat[5], bodyMat[4]); // + cuando Up.z > 0 (inclinado hacia adelante)
+        // Modo STAB (Auto-Level)
+        const curPitch = Math.asin(Math.max(-1, Math.min(1, -drone.fy)));
+        const curRoll  = Math.asin(Math.max(-1, Math.min(1, -drone.ry)));
         const maxAngle = 50.0 * DEG2RAD;
-        const errPitch = (pitchCmd * maxAngle) - curPitch;
-        const errRoll  = (rollCmd  * maxAngle) - curRoll;
-
-        targetWx = -errPitch * 6.5;
-        targetWz = -errRoll  * 6.5;
-        targetWy =  yawCmd * simConfig.rateYaw * DEG2RAD;
+        targetPitchRate = ((pitchCmd * maxAngle) - curPitch) * 6.5;
+        targetRollRate  = ((rollCmd  * maxAngle) - curRoll)  * 6.5;
+        targetYawRate   = yawCmd * simConfig.rateYaw * DEG2RAD;
       }
 
-      // Inercia rotacional de los motores (respuesta rápida pero con masa física real)
-      const rotResponse = Math.min(1.0, 18.0 * dt);
-      drone.wx += (targetWx - drone.wx) * rotResponse;
-      drone.wy += (targetWy - drone.wy) * rotResponse;
-      drone.wz += (targetWz - drone.wz) * rotResponse;
+      // Inercia rotacional de los motores
+      const alpha = Math.min(1.0, 20.0 * dt);
+      drone.pitchRate += (targetPitchRate - drone.pitchRate) * alpha;
+      drone.rollRate  += (targetRollRate  - drone.rollRate)  * alpha;
+      drone.yawRate   += (targetYawRate   - drone.yawRate)   * alpha;
 
-      quatIntegrateBodyRates(drone, drone.wx, drone.wy, drone.wz, dt);
-      quatToMatrix(drone, bodyMat);
+      // 1. PITCH (Stick Derecho Vertical):
+      //    pitchRate > 0 inclina la nariz (F) hacia abajo (-U) y el vector Up (U) hacia adelante (+F)
+      rotateBasisPair('ux', 'uy', 'uz', 'fx', 'fy', 'fz', drone.pitchRate * dt);
 
-      // Extraer ángulos de actitud para telemetría y horizonte artificial
-      drone.rollDeg  = Math.atan2(bodyMat[3], bodyMat[4]) * RAD2DEG;
-      drone.pitchDeg = Math.atan2(bodyMat[5], bodyMat[4]) * RAD2DEG;
+      // 2. ROLL (Stick Derecho Horizontal):
+      //    rollRate > 0 inclina el ala derecha (R) hacia abajo (-U) y el vector Up (U) hacia la derecha (+R)
+      rotateBasisPair('ux', 'uy', 'uz', 'rx', 'ry', 'rz', drone.rollRate * dt);
 
-      // Dinámica Traslacional Pura:
-      // F_total = Empuje * Up_vector + Gravedad (0, -g, 0) - Drag * Velocidad
-      // ¡SIN anulaciones artificiales de velocidad vertical ni auto-thrust!
+      // 3. YAW (Stick Izquierdo Horizontal):
+      //    yawRate > 0 gira la nariz (F) hacia la derecha (+R) y el ala derecha (R) hacia atrás (-F)
+      rotateBasisPair('fx', 'fy', 'fz', 'rx', 'ry', 'rz', drone.yawRate * dt);
+
+      orthonormalizeDroneBasis();
+
+      // Ángulos de telemetría
+      drone.pitchDeg = Math.atan2(drone.uz, drone.uy) * RAD2DEG;
+      drone.rollDeg  = Math.atan2(drone.ux, drone.uy) * RAD2DEG;
+      drone.yawDeg   = Math.atan2(drone.fx, drone.fz) * RAD2DEG;
+
+      // Dinámica Traslacional: Empuje a lo largo de U (ux, uy, uz) + Gravedad (-Y) + Drag
       const thrustAccel = drone.throttleCmd * simConfig.maxThrustAccel;
-
-      const upX = bodyMat[3];
-      const upY = bodyMat[4];
-      const upZ = bodyMat[5];
-
       const speed = Math.hypot(drone.vx, drone.vy, drone.vz);
       const drag = simConfig.dragLinear + simConfig.dragQuad * speed;
 
-      const ax = upX * thrustAccel - drone.vx * drag;
-      const ay = upY * thrustAccel - simConfig.gravity - drone.vy * drag;
-      const az = upZ * thrustAccel - drone.vz * drag;
+      const ax = drone.ux * thrustAccel - drone.vx * drag;
+      const ay = drone.uy * thrustAccel - simConfig.gravity - drone.vy * drag;
+      const az = drone.uz * thrustAccel - drone.vz * drag;
 
-      // Integración de velocidad (Inercia traslacional real)
       drone.vx += ax * dt;
       drone.vy += ay * dt;
       drone.vz += az * dt;
 
-      // Integración de posición
       drone.px += drone.vx * dt;
       drone.py += drone.vy * dt;
       drone.pz += drone.vz * dt;
 
-      // Colisión con el suelo con rebote amortiguado y fricción
+      // Colisión con el suelo (Y = 0.25m)
       if (drone.py < 0.25) {
         drone.py = 0.25;
         if (drone.vy < -1.5) {
-          drone.vy = -drone.vy * 0.25; // Pequeño rebote si cae fuerte
+          drone.vy = -drone.vy * 0.25;
         } else if (drone.vy < 0) {
           drone.vy = 0;
         }
-        // Fricción de patines contra el suelo
         drone.vx *= Math.max(0, 1.0 - 3.5 * dt);
         drone.vz *= Math.max(0, 1.0 - 3.5 * dt);
       }
@@ -1298,27 +1236,24 @@
     let camPosX = 0, camPosY = 0, camPosZ = 0;
 
     function updateCameraTransform() {
-      quatToMatrix(drone, bodyMat);
-
-      // Camera Uptilt: inclina la cámara hacia arriba (rotación positiva alrededor de +X local)
-      // Con nuestra matriz, rotar hacia arriba (+Y) desde Forward (+Z) combina:
-      // CamForward = cos(tilt)*BodyForward + sin(tilt)*BodyUp
-      // CamUp      = cos(tilt)*BodyUp      - sin(tilt)*BodyForward
       const tiltRad = simConfig.camUptiltDeg * DEG2RAD;
       const cosT = Math.cos(tiltRad);
       const sinT = Math.sin(tiltRad);
 
-      camMat[0] = bodyMat[0];
-      camMat[1] = bodyMat[1];
-      camMat[2] = bodyMat[2];
+      // Eje X de cámara = Right del dron
+      camMat[0] = drone.rx;
+      camMat[1] = drone.ry;
+      camMat[2] = drone.rz;
 
-      camMat[3] = cosT * bodyMat[3] - sinT * bodyMat[6];
-      camMat[4] = cosT * bodyMat[4] - sinT * bodyMat[7];
-      camMat[5] = cosT * bodyMat[5] - sinT * bodyMat[8];
+      // Eje Y de cámara = cosT * Up - sinT * Forward
+      camMat[3] = cosT * drone.ux - sinT * drone.fx;
+      camMat[4] = cosT * drone.uy - sinT * drone.fy;
+      camMat[5] = cosT * drone.uz - sinT * drone.fz;
 
-      camMat[6] = sinT * bodyMat[3] + cosT * bodyMat[6];
-      camMat[7] = sinT * bodyMat[4] + cosT * bodyMat[7];
-      camMat[8] = sinT * bodyMat[5] + cosT * bodyMat[8];
+      // Eje Z de cámara (Mirada) = sinT * Up + cosT * Forward
+      camMat[6] = sinT * drone.ux + cosT * drone.fx;
+      camMat[7] = sinT * drone.uy + cosT * drone.fy;
+      camMat[8] = sinT * drone.uz + cosT * drone.fz;
 
       if (!simConfig.chaseCam) {
         camPosX = drone.px;
@@ -1374,16 +1309,15 @@
       if (!simConfig.chaseCam) return;
       const s = 0.55;
       const pts = [[-s,0,-s],[s,0,s],[-s,0,s],[s,0,-s]].map(([lx,ly,lz]) => [
-        drone.px + lx * bodyMat[0] + ly * bodyMat[3] + lz * bodyMat[6],
-        drone.py + lx * bodyMat[1] + ly * bodyMat[4] + lz * bodyMat[7],
-        drone.pz + lx * bodyMat[2] + ly * bodyMat[5] + lz * bodyMat[8]
+        drone.px + lx * drone.rx + ly * drone.ux + lz * drone.fx,
+        drone.py + lx * drone.ry + ly * drone.uy + lz * drone.fy,
+        drone.pz + lx * drone.rz + ly * drone.uz + lz * drone.fz
       ]);
       renderLine3D(pts[0][0], pts[0][1], pts[0][2], pts[1][0], pts[1][1], pts[1][2], false);
       renderLine3D(pts[2][0], pts[2][1], pts[2][2], pts[3][0], pts[3][1], pts[3][2], false);
     }
 
     function renderOSD() {
-      // 1. Barra izquierda: Nivel de Acelerador (Throttle) + marca de Hover real
       const barX = 2, barTop = 10, barBot = 54, barH = barBot - barTop;
       fbDrawLine(barX, barTop, barX, barBot);
 
@@ -1398,21 +1332,19 @@
         fbSetPixel(barX + 2, y);
       }
 
-      // 2. Barra derecha: Altitud + Indicador de Velocidad Vertical (Variómetro)
       const altBarX = 125;
       fbDrawLine(altBarX, barTop, altBarX, barBot);
       const normAlt = Math.min(1.0, Math.max(0.0, drone.py / 15.0));
       const altY = (barBot - Math.round(normAlt * barH)) | 0;
       fbDrawLine(altBarX - 3, altY, altBarX, altY);
 
-      // 3. Horizonte Artificial Dinámico en el centro de la pantalla OLED
-      // Permite ver de inmediato cómo responde el joystick derecho (Pitch y Roll)
+      // Horizonte Artificial Dinámico en el centro de la pantalla OLED
       const cx = 64, cy = 32;
       const rollRad = drone.rollDeg * DEG2RAD;
       const pitchOffset = Math.max(-22, Math.min(22, (drone.pitchDeg - simConfig.camUptiltDeg) * 0.45));
       const cosR = Math.cos(rollRad);
       const sinR = Math.sin(rollRad);
-      const hLen = 14;
+      const hLen = 16;
 
       const hx0 = cx - cosR * hLen;
       const hy0 = (cy + pitchOffset) - sinR * hLen;
@@ -1420,13 +1352,11 @@
       const hy1 = (cy + pitchOffset) + sinR * hLen;
       fbDrawDashedLine(hx0, hy0, hx1, hy1, 1);
 
-      // Cruz central fija del visor FPV
       fbSetPixel(cx - 2, cy);
       fbSetPixel(cx + 2, cy);
       fbSetPixel(cx, cy - 2);
       fbSetPixel(cx, cy + 2);
 
-      // 4. Brújula superior hacia la puerta objetivo
       const g = gates[activeGateIdx];
       const toGx = g.cx - drone.px, toGz = g.cz - drone.pz;
       const camRightDot = toGx * camMat[0] + toGz * camMat[2];
@@ -1541,8 +1471,10 @@
     function resetDrone() {
       drone.px = 0.0; drone.py = 2.2; drone.pz = -10.0;
       drone.vx = 0.0; drone.vy = 0.0; drone.vz = 0.0;
-      drone.wx = 0.0; drone.wy = 0.0; drone.wz = 0.0;
-      drone.qx = 0.0; drone.qy = 0.0; drone.qz = 0.0; drone.qw = 1.0;
+      drone.pitchRate = 0.0; drone.rollRate = 0.0; drone.yawRate = 0.0;
+      drone.rx = 1.0; drone.ry = 0.0; drone.rz = 0.0;
+      drone.ux = 0.0; drone.uy = 1.0; drone.uz = 0.0;
+      drone.fx = 0.0; drone.fy = 0.0; drone.fz = 1.0;
       drone.prevPx = drone.px; drone.prevPy = drone.py; drone.prevPz = drone.pz;
       activeGateIdx = 0;
       lapRunning = false;
@@ -1625,10 +1557,10 @@
       document.getElementById('slThrust').value = 26.0;
       document.getElementById('slGravity').value = 9.81;
       document.getElementById('slDrag').value = 0.08;
-      document.getElementById('slRatePR').value = 360;
-      document.getElementById('slRateYaw').value = 240;
-      document.getElementById('slExpo').value = 0.20;
-      document.getElementById('slDeadzone').value = 0.03;
+      document.getElementById('slRatePR').value = 380;
+      document.getElementById('slRateYaw').value = 260;
+      document.getElementById('slExpo').value = 0.15;
+      document.getElementById('slDeadzone').value = 0.02;
       ['slUptilt','slHover','slThrust','slGravity','slDrag','slRatePR','slRateYaw','slExpo','slDeadzone']
         .forEach(id => document.getElementById(id).dispatchEvent(new Event('input')));
     });
@@ -1667,7 +1599,7 @@
       document.getElementById('uiSpeed').textContent = `${speed.toFixed(1)}m/s`;
       document.getElementById('uiAlt').textContent = `${drone.py.toFixed(1)}m`;
       document.getElementById('uiAttitude').textContent =
-        `${Math.round(drone.pitchDeg)}°/${Math.round(drone.rollDeg)}°`;
+        `${Math.round(drone.pitchDeg)}°/${Math.round(drone.rollDeg)}°/${Math.round(drone.yawDeg)}°`;
 
       fpsFrames++;
       if (now - fpsClock >= 500) {
