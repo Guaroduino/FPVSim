@@ -15,7 +15,7 @@
       --bg-panel: #161f30;
       --border: #28364f;
       --accent: #00e5ff;
-      --accent-glow: rgba(0, 229, 255, 0.25);
+      --accent-glow: rgba(0, 229, 255, 0.28);
       --amber: #ffb300;
       --green: #00e676;
       --red: #ff5252;
@@ -46,7 +46,6 @@
       touch-action: none;
     }
 
-    /* Portrait Warning Banner for Mobile */
     .portrait-notice {
       display: none;
       position: fixed;
@@ -68,7 +67,6 @@
       }
     }
 
-    /* Handheld Console Full-Viewport Layout */
     .handheld-layout {
       width: 100%;
       height: 100dvh;
@@ -80,14 +78,14 @@
 
     /* Compact HUD Top Bar */
     .hud-topbar {
-      height: 38px;
+      height: 36px;
       flex-shrink: 0;
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 6px;
       padding: 0 8px;
-      background: rgba(16, 22, 34, 0.9);
+      background: rgba(16, 22, 34, 0.92);
       border-bottom: 1px solid var(--border);
       border-radius: 6px;
     }
@@ -95,16 +93,16 @@
     .hud-stats {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 9px;
       overflow-x: auto;
-      font-size: 0.72rem;
+      font-size: 0.68rem;
       white-space: nowrap;
     }
 
     .hud-metric {
       display: inline-flex;
       align-items: center;
-      gap: 4px;
+      gap: 3px;
     }
 
     .hud-metric b {
@@ -118,7 +116,7 @@
     .hud-actions {
       display: flex;
       align-items: center;
-      gap: 5px;
+      gap: 4px;
       flex-shrink: 0;
     }
 
@@ -127,9 +125,9 @@
       color: var(--text);
       border: 1px solid var(--border);
       border-radius: 5px;
-      padding: 5px 8px;
+      padding: 4px 7px;
       font-family: inherit;
-      font-size: 0.68rem;
+      font-size: 0.66rem;
       font-weight: 600;
       cursor: pointer;
       white-space: nowrap;
@@ -147,19 +145,18 @@
       flex: 1;
       min-height: 0;
       display: grid;
-      grid-template-columns: minmax(145px, 27vw) 1fr minmax(145px, 27vw);
+      grid-template-columns: minmax(140px, 27vw) 1fr minmax(140px, 27vw);
       align-items: center;
       justify-items: center;
-      gap: 8px;
+      gap: 6px;
       padding: 4px 2px;
     }
 
-    /* Portrait fallback so it remains playable even if not rotated yet */
     @media (orientation: portrait) and (max-width: 768px) {
       .cockpit-body {
         grid-template-columns: 1fr 1fr;
         grid-template-rows: 1fr auto;
-        padding-bottom: 10px;
+        padding-bottom: 8px;
       }
       .center-display-col {
         grid-column: 1 / -1;
@@ -175,7 +172,6 @@
       }
     }
 
-    /* Gimbal Columns */
     .gimbal-col {
       width: 100%;
       height: 100%;
@@ -188,32 +184,32 @@
     }
 
     .gimbal-label {
-      font-size: 0.62rem;
+      font-size: 0.60rem;
       color: var(--text-muted);
-      letter-spacing: 0.5px;
+      letter-spacing: 0.4px;
       text-align: center;
     }
 
     .gimbal-pad {
-      width: min(100%, 210px, 68dvh);
+      width: min(100%, 200px, 66dvh);
       aspect-ratio: 1 / 1;
-      background: radial-gradient(circle at center, #121a28 0%, #090d14 100%);
+      background: radial-gradient(circle at center, #131c2e 0%, #090d14 100%);
       border: 2px solid #2c3e5a;
-      border-radius: 18px;
+      border-radius: 16px;
       position: relative;
       touch-action: none;
-      box-shadow: inset 0 0 24px rgba(0, 0, 0, 0.9), 0 4px 14px rgba(0, 0, 0, 0.5);
+      box-shadow: inset 0 0 22px rgba(0, 0, 0, 0.9), 0 4px 14px rgba(0, 0, 0, 0.5);
     }
 
     .gimbal-pad.engaged {
       border-color: var(--accent);
-      box-shadow: inset 0 0 24px rgba(0, 229, 255, 0.14), 0 0 12px rgba(0, 229, 255, 0.25);
+      box-shadow: inset 0 0 22px rgba(0, 229, 255, 0.18), 0 0 12px rgba(0, 229, 255, 0.3);
     }
 
     .gimbal-axis-h,
     .gimbal-axis-v {
       position: absolute;
-      background: rgba(139, 155, 180, 0.2);
+      background: rgba(139, 155, 180, 0.22);
       pointer-events: none;
     }
 
@@ -242,18 +238,18 @@
     .gimbal-ring-inner {
       position: absolute;
       inset: 32%;
-      border: 1px solid rgba(139, 155, 180, 0.12);
+      border: 1px solid rgba(139, 155, 180, 0.14);
       border-radius: 50%;
       pointer-events: none;
     }
 
     .gimbal-knob {
-      width: 48px;
-      height: 48px;
+      width: 44px;
+      height: 44px;
       border-radius: 50%;
-      background: radial-gradient(circle at 35% 35%, #4df0ff, #0088aa 70%, #004d66 100%);
+      background: radial-gradient(circle at 35% 35%, #5ff4ff, #0088aa 70%, #004d66 100%);
       border: 2px solid #ffffff;
-      box-shadow: 0 4px 12px rgba(0, 229, 255, 0.55);
+      box-shadow: 0 3px 12px rgba(0, 229, 255, 0.6);
       position: absolute;
       top: 50%;
       left: 50%;
@@ -262,7 +258,7 @@
     }
 
     .gimbal-readout {
-      font-size: 0.62rem;
+      font-size: 0.60rem;
       color: var(--text-muted);
       font-variant-numeric: tabular-nums;
     }
@@ -275,7 +271,7 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 6px;
+      gap: 5px;
       min-width: 0;
     }
 
@@ -285,19 +281,19 @@
       background: #030508;
       border: 3px solid #2e3d56;
       border-radius: 10px;
-      padding: 6px 8px 8px;
-      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.8), inset 0 0 14px rgba(0, 229, 255, 0.08);
+      padding: 5px 7px 7px;
+      box-shadow: 0 8px 26px rgba(0, 0, 0, 0.85), inset 0 0 14px rgba(0, 229, 255, 0.08);
       display: flex;
       flex-direction: column;
-      gap: 4px;
+      gap: 3px;
     }
 
     .oled-bezel-top {
       display: flex;
       justify-content: space-between;
-      font-size: 0.58rem;
+      font-size: 0.56rem;
       color: #6c809a;
-      letter-spacing: 0.8px;
+      letter-spacing: 0.6px;
     }
 
     .canvas-wrap {
@@ -322,17 +318,18 @@
       position: absolute;
       inset: 0;
       background-image:
-        linear-gradient(to right, rgba(0, 0, 0, 0.26) 1px, transparent 1px),
-        linear-gradient(to bottom, rgba(0, 0, 0, 0.26) 1px, transparent 1px);
+        linear-gradient(to right, rgba(0, 0, 0, 0.25) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(0, 0, 0, 0.25) 1px, transparent 1px);
       background-size: calc(100% / 128) calc(100% / 64);
       pointer-events: none;
     }
 
     .quick-flight-bar {
       display: flex;
-      gap: 6px;
+      gap: 5px;
       flex-wrap: wrap;
       justify-content: center;
+      align-items: center;
     }
 
     /* Slide-Over Calibration Drawer */
@@ -351,7 +348,7 @@
     }
 
     .settings-drawer {
-      width: min(380px, 92vw);
+      width: min(370px, 92vw);
       height: 100dvh;
       background: var(--bg-shell);
       border-left: 1px solid var(--border);
@@ -372,7 +369,7 @@
     }
 
     .drawer-title {
-      font-size: 0.85rem;
+      font-size: 0.82rem;
       font-weight: 700;
       color: var(--accent);
     }
@@ -388,7 +385,7 @@
     }
 
     .group-title {
-      font-size: 0.7rem;
+      font-size: 0.68rem;
       font-weight: 700;
       color: var(--amber);
       text-transform: uppercase;
@@ -403,7 +400,7 @@
     .slider-label {
       display: flex;
       justify-content: space-between;
-      font-size: 0.68rem;
+      font-size: 0.66rem;
     }
 
     input[type="range"] {
@@ -422,7 +419,7 @@
       flex: 1;
       text-align: center;
       padding: 5px 4px;
-      font-size: 0.66rem;
+      font-size: 0.65rem;
       border-radius: 4px;
       border: 1px solid var(--border);
       background: #080c12;
@@ -437,27 +434,26 @@
 </head>
 <body>
   <div class="portrait-notice">
-    🔄 Gira el teléfono en horizontal (Landscape) para experiencia de consola FPV
+    🔄 Gira el teléfono en horizontal (Landscape) para volar cómodamente
   </div>
 
   <div class="handheld-layout">
     <!-- Top Compact HUD Bar -->
     <header class="hud-topbar">
       <div class="hud-stats">
-        <span class="hud-metric">PUERTA <b id="uiGate">1/8</b></span>
-        <span class="hud-metric">TIEMPO <b id="uiLapTime" class="amber">00:00.0</b></span>
-        <span class="hud-metric">MEJOR <b id="uiBestLap" class="green">--:--.-</b></span>
+        <span class="hud-metric">GATE <b id="uiGate">1/8</b></span>
+        <span class="hud-metric">LAP <b id="uiLapTime" class="amber">00:00.0</b></span>
         <span class="hud-metric">VEL <b id="uiSpeed">0.0m/s</b></span>
         <span class="hud-metric">ALT <b id="uiAlt">1.8m</b></span>
-        <span class="hud-metric">THR <b id="uiThr">42%</b></span>
+        <span class="hud-metric">P/R <b id="uiAttitude">0° / 0°</b></span>
       </div>
 
       <div class="hud-actions">
-        <button id="btnFlightMode" class="btn-hud active" title="Alternar HORIZON (Asistido) / ACRO Puro">Modo: HORIZON</button>
+        <button id="btnFlightMode" class="btn-hud active" title="Alternar ACRO Puro / STAB">Modo: ACRO</button>
         <button id="btnCamView" class="btn-hud">🎥 FPV</button>
         <button id="btnResetDrone" class="btn-hud">↺ Reset</button>
         <button id="btnFullscreen" class="btn-hud">⛶ Full</button>
-        <button id="btnOpenSettings" class="btn-hud">⚙️ Ajustes</button>
+        <button id="btnOpenSettings" class="btn-hud">⚙️</button>
       </div>
     </header>
 
@@ -465,7 +461,7 @@
     <main class="cockpit-body">
       <!-- Left Self-Centering Gimbal (Throttle + Yaw) -->
       <div class="gimbal-col left">
-        <span class="gimbal-label">EMPUJE (HOVER) / YAW</span>
+        <span class="gimbal-label">IZQ: EMPUJE (ARRIBA/ABAJO) + YAW</span>
         <div id="stickLeft" class="gimbal-pad">
           <div class="gimbal-axis-h"></div>
           <div class="gimbal-axis-v"></div>
@@ -473,7 +469,7 @@
           <div class="gimbal-ring-inner"></div>
           <div id="knobLeft" class="gimbal-knob"></div>
         </div>
-        <span id="readoutLeft" class="gimbal-readout">T:+0.00 Y:+0.00</span>
+        <span id="readoutLeft" class="gimbal-readout">THR: 35% | YAW: 0.00</span>
       </div>
 
       <!-- Center 128x64 Native Monochrome OLED -->
@@ -489,17 +485,17 @@
         </div>
 
         <div class="quick-flight-bar">
-          <button id="btnSound" class="btn-hud">🔇 Audio Motor</button>
-          <button id="btnGridToggle" class="btn-hud active">Retícula OLED</button>
-          <span id="gamepadStatus" style="font-size:0.62rem;color:var(--text-muted);align-self:center;">
-            📱 Multitouch Activo
+          <button id="btnSound" class="btn-hud">🔇 Audio</button>
+          <button id="btnGridToggle" class="btn-hud active">Grid OLED</button>
+          <span id="touchStatus" style="font-size:0.60rem;color:var(--text-muted);">
+            Toca o arrastra ambos joysticks
           </span>
         </div>
       </div>
 
       <!-- Right Self-Centering Gimbal (Pitch + Roll) -->
       <div class="gimbal-col right">
-        <span class="gimbal-label">PITCH (AVANCE) / ROLL</span>
+        <span class="gimbal-label">DER: PITCH (INCLINAR) + ROLL (ALABEO)</span>
         <div id="stickRight" class="gimbal-pad">
           <div class="gimbal-axis-h"></div>
           <div class="gimbal-axis-v"></div>
@@ -507,7 +503,7 @@
           <div class="gimbal-ring-inner"></div>
           <div id="knobRight" class="gimbal-knob"></div>
         </div>
-        <span id="readoutRight" class="gimbal-readout">P:+0.00 R:+0.00</span>
+        <span id="readoutRight" class="gimbal-readout">PIT: 0.00 | ROL: 0.00</span>
       </div>
     </main>
   </div>
@@ -516,7 +512,7 @@
   <div id="settingsBackdrop" class="settings-backdrop">
     <aside class="settings-drawer">
       <div class="drawer-header">
-        <span class="drawer-title">⚙️ Calibración Física & Rates</span>
+        <span class="drawer-title">⚙️ Física FPV & Rates</span>
         <button id="btnCloseSettings" class="btn-hud">✕ Cerrar</button>
       </div>
 
@@ -531,55 +527,60 @@
       </div>
 
       <div class="config-group">
-        <span class="group-title">Cámara & Dinámica Traslacional</span>
+        <span class="group-title">Física, Gravedad & Inercia</span>
 
         <div class="slider-item">
-          <div class="slider-label"><span>Camera Uptilt (°)</span><b id="valUptilt">18°</b></div>
-          <input id="slUptilt" type="range" min="0" max="45" step="1" value="18" />
+          <div class="slider-label"><span>Camera Uptilt (°)</span><b id="valUptilt">20°</b></div>
+          <input id="slUptilt" type="range" min="0" max="45" step="1" value="20" />
         </div>
 
         <div class="slider-item">
-          <div class="slider-label"><span>Empuje Máx (m/s²)</span><b id="valThrust">23.4</b></div>
-          <input id="slThrust" type="range" min="15" max="38" step="0.2" value="23.4" />
+          <div class="slider-label"><span>Neutral Throttle (Centro Stick)</span><b id="valHover">35%</b></div>
+          <input id="slHover" type="range" min="20" max="55" step="1" value="35" />
+        </div>
+
+        <div class="slider-item">
+          <div class="slider-label"><span>Empuje Máx (m/s²)</span><b id="valThrust">26.0</b></div>
+          <input id="slThrust" type="range" min="15" max="42" step="0.5" value="26.0" />
         </div>
 
         <div class="slider-item">
           <div class="slider-label"><span>Gravedad (m/s²)</span><b id="valGravity">9.81</b></div>
-          <input id="slGravity" type="range" min="4.0" max="15.0" step="0.1" value="9.81" />
+          <input id="slGravity" type="range" min="3.0" max="18.0" step="0.1" value="9.81" />
         </div>
 
         <div class="slider-item">
-          <div class="slider-label"><span>Amortiguamiento (Drag)</span><b id="valDrag">0.24</b></div>
-          <input id="slDrag" type="range" min="0.05" max="0.60" step="0.01" value="0.24" />
+          <div class="slider-label"><span>Resistencia Aire (Drag / Inercia)</span><b id="valDrag">0.08</b></div>
+          <input id="slDrag" type="range" min="0.01" max="0.40" step="0.01" value="0.08" />
         </div>
       </div>
 
       <div class="config-group">
-        <span class="group-title">Sensibilidad de Sticks (Touch / Gamepad)</span>
+        <span class="group-title">Rates Acro & Sticks</span>
 
         <div class="slider-item">
-          <div class="slider-label"><span>Rate Pitch / Roll (°/s)</span><b id="valRatePR">260°/s</b></div>
-          <input id="slRatePR" type="range" min="100" max="800" step="10" value="260" />
+          <div class="slider-label"><span>Rate Pitch / Roll (°/s)</span><b id="valRatePR">360°/s</b></div>
+          <input id="slRatePR" type="range" min="120" max="900" step="10" value="360" />
         </div>
 
         <div class="slider-item">
-          <div class="slider-label"><span>Rate Yaw (°/s)</span><b id="valRateYaw">180°/s</b></div>
-          <input id="slRateYaw" type="range" min="80" max="600" step="10" value="180" />
+          <div class="slider-label"><span>Rate Yaw (°/s)</span><b id="valRateYaw">240°/s</b></div>
+          <input id="slRateYaw" type="range" min="90" max="720" step="10" value="240" />
         </div>
 
         <div class="slider-item">
-          <div class="slider-label"><span>Curva Expo</span><b id="valExpo">0.45</b></div>
-          <input id="slExpo" type="range" min="0.0" max="0.85" step="0.05" value="0.45" />
+          <div class="slider-label"><span>Curva Expo</span><b id="valExpo">0.20</b></div>
+          <input id="slExpo" type="range" min="0.0" max="0.80" step="0.05" value="0.20" />
         </div>
 
         <div class="slider-item">
-          <div class="slider-label"><span>Zona Muerta (Deadzone)</span><b id="valDeadzone">0.06</b></div>
-          <input id="slDeadzone" type="range" min="0.00" max="0.25" step="0.01" value="0.06" />
+          <div class="slider-label"><span>Zona Muerta (Deadzone)</span><b id="valDeadzone">0.03</b></div>
+          <input id="slDeadzone" type="range" min="0.00" max="0.20" step="0.01" value="0.03" />
         </div>
       </div>
 
       <button id="btnResetParams" class="btn-hud" style="padding:8px;text-align:center;">
-        Restaurar Valores Recomendados
+        Restaurar Valores por Defecto
       </button>
     </aside>
   </div>
@@ -690,7 +691,8 @@
       '4': [5,5,7,1,1], '5': [7,4,7,1,7], '6': [7,4,7,5,7], '7': [7,1,1,2,2],
       '8': [7,5,7,5,7], '9': [7,5,7,1,7], 'A': [2,5,7,5,5], 'C': [7,4,4,4,7],
       'G': [7,4,5,5,7], 'H': [5,5,7,5,5], 'L': [4,4,4,4,7], 'R': [6,5,6,5,5],
-      'V': [5,5,5,5,2], '/': [1,1,2,4,4], ':': [0,2,0,2,0]
+      'S': [7,4,7,1,7], 'T': [7,2,2,2,2], 'V': [5,5,5,5,2], '/': [1,1,2,4,4],
+      '-': [0,0,7,0,0]
     };
 
     function fbDrawText(str, x, y) {
@@ -733,34 +735,46 @@
     }
 
     /***************************************************************************
-     * 2. MODELO FÍSICO DE VUELO (CONVENCIÓN ESTÁNDAR +X DERECHA, +Y ARRIBA, +Z FRENTE)
+     * 2. MODELO FÍSICO DE VUELO ACRO REAL (GRAVEDAD + INERCIA + CUATERNIONES)
+     *    - Convención mano derecha estándar:
+     *      • +X = Derecha
+     *      • +Y = Arriba
+     *      • -Z = Adelante (Mirando hacia el circuito)
+     *      • Pitch adelante (nariz abajo) = Rotación -X
+     *      • Roll derecha (ala derecha abajo) = Rotación +Z (sobre -Z forward)
+     *      • Yaw derecha = Rotación -Y
      ***************************************************************************/
     const DEG2RAD = Math.PI / 180.0;
+    const RAD2DEG = 180.0 / Math.PI;
     const NEAR_Z = 0.15;
-    const FOCAL_LEN = 70.0;
+    const FOCAL_LEN = 68.0;
 
-    // FlightMode: 'HORIZON' (Híbrido intuitivo en pantalla táctil: auto-estabiliza en el centro y permite flips en los extremos)
-    //             'ACRO'    (Tasas angulares puras tipo Betaflight)
     const simConfig = {
-      camUptiltDeg: 18.0,
-      maxThrustAccel: 23.4, // Hover exacto a ~42% de empuje (9.81 / 23.4 = 0.419)
-      gravity: 9.81,
-      dragLinear: 0.24,
-      dragQuad: 0.018,
-      ratePitchRoll: 260.0,
-      rateYaw: 180.0,
-      expo: 0.45,
-      deadzone: 0.06,
-      mode: 'HORIZON',
+      camUptiltDeg: 20.0,
+      neutralThrottle: 0.35, // 35% en centro (ligeramente menor que hover 37.7% -> siente gravedad real!)
+      maxThrustAccel: 26.0,  // m/s^2 a 100% throttle (Hover real = 9.81 / 26 = 37.7%)
+      gravity: 9.81,         // m/s^2 constante hacia abajo (-Y)
+      dragLinear: 0.08,      // Bajo drag = alta inercia y planeo realista
+      dragQuad: 0.008,
+      ratePitchRoll: 360.0,  // deg/s en Acro
+      rateYaw: 240.0,        // deg/s
+      expo: 0.20,
+      deadzone: 0.03,
+      mode: 'ACRO',          // 'ACRO' por defecto (según especificación del Brief) o 'STAB'
       chaseCam: false
     };
 
     const drone = {
-      px: 0.0, py: 2.0, pz: -10.0,
+      px: 0.0, py: 2.2, pz: -10.0,
       vx: 0.0, vy: 0.0, vz: 0.0,
+      // Velocidades angulares del chasis con inercia rotacional (rad/s)
+      wx: 0.0, wy: 0.0, wz: 0.0,
+      // Cuaternión de orientación del dron respecto al mundo
       qx: 0.0, qy: 0.0, qz: 0.0, qw: 1.0,
-      throttleCmd: 0.42,
-      prevPx: 0.0, prevPy: 2.0, prevPz: -10.0
+      throttleCmd: 0.35,
+      pitchDeg: 0.0,
+      rollDeg: 0.0,
+      prevPx: 0.0, prevPy: 2.2, prevPz: -10.0
     };
 
     function quatNormalize(q) {
@@ -768,6 +782,7 @@
       q.qx /= m; q.qy /= m; q.qz /= m; q.qw /= m;
     }
 
+    // Multiplicación q = q * deltaQ(wx, wy, wz, dt) en espacio local del dron
     function quatIntegrateBodyRates(q, wx, wy, wz, dt) {
       const hx = 0.5 * wx * dt;
       const hy = 0.5 * wy * dt;
@@ -783,6 +798,10 @@
       quatNormalize(q);
     }
 
+    // Matriz 3x3: Columnas son los ejes locales del dron expresados en el mundo:
+    // Col 0 (0,1,2) = Right (+X local)
+    // Col 1 (3,4,5) = Up    (+Y local = Vector de Empuje de las hélices)
+    // Col 2 (6,7,8) = Back  (+Z local; Forward es -Col 2, pero usamos +Z mundo hacia adelante)
     const bodyMat = new Float32Array(9);
     function quatToMatrix(q, out) {
       const x = q.qx, y = q.qy, z = q.qz, w = q.qw;
@@ -791,24 +810,25 @@
       const yy = y * y2, yz = y * z2, zz = z * z2;
       const wx = w * x2, wy = w * y2, wz = w * z2;
 
-      // Columna 0: Right (+X local)
+      // Columna 0: Right (+X)
       out[0] = 1.0 - (yy + zz);
       out[1] = xy + wz;
       out[2] = xz - wy;
 
-      // Columna 1: Up (+Y local / Vector de Empuje)
+      // Columna 1: Up (+Y = Empuje)
       out[3] = xy - wz;
       out[4] = 1.0 - (xx + zz);
       out[5] = yz + wx;
 
-      // Columna 2: Forward (+Z local / Nariz del dron)
+      // Columna 2: Forward (+Z)
       out[6] = xz + wy;
       out[7] = yz - wx;
       out[8] = 1.0 - (xx + yy);
     }
 
     /***************************************************************************
-     * 3. CIRCUITO 3D WIREFRAME DE 8 PUERTAS + CRONÓMETRO
+     * 3. ESCENARIO 3D WIREFRAME: CUADRÍCULA DENSA, PUERTAS Y PILARES CERCANOS
+     *    (Para percibir de inmediato la caída por gravedad, la inercia y el giro)
      ***************************************************************************/
     const worldLines = [];
     const gates = [];
@@ -821,30 +841,30 @@
       worldLines.length = 0;
       gates.length = 0;
 
-      // Cuadrícula de suelo de referencia
-      const gridRange = 70;
-      const gridStep = 10;
+      // Cuadrícula de suelo cada 5 metros para fuerte sensación de velocidad y altura
+      const gridRange = 60;
+      const gridStep = 6;
       for (let i = -gridRange; i <= gridRange; i += gridStep) {
         addLine(i, 0, -gridRange, i, 0, gridRange, true);
         addLine(-gridRange, 0, i, gridRange, 0, i, true);
       }
 
-      // Helipuerto de salida
+      // Pista de despegue bajo el dron (Z = -10)
       addLine(-2, 0.02, -8,  2, 0.02, -8, false);
       addLine(-2, 0.02, -12, 2, 0.02, -12, false);
       addLine(-2, 0.02, -12, -2, 0.02, -8, false);
       addLine( 2, 0.02, -12,  2, 0.02, -8, false);
 
-      // 8 Puertas amplias para vuelo fluido en móvil
+      // Circuito de 8 puertas
       const gateDefs = [
-        { x:   0, y: 2.5, z:   8, yaw:   0, w: 5.2, h: 4.2 },
-        { x:   5, y: 3.0, z:  26, yaw:  22, w: 5.2, h: 4.2 },
-        { x:  22, y: 3.5, z:  40, yaw:  65, w: 5.2, h: 4.2 },
-        { x:  40, y: 2.6, z:  26, yaw: 135, w: 5.2, h: 4.2 },
-        { x:  36, y: 2.4, z:   0, yaw: 195, w: 5.2, h: 4.2 },
-        { x:  18, y: 3.8, z: -20, yaw: 230, w: 5.2, h: 4.2 },
-        { x:  -8, y: 2.8, z: -28, yaw: 285, w: 5.2, h: 4.2 },
-        { x: -12, y: 2.4, z:  -8, yaw: 335, w: 5.2, h: 4.2 }
+        { x:   0, y: 2.5, z:   4, yaw:   0, w: 5.0, h: 4.0 },
+        { x:   4, y: 3.2, z:  22, yaw:  20, w: 5.0, h: 4.0 },
+        { x:  20, y: 3.6, z:  36, yaw:  65, w: 5.0, h: 4.0 },
+        { x:  38, y: 2.6, z:  24, yaw: 135, w: 5.0, h: 4.0 },
+        { x:  34, y: 2.4, z:   0, yaw: 195, w: 5.0, h: 4.0 },
+        { x:  16, y: 3.8, z: -18, yaw: 230, w: 5.0, h: 4.0 },
+        { x:  -8, y: 2.8, z: -26, yaw: 285, w: 5.0, h: 4.0 },
+        { x: -12, y: 2.4, z:  -6, yaw: 335, w: 5.0, h: 4.0 }
       ];
 
       for (let i = 0; i < gateDefs.length; i++) {
@@ -870,6 +890,23 @@
           nx, nz, rx, rz, hw, hh, xL, zL, xR, zR, yBot, yTop
         });
       }
+
+      // Cubos/Torres de referencia espacial cerca del corredor de salida
+      const pillars = [
+        { x: -6, z: -2, h: 5 },
+        { x:  6, z: -2, h: 5 },
+        { x: -8, z: 12, h: 7 },
+        { x: 10, z: 12, h: 7 },
+        { x: 18, z: 15, h: 9 }
+      ];
+      for (const p of pillars) {
+        const s = 0.6;
+        addLine(p.x - s, 0, p.z - s, p.x - s, p.h, p.z - s, false);
+        addLine(p.x + s, 0, p.z - s, p.x + s, p.h, p.z - s, false);
+        addLine(p.x - s, p.h, p.z - s, p.x + s, p.h, p.z - s, false);
+        addLine(p.x - s, p.h, p.z - s, p.x - s, p.h, p.z + s, false);
+        addLine(p.x + s, p.h, p.z - s, p.x + s, p.h, p.z + s, false);
+      }
     }
 
     buildCircuitGeometry();
@@ -877,7 +914,6 @@
     let activeGateIdx = 0;
     let lapRunning = false;
     let lapStartTime = 0;
-    let bestLapMs = null;
     let gateFlashTimer = 0;
 
     function formatTimeShort(ms) {
@@ -905,15 +941,7 @@
           gateFlashTimer = 0.28;
           playGateBeep(activeGateIdx === 0 ? 980 : 740);
           if (activeGateIdx === 0) {
-            const now = performance.now();
-            if (lapRunning) {
-              const lapMs = now - lapStartTime;
-              if (bestLapMs === null || lapMs < bestLapMs) {
-                bestLapMs = lapMs;
-                document.getElementById('uiBestLap').textContent = formatTimeShort(bestLapMs);
-              }
-            }
-            lapStartTime = now;
+            lapStartTime = performance.now();
             lapRunning = true;
           }
           activeGateIdx = (activeGateIdx + 1) % gates.length;
@@ -922,123 +950,165 @@
     }
 
     /***************************************************************************
-     * 4. MULTITOUCH FLOATING GIMBALS (ORIGEN FLOTANTE EN EL PRIMER TOQUE)
-     *    - En cuanto tocas cualquier parte del pad, ese punto es el (0,0) neutral
-     *    - Arrastrar desde ahí produce respuesta inmediata y suave sin saltos
-     *    - Al soltar el dedo, el muelle regresa automáticamente a (0,0) (Hover)
+     * 4. JOYSTICKS MULTITOUCH DIRECTOS AL CENTRO DEL PAD (RESPUESTA INMEDIATA)
+     *    - Tocar cualquier punto del joystick mueve el stick DE INMEDIATO a esa
+     *      posición respecto al centro geométrico del pad (sin tener que arrastrar
+     *      desde cero).
+     *    - Usa un manejador global de Touch + Pointer unificado a prueba de fallos
+     *      para que el stick izquierdo y el derecho funcionen a la vez o por separado.
      ***************************************************************************/
-    let touchLeftX = 0, touchLeftY = 0;
-    let touchRightX = 0, touchRightY = 0;
-
-    function attachFloatingTouchGimbal(padEl, knobEl, onUpdate) {
-      let activeTouchId = null;
-      let originX = 0;
-      let originY = 0;
-
-      function handleDelta(clientX, clientY) {
-        const rect = padEl.getBoundingClientRect();
-        const maxRadius = Math.max(36, rect.width * 0.36);
-
-        const dx = clientX - originX;
-        const dy = clientY - originY;
-
-        // Limitar dentro de círculo unitario para evitar saturación diagonal brusca
-        const dist = Math.hypot(dx, dy);
-        const clampDist = Math.min(dist, maxRadius);
-        const scale = dist > 0.001 ? (clampDist / dist) : 0.0;
-
-        const nx = (dx * scale) / maxRadius;
-        const ny = (-dy * scale) / maxRadius; // +1 hacia arriba
-
-        knobEl.style.left = `${50 + nx * 36}%`;
-        knobEl.style.top  = `${50 - ny * 36}%`;
-        onUpdate(nx, ny);
-      }
-
-      function releaseStick() {
-        activeTouchId = null;
-        padEl.classList.remove('engaged');
-        knobEl.style.left = '50%';
-        knobEl.style.top  = '50%';
-        onUpdate(0.0, 0.0);
-      }
-
-      // Touch Events nativos con seguimiento por identifier (Multitouch independiente)
-      padEl.addEventListener('touchstart', (e) => {
-        e.preventDefault();
-        if (activeTouchId !== null) return;
-        const t = e.changedTouches[0];
-        activeTouchId = t.identifier;
-        originX = t.clientX;
-        originY = t.clientY;
-        padEl.classList.add('engaged');
-        handleDelta(t.clientX, t.clientY);
-      }, { passive: false });
-
-      padEl.addEventListener('touchmove', (e) => {
-        e.preventDefault();
-        if (activeTouchId === null) return;
-        for (let i = 0; i < e.changedTouches.length; i++) {
-          const t = e.changedTouches[i];
-          if (t.identifier === activeTouchId) {
-            handleDelta(t.clientX, t.clientY);
-            break;
-          }
-        }
-      }, { passive: false });
-
-      padEl.addEventListener('touchend', (e) => {
-        e.preventDefault();
-        for (let i = 0; i < e.changedTouches.length; i++) {
-          if (e.changedTouches[i].identifier === activeTouchId) {
-            releaseStick();
-            break;
-          }
-        }
-      }, { passive: false });
-
-      padEl.addEventListener('touchcancel', (e) => {
-        e.preventDefault();
-        releaseStick();
-      }, { passive: false });
-
-      // Soporte para Mouse en PC
-      let mouseDown = false;
-      padEl.addEventListener('mousedown', (e) => {
-        e.preventDefault();
-        mouseDown = true;
-        originX = e.clientX;
-        originY = e.clientY;
-        padEl.classList.add('engaged');
-        handleDelta(e.clientX, e.clientY);
-      });
-
-      window.addEventListener('mousemove', (e) => {
-        if (!mouseDown) return;
-        handleDelta(e.clientX, e.clientY);
-      });
-
-      window.addEventListener('mouseup', () => {
-        if (!mouseDown) return;
-        mouseDown = false;
-        releaseStick();
-      });
-    }
-
+    const padLeftEl = document.getElementById('stickLeft');
+    const padRightEl = document.getElementById('stickRight');
     const knobLeftEl = document.getElementById('knobLeft');
     const knobRightEl = document.getElementById('knobRight');
 
-    attachFloatingTouchGimbal(
-      document.getElementById('stickLeft'),
-      knobLeftEl,
-      (x, y) => { touchLeftX = x; touchLeftY = y; }
-    );
+    let touchLeftX = 0.0, touchLeftY = 0.0;
+    let touchRightX = 0.0, touchRightY = 0.0;
 
-    attachFloatingTouchGimbal(
-      document.getElementById('stickRight'),
-      knobRightEl,
-      (x, y) => { touchRightX = x; touchRightY = y; }
-    );
+    function computePadDeflection(padEl, clientX, clientY) {
+      const rect = padEl.getBoundingClientRect();
+      const cx = rect.left + rect.width * 0.5;
+      const cy = rect.top + rect.height * 0.5;
+      const maxR = Math.max(28, rect.width * 0.42);
+
+      const dx = clientX - cx;
+      const dy = clientY - cy;
+
+      const dist = Math.hypot(dx, dy);
+      const scale = dist > maxR ? (maxR / dist) : 1.0;
+
+      const nx = (dx * scale) / maxR;
+      const ny = (-dy * scale) / maxR; // +1 arriba, -1 abajo
+      return { nx, ny };
+    }
+
+    function updateKnobVisual(padEl, knobEl, nx, ny, engaged) {
+      knobEl.style.left = `${50 + nx * 38}%`;
+      knobEl.style.top  = `${50 - ny * 38}%`;
+      padEl.classList.toggle('engaged', engaged);
+    }
+
+    // Seguimiento multitouch global: evalúa todos los dedos activos en pantalla
+    // y los asigna al stick izquierdo o derecho según su posición o inicio de toque
+    const touchAssignment = new Map(); // identifier -> 'left' | 'right'
+
+    function processAllTouches(e) {
+      // Si el toque ocurre en botones del HUD o en el panel de ajustes, no interceptar
+      if (e.target && (e.target.closest('.hud-topbar') || e.target.closest('.settings-backdrop') || e.target.closest('.quick-flight-bar'))) {
+        return;
+      }
+      e.preventDefault();
+
+      // Registrar nuevos toques según en qué mitad de la pantalla o pad cayeron
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const t = e.changedTouches[i];
+        if (e.type === 'touchstart' && !touchAssignment.has(t.identifier)) {
+          const rL = padLeftEl.getBoundingClientRect();
+          const rR = padRightEl.getBoundingClientRect();
+          const margin = 35;
+
+          if (t.clientX >= rL.left - margin && t.clientX <= rL.right + margin &&
+              t.clientY >= rL.top - margin  && t.clientY <= rL.bottom + margin) {
+            touchAssignment.set(t.identifier, 'left');
+          } else if (t.clientX >= rR.left - margin && t.clientX <= rR.right + margin &&
+                     t.clientY >= rR.top - margin  && t.clientY <= rR.bottom + margin) {
+            touchAssignment.set(t.identifier, 'right');
+          } else if (t.clientX < window.innerWidth * 0.42) {
+            touchAssignment.set(t.identifier, 'left');
+          } else if (t.clientX > window.innerWidth * 0.58) {
+            touchAssignment.set(t.identifier, 'right');
+          }
+        }
+      }
+
+      // Limpiar toques que terminaron
+      if (e.type === 'touchend' || e.type === 'touchcancel') {
+        for (let i = 0; i < e.changedTouches.length; i++) {
+          touchAssignment.delete(e.changedTouches[i].identifier);
+        }
+      }
+
+      let leftFound = false;
+      let rightFound = false;
+
+      for (let i = 0; i < e.touches.length; i++) {
+        const t = e.touches[i];
+        const side = touchAssignment.get(t.identifier);
+        if (side === 'left' && !leftFound) {
+          leftFound = true;
+          const { nx, ny } = computePadDeflection(padLeftEl, t.clientX, t.clientY);
+          touchLeftX = nx;
+          touchLeftY = ny;
+          updateKnobVisual(padLeftEl, knobLeftEl, nx, ny, true);
+        } else if (side === 'right' && !rightFound) {
+          rightFound = true;
+          const { nx, ny } = computePadDeflection(padRightEl, t.clientX, t.clientY);
+          touchRightX = nx;
+          touchRightY = ny;
+          updateKnobVisual(padRightEl, knobRightEl, nx, ny, true);
+        }
+      }
+
+      if (!leftFound) {
+        touchLeftX = 0.0;
+        touchLeftY = 0.0;
+        updateKnobVisual(padLeftEl, knobLeftEl, 0, 0, false);
+      }
+      if (!rightFound) {
+        touchRightX = 0.0;
+        touchRightY = 0.0;
+        updateKnobVisual(padRightEl, knobRightEl, 0, 0, false);
+      }
+
+      document.getElementById('touchStatus').textContent =
+        `Touch L:${leftFound ? 'ON' : 'OFF'} R:${rightFound ? 'ON' : 'OFF'}`;
+    }
+
+    window.addEventListener('touchstart',  processAllTouches, { passive: false });
+    window.addEventListener('touchmove',   processAllTouches, { passive: false });
+    window.addEventListener('touchend',    processAllTouches, { passive: false });
+    window.addEventListener('touchcancel', processAllTouches, { passive: false });
+
+    // Soporte de Mouse en PC para probar cualquiera de los dos sticks con clic y arrastrar
+    let activeMouseSide = null;
+    padLeftEl.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      activeMouseSide = 'left';
+      const { nx, ny } = computePadDeflection(padLeftEl, e.clientX, e.clientY);
+      touchLeftX = nx; touchLeftY = ny;
+      updateKnobVisual(padLeftEl, knobLeftEl, nx, ny, true);
+    });
+
+    padRightEl.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      activeMouseSide = 'right';
+      const { nx, ny } = computePadDeflection(padRightEl, e.clientX, e.clientY);
+      touchRightX = nx; touchRightY = ny;
+      updateKnobVisual(padRightEl, knobRightEl, nx, ny, true);
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (activeMouseSide === 'left') {
+        const { nx, ny } = computePadDeflection(padLeftEl, e.clientX, e.clientY);
+        touchLeftX = nx; touchLeftY = ny;
+        updateKnobVisual(padLeftEl, knobLeftEl, nx, ny, true);
+      } else if (activeMouseSide === 'right') {
+        const { nx, ny } = computePadDeflection(padRightEl, e.clientX, e.clientY);
+        touchRightX = nx; touchRightY = ny;
+        updateKnobVisual(padRightEl, knobRightEl, nx, ny, true);
+      }
+    });
+
+    window.addEventListener('mouseup', () => {
+      if (activeMouseSide === 'left') {
+        touchLeftX = 0; touchLeftY = 0;
+        updateKnobVisual(padLeftEl, knobLeftEl, 0, 0, false);
+      } else if (activeMouseSide === 'right') {
+        touchRightX = 0; touchRightY = 0;
+        updateKnobVisual(padRightEl, knobRightEl, 0, 0, false);
+      }
+      activeMouseSide = null;
+    });
 
     const keyState = {};
     window.addEventListener('keydown', (e) => {
@@ -1066,11 +1136,9 @@
       let ry = touchRightY;
 
       const pads = navigator.getGamepads ? navigator.getGamepads() : [];
-      let gpActive = false;
       for (let i = 0; i < pads.length; i++) {
         const gp = pads[i];
         if (gp && gp.connected) {
-          gpActive = true;
           const gLx = gp.axes[0] || 0;
           const gLy = -(gp.axes[1] || 0);
           const gRx = gp.axes[2] || 0;
@@ -1084,17 +1152,14 @@
         }
       }
 
-      document.getElementById('gamepadStatus').textContent =
-        gpActive ? '🎮 Gamepad Conectado' : '📱 Multitouch Activo';
-
-      if (keyState['KeyW']) ly = 0.80;
-      if (keyState['KeyS']) ly = -0.80;
-      if (keyState['KeyA']) lx = -0.70;
-      if (keyState['KeyD']) lx = 0.70;
-      if (keyState['ArrowUp'])    ry = 0.70;
-      if (keyState['ArrowDown'])  ry = -0.70;
-      if (keyState['ArrowLeft'])  rx = -0.70;
-      if (keyState['ArrowRight']) rx = 0.70;
+      if (keyState['KeyW']) ly = 0.85;
+      if (keyState['KeyS']) ly = -0.85;
+      if (keyState['KeyA']) lx = -0.75;
+      if (keyState['KeyD']) lx = 0.75;
+      if (keyState['ArrowUp'])    ry = 0.75;
+      if (keyState['ArrowDown'])  ry = -0.75;
+      if (keyState['ArrowLeft'])  rx = -0.75;
+      if (keyState['ArrowRight']) rx = 0.75;
 
       rawStick.leftX = lx;
       rawStick.leftY = ly;
@@ -1102,23 +1167,13 @@
       rawStick.rightY = ry;
 
       document.getElementById('readoutLeft').textContent =
-        `T:${ly >= 0 ? '+' : ''}${ly.toFixed(2)} Y:${lx >= 0 ? '+' : ''}${lx.toFixed(2)}`;
+        `THR:${Math.round(drone.throttleCmd * 100)}% Y:${lx >= 0 ? '+' : ''}${lx.toFixed(2)}`;
       document.getElementById('readoutRight').textContent =
-        `P:${ry >= 0 ? '+' : ''}${ry.toFixed(2)} R:${rx >= 0 ? '+' : ''}${rx.toFixed(2)}`;
+        `PIT:${ry >= 0 ? '+' : ''}${ry.toFixed(2)} ROL:${rx >= 0 ? '+' : ''}${rx.toFixed(2)}`;
     }
 
     /***************************************************************************
-     * 5. DINÁMICA DE VUELO REVISADA Y CORREGIDA
-     *    - En nuestra matriz de rotación:
-     *      • Pitch adelante (empujar stick derecho ARRIBA, pitchCmd > 0):
-     *        Gira la nariz (+Z) hacia abajo (-Y) -> velocidad angular wx < 0.
-     *        Al inclinarse hacia adelante, el vector de empuje (+Y local) apunta a +Z
-     *        y el dron acelera hacia ADELANTE.
-     *      • Roll derecha (empujar stick derecho DERECHA, rollCmd > 0):
-     *        Inclina el lado derecho (+X) hacia abajo (-Y) -> velocidad angular wz > 0.
-     *        El vector de empuje (+Y local) apunta hacia +X y el dron se desplaza a la DERECHA.
-     *      • Yaw derecha (empujar stick izquierdo DERECHA, yawCmd > 0):
-     *        Gira la nariz (+Z) hacia la derecha (+X) -> velocidad angular wy > 0.
+     * 5. PASO DE FÍSICA ACRO REAL CON INERCIA TRASLACIONAL Y ROTACIONAL
      ***************************************************************************/
     function stepPhysics(dt) {
       drone.prevPx = drone.px;
@@ -1129,64 +1184,75 @@
       const expo = simConfig.expo;
 
       const yawCmd   = applyDeadzoneAndExpo(rawStick.leftX, dz, expo);
-      const thrStick = applyDeadzoneAndExpo(rawStick.leftY, dz, 0.25);
+      const thrStick = applyDeadzoneAndExpo(rawStick.leftY, dz, 0.15);
       const rollCmd  = applyDeadzoneAndExpo(rawStick.rightX, dz, expo);
       const pitchCmd = applyDeadzoneAndExpo(rawStick.rightY, dz, expo);
 
-      // Hover neutral exacto donde Empuje vertical = Gravedad
-      const hoverThr = Math.min(0.75, simConfig.gravity / simConfig.maxThrustAccel);
+      // Mapeo de mando autocentrado para el acelerador:
+      // Centro = neutralThrottle (35%), Arriba = 100%, Abajo = 0% (caída libre por gravedad!)
+      const baseThr = simConfig.neutralThrottle;
       if (thrStick >= 0) {
-        drone.throttleCmd = hoverThr + thrStick * (1.0 - hoverThr);
+        drone.throttleCmd = baseThr + thrStick * (1.0 - baseThr);
       } else {
-        drone.throttleCmd = hoverThr * (1.0 + thrStick);
+        drone.throttleCmd = baseThr * (1.0 + thrStick);
       }
 
       quatToMatrix(drone, bodyMat);
+
+      // Cálculo de tasas angulares objetivo (rad/s)
+      let targetWx = 0, targetWy = 0, targetWz = 0;
 
       if (simConfig.mode === 'ACRO') {
-        // Modo ACRO puro (tasas angulares directas)
-        const wx = -pitchCmd * simConfig.ratePitchRoll * DEG2RAD;
-        const wy =  yawCmd   * simConfig.rateYaw       * DEG2RAD;
-        const wz =  rollCmd  * simConfig.ratePitchRoll * DEG2RAD;
-        quatIntegrateBodyRates(drone, wx, wy, wz, dt);
+        // Modo ACRO puro: el stick derecho comanda velocidad angular de Pitch y Roll directamente.
+        // - Pitch adelante (pitchCmd > 0): inclina nariz (+Z) hacia abajo (-Y) -> wx positivo en nuestra matriz
+        //   Verificación matemática: Con q = (sin(a/2), 0, 0, cos(a/2)):
+        //   Columna 1 (Up)     = (0, cos(a), -sin(a))
+        //   Columna 2 (Forward)= (0, sin(a),  cos(a))
+        //   Para que la nariz (+Z) baje (Forward.y < 0) y el vector Up apunte hacia adelante (+Z, Up.z > 0),
+        //   necesitamos sin(a) < 0, es decir, rotación wx NEGATIVA: wx = -pitchCmd * rate.
+        // - Roll derecha (rollCmd > 0): inclina ala derecha (+X) hacia abajo (-Y).
+        //   Con q = (0, 0, sin(b/2), cos(b/2)):
+        //   Columna 0 (Right) = (cos(b), sin(b), 0)
+        //   Columna 1 (Up)    = (-sin(b), cos(b), 0)
+        //   Para que Right.y < 0 (ala derecha baje) y Up.x > 0 (empuje hacia +X derecha),
+        //   necesitamos sin(b) < 0, es decir, rotación wz NEGATIVA: wz = -rollCmd * rate.
+        // - Yaw derecha (yawCmd > 0): gira nariz (+Z) hacia la derecha (+X).
+        //   Con q = (0, sin(c/2), 0, cos(c/2)):
+        //   Columna 2 (Forward) = (sin(c), 0, cos(c)).
+        //   Para que Forward.x > 0, necesitamos sin(c) > 0 -> wy POSITIVA: wy = +yawCmd * rate.
+        targetWx = -pitchCmd * simConfig.ratePitchRoll * DEG2RAD;
+        targetWy =  yawCmd   * simConfig.rateYaw       * DEG2RAD;
+        targetWz = -rollCmd  * simConfig.ratePitchRoll * DEG2RAD;
       } else {
-        // Modo HORIZON (Híbrido ideal para sticks táctiles):
-        // En ángulos moderados controla inclinación y auto-nivela al soltar;
-        // en los extremos del stick (>80%) permite giros acrobáticos completos.
-        // bodyMat[4] = Up.y, bodyMat[3] = Up.x, bodyMat[5] = Up.z
-        const currentRoll  = Math.atan2(bodyMat[3], bodyMat[4]); // + cuando inclina a la derecha
-        const currentPitch = Math.atan2(bodyMat[5], bodyMat[4]); // + cuando inclina hacia adelante
+        // Modo STAB (Auto-Level con límite de 50 grados)
+        const curRoll  = Math.atan2(bodyMat[3], bodyMat[4]); // + cuando Up.x > 0 (inclinado a la derecha)
+        const curPitch = Math.atan2(bodyMat[5], bodyMat[4]); // + cuando Up.z > 0 (inclinado hacia adelante)
+        const maxAngle = 50.0 * DEG2RAD;
+        const errPitch = (pitchCmd * maxAngle) - curPitch;
+        const errRoll  = (rollCmd  * maxAngle) - curRoll;
 
-        const maxTilt = 42.0 * DEG2RAD;
-        const targetRoll  = rollCmd * maxTilt;
-        const targetPitch = pitchCmd * maxTilt;
-
-        const stickDeflection = Math.max(Math.abs(rollCmd), Math.abs(pitchCmd));
-        const acroBlend = Math.max(0.0, (stickDeflection - 0.75) / 0.25);
-
-        const levelWx = -(targetPitch - currentPitch) * 7.5;
-        const levelWz =  (targetRoll  - currentRoll)  * 7.5;
-
-        const acroWx = -pitchCmd * simConfig.ratePitchRoll * DEG2RAD;
-        const acroWz =  rollCmd  * simConfig.ratePitchRoll * DEG2RAD;
-
-        const wx = levelWx * (1.0 - acroBlend) + acroWx * acroBlend;
-        const wz = levelWz * (1.0 - acroBlend) + acroWz * acroBlend;
-        // Coordinación suave de Yaw con Roll para giros muy naturales en móvil
-        const wy = (yawCmd * simConfig.rateYaw * DEG2RAD) + (rollCmd * 0.45);
-
-        quatIntegrateBodyRates(drone, wx, wy, wz, dt);
+        targetWx = -errPitch * 6.5;
+        targetWz = -errRoll  * 6.5;
+        targetWy =  yawCmd * simConfig.rateYaw * DEG2RAD;
       }
 
+      // Inercia rotacional de los motores (respuesta rápida pero con masa física real)
+      const rotResponse = Math.min(1.0, 18.0 * dt);
+      drone.wx += (targetWx - drone.wx) * rotResponse;
+      drone.wy += (targetWy - drone.wy) * rotResponse;
+      drone.wz += (targetWz - drone.wz) * rotResponse;
+
+      quatIntegrateBodyRates(drone, drone.wx, drone.wy, drone.wz, dt);
       quatToMatrix(drone, bodyMat);
 
-      // Compensación automática sutil de sustentación al inclinar (evita caer brusco al avanzar)
-      const tiltBoost = simConfig.mode === 'HORIZON'
-        ? (1.0 / Math.max(0.65, bodyMat[4]))
-        : 1.0;
+      // Extraer ángulos de actitud para telemetría y horizonte artificial
+      drone.rollDeg  = Math.atan2(bodyMat[3], bodyMat[4]) * RAD2DEG;
+      drone.pitchDeg = Math.atan2(bodyMat[5], bodyMat[4]) * RAD2DEG;
 
-      const effectiveThr = Math.min(1.0, drone.throttleCmd * (0.65 + 0.35 * tiltBoost));
-      const thrustMag = effectiveThr * simConfig.maxThrustAccel;
+      // Dinámica Traslacional Pura:
+      // F_total = Empuje * Up_vector + Gravedad (0, -g, 0) - Drag * Velocidad
+      // ¡SIN anulaciones artificiales de velocidad vertical ni auto-thrust!
+      const thrustAccel = drone.throttleCmd * simConfig.maxThrustAccel;
 
       const upX = bodyMat[3];
       const upY = bodyMat[4];
@@ -1195,35 +1261,38 @@
       const speed = Math.hypot(drone.vx, drone.vy, drone.vz);
       const drag = simConfig.dragLinear + simConfig.dragQuad * speed;
 
-      const ax = upX * thrustMag - drone.vx * drag;
-      const ay = upY * thrustMag - simConfig.gravity - drone.vy * drag;
-      const az = upZ * thrustMag - drone.vz * drag;
+      const ax = upX * thrustAccel - drone.vx * drag;
+      const ay = upY * thrustAccel - simConfig.gravity - drone.vy * drag;
+      const az = upZ * thrustAccel - drone.vz * drag;
 
+      // Integración de velocidad (Inercia traslacional real)
       drone.vx += ax * dt;
       drone.vy += ay * dt;
       drone.vz += az * dt;
 
-      // Amortiguamiento vertical extra cerca del hover cuando el stick izquierdo está centrado
-      if (Math.abs(thrStick) < 0.05) {
-        drone.vy *= (1.0 - 1.8 * dt);
-      }
-
+      // Integración de posición
       drone.px += drone.vx * dt;
       drone.py += drone.vy * dt;
       drone.pz += drone.vz * dt;
 
-      if (drone.py < 0.30) {
-        drone.py = 0.30;
-        if (drone.vy < 0) drone.vy = 0;
-        drone.vx *= 0.90;
-        drone.vz *= 0.90;
+      // Colisión con el suelo con rebote amortiguado y fricción
+      if (drone.py < 0.25) {
+        drone.py = 0.25;
+        if (drone.vy < -1.5) {
+          drone.vy = -drone.vy * 0.25; // Pequeño rebote si cae fuerte
+        } else if (drone.vy < 0) {
+          drone.vy = 0;
+        }
+        // Fricción de patines contra el suelo
+        drone.vx *= Math.max(0, 1.0 - 3.5 * dt);
+        drone.vz *= Math.max(0, 1.0 - 3.5 * dt);
       }
 
       checkGateCrossing();
     }
 
     /***************************************************************************
-     * 6. CÁMARA FPV + PROYECCIÓN PERSPECTIVA 128x64
+     * 6. CÁMARA FPV + HORIZONTE ARTIFICIAL 1-BIT + PROYECCIÓN 128x64
      ***************************************************************************/
     const camMat = new Float32Array(9);
     let camPosX = 0, camPosY = 0, camPosZ = 0;
@@ -1231,6 +1300,10 @@
     function updateCameraTransform() {
       quatToMatrix(drone, bodyMat);
 
+      // Camera Uptilt: inclina la cámara hacia arriba (rotación positiva alrededor de +X local)
+      // Con nuestra matriz, rotar hacia arriba (+Y) desde Forward (+Z) combina:
+      // CamForward = cos(tilt)*BodyForward + sin(tilt)*BodyUp
+      // CamUp      = cos(tilt)*BodyUp      - sin(tilt)*BodyForward
       const tiltRad = simConfig.camUptiltDeg * DEG2RAD;
       const cosT = Math.cos(tiltRad);
       const sinT = Math.sin(tiltRad);
@@ -1252,9 +1325,9 @@
         camPosY = drone.py;
         camPosZ = drone.pz;
       } else {
-        camPosX = drone.px - camMat[6] * 3.4 + camMat[3] * 1.0;
-        camPosY = Math.max(0.4, drone.py - camMat[7] * 3.4 + camMat[4] * 1.0);
-        camPosZ = drone.pz - camMat[8] * 3.4 + camMat[5] * 1.0;
+        camPosX = drone.px - camMat[6] * 3.5 + camMat[3] * 1.1;
+        camPosY = Math.max(0.35, drone.py - camMat[7] * 3.5 + camMat[4] * 1.1);
+        camPosZ = drone.pz - camMat[8] * 3.5 + camMat[5] * 1.1;
       }
     }
 
@@ -1271,7 +1344,7 @@
       let cz1 = dx1 * camMat[6] + dy1 * camMat[7] + dz1 * camMat[8];
 
       if (cz0 < NEAR_Z && cz1 < NEAR_Z) return;
-      if (cz0 > 85.0 && cz1 > 85.0) return;
+      if (cz0 > 80.0 && cz1 > 80.0) return;
 
       if (cz0 < NEAR_Z) {
         const t = (NEAR_Z - cz0) / (cz1 - cz0);
@@ -1299,7 +1372,7 @@
 
     function renderChaseDroneModel() {
       if (!simConfig.chaseCam) return;
-      const s = 0.5;
+      const s = 0.55;
       const pts = [[-s,0,-s],[s,0,s],[-s,0,s],[s,0,-s]].map(([lx,ly,lz]) => [
         drone.px + lx * bodyMat[0] + ly * bodyMat[3] + lz * bodyMat[6],
         drone.py + lx * bodyMat[1] + ly * bodyMat[4] + lz * bodyMat[7],
@@ -1310,28 +1383,50 @@
     }
 
     function renderOSD() {
+      // 1. Barra izquierda: Nivel de Acelerador (Throttle) + marca de Hover real
       const barX = 2, barTop = 10, barBot = 54, barH = barBot - barTop;
       fbDrawLine(barX, barTop, barX, barBot);
+
+      const realHoverThr = Math.min(1.0, simConfig.gravity / simConfig.maxThrustAccel);
+      const hoverY = (barBot - Math.round(realHoverThr * barH)) | 0;
+      fbSetPixel(barX + 2, hoverY);
+      fbSetPixel(barX + 3, hoverY);
+
       const thrY = (barBot - Math.round(drone.throttleCmd * barH)) | 0;
       for (let y = thrY; y <= barBot; y += 2) {
         fbSetPixel(barX + 1, y);
         fbSetPixel(barX + 2, y);
       }
 
+      // 2. Barra derecha: Altitud + Indicador de Velocidad Vertical (Variómetro)
       const altBarX = 125;
       fbDrawLine(altBarX, barTop, altBarX, barBot);
       const normAlt = Math.min(1.0, Math.max(0.0, drone.py / 15.0));
       const altY = (barBot - Math.round(normAlt * barH)) | 0;
       fbDrawLine(altBarX - 3, altY, altBarX, altY);
 
-      // Retícula central + Horizonte Artificial Dinámico en 1-bit
+      // 3. Horizonte Artificial Dinámico en el centro de la pantalla OLED
+      // Permite ver de inmediato cómo responde el joystick derecho (Pitch y Roll)
       const cx = 64, cy = 32;
+      const rollRad = drone.rollDeg * DEG2RAD;
+      const pitchOffset = Math.max(-22, Math.min(22, (drone.pitchDeg - simConfig.camUptiltDeg) * 0.45));
+      const cosR = Math.cos(rollRad);
+      const sinR = Math.sin(rollRad);
+      const hLen = 14;
+
+      const hx0 = cx - cosR * hLen;
+      const hy0 = (cy + pitchOffset) - sinR * hLen;
+      const hx1 = cx + cosR * hLen;
+      const hy1 = (cy + pitchOffset) + sinR * hLen;
+      fbDrawDashedLine(hx0, hy0, hx1, hy1, 1);
+
+      // Cruz central fija del visor FPV
       fbSetPixel(cx - 2, cy);
       fbSetPixel(cx + 2, cy);
       fbSetPixel(cx, cy - 2);
       fbSetPixel(cx, cy + 2);
 
-      // Flecha superior hacia la puerta activa
+      // 4. Brújula superior hacia la puerta objetivo
       const g = gates[activeGateIdx];
       const toGx = g.cx - drone.px, toGz = g.cz - drone.pz;
       const camRightDot = toGx * camMat[0] + toGz * camMat[2];
@@ -1341,10 +1436,10 @@
       fbDrawLine(ptrX - 2, 2, ptrX, 4);
       fbDrawLine(ptrX + 2, 2, ptrX, 4);
 
-      const hSpeed = Math.hypot(drone.vx, drone.vz);
-      fbDrawText(simConfig.mode === 'ACRO' ? 'ACR' : 'HRZ', 2, 2);
+      const totalSpeed = Math.hypot(drone.vx, drone.vy, drone.vz);
+      fbDrawText(simConfig.mode === 'ACRO' ? 'ACR' : 'STB', 2, 2);
       fbDrawText(`G${activeGateIdx + 1}/${gates.length}`, 104, 2);
-      fbDrawText(`V${Math.round(hSpeed)}`, 6, 58);
+      fbDrawText(`V${Math.round(totalSpeed)}`, 6, 58);
       fbDrawText(`A${Math.round(drone.py)}`, 108, 58);
 
       if (gateFlashTimer > 0) {
@@ -1378,8 +1473,8 @@
           renderLine3D(ixR, iyB, izR, ixR, iyT, izR, false);
           renderLine3D(ixL, iyT, izL, ixR, iyT, izR, false);
           renderLine3D(ixL, iyB, izL, ixR, iyB, izR, false);
-          renderLine3D(g.cx, g.yTop + 1.6, g.cz, g.cx - g.rx * 1.0, g.yTop + 2.8, g.cz - g.rz * 1.0, false);
-          renderLine3D(g.cx, g.yTop + 1.6, g.cz, g.cx + g.rx * 1.0, g.yTop + 2.8, g.cz + g.rz * 1.0, false);
+          renderLine3D(g.cx, g.yTop + 1.5, g.cz, g.cx - g.rx * 1.0, g.yTop + 2.7, g.cz - g.rz * 1.0, false);
+          renderLine3D(g.cx, g.yTop + 1.5, g.cz, g.cx + g.rx * 1.0, g.yTop + 2.7, g.cz + g.rz * 1.0, false);
         }
       }
 
@@ -1389,7 +1484,7 @@
     }
 
     /***************************************************************************
-     * 7. AUDIO MOTOR + CONTROLES UI
+     * 7. AUDIO DE MOTORES & UI EVENT HANDLERS
      ***************************************************************************/
     let audioCtx = null, motorOsc1 = null, motorOsc2 = null, motorGain = null, soundEnabled = false;
 
@@ -1412,21 +1507,21 @@
       const btn = document.getElementById('btnSound');
       if (soundEnabled) {
         audioCtx.resume();
-        btn.textContent = '🔊 Audio Motor';
+        btn.textContent = '🔊 Audio';
         btn.classList.add('active');
       } else {
         motorGain.gain.setTargetAtTime(0.0, audioCtx.currentTime, 0.05);
-        btn.textContent = '🔇 Audio Motor';
+        btn.textContent = '🔇 Audio';
         btn.classList.remove('active');
       }
     }
 
     function updateMotorAudio() {
       if (!soundEnabled || !audioCtx) return;
-      const baseFreq = 130 + drone.throttleCmd * 420;
+      const baseFreq = 120 + drone.throttleCmd * 450;
       motorOsc1.frequency.setTargetAtTime(baseFreq, audioCtx.currentTime, 0.03);
       motorOsc2.frequency.setTargetAtTime(baseFreq * 1.49, audioCtx.currentTime, 0.03);
-      motorGain.gain.setTargetAtTime(0.025 + drone.throttleCmd * 0.045, audioCtx.currentTime, 0.04);
+      motorGain.gain.setTargetAtTime(0.025 + drone.throttleCmd * 0.05, audioCtx.currentTime, 0.04);
     }
 
     function playGateBeep(freq = 800) {
@@ -1444,8 +1539,9 @@
     }
 
     function resetDrone() {
-      drone.px = 0.0; drone.py = 2.0; drone.pz = -10.0;
+      drone.px = 0.0; drone.py = 2.2; drone.pz = -10.0;
       drone.vx = 0.0; drone.vy = 0.0; drone.vz = 0.0;
+      drone.wx = 0.0; drone.wy = 0.0; drone.wz = 0.0;
       drone.qx = 0.0; drone.qy = 0.0; drone.qz = 0.0; drone.qw = 1.0;
       drone.prevPx = drone.px; drone.prevPy = drone.py; drone.prevPz = drone.pz;
       activeGateIdx = 0;
@@ -1457,14 +1553,14 @@
     document.getElementById('btnSound').addEventListener('click', toggleMotorAudio);
 
     document.getElementById('btnFlightMode').addEventListener('click', (e) => {
-      simConfig.mode = simConfig.mode === 'HORIZON' ? 'ACRO' : 'HORIZON';
+      simConfig.mode = simConfig.mode === 'ACRO' ? 'STAB' : 'ACRO';
       e.currentTarget.textContent = `Modo: ${simConfig.mode}`;
-      e.currentTarget.classList.toggle('active', simConfig.mode === 'HORIZON');
+      e.currentTarget.classList.toggle('active', simConfig.mode === 'ACRO');
     });
 
     document.getElementById('btnCamView').addEventListener('click', (e) => {
       simConfig.chaseCam = !simConfig.chaseCam;
-      e.currentTarget.textContent = simConfig.chaseCam ? '🎥 3ra Persona' : '🎥 FPV';
+      e.currentTarget.textContent = simConfig.chaseCam ? '🎥 3raP' : '🎥 FPV';
       e.currentTarget.classList.toggle('active', simConfig.chaseCam);
     });
 
@@ -1508,30 +1604,32 @@
       const vEl = document.getElementById(valId);
       el.addEventListener('input', () => {
         const v = parseFloat(el.value);
-        simConfig[key] = v;
+        simConfig[key] = key === 'neutralThrottle' ? v / 100.0 : v;
         vEl.textContent = fmt(v);
       });
     }
 
-    bindSlider('slUptilt',   'valUptilt',   'camUptiltDeg',   v => `${v}°`);
-    bindSlider('slThrust',   'valThrust',   'maxThrustAccel', v => v.toFixed(1));
-    bindSlider('slGravity',  'valGravity',  'gravity',        v => v.toFixed(2));
-    bindSlider('slDrag',     'valDrag',     'dragLinear',     v => v.toFixed(2));
-    bindSlider('slRatePR',   'valRatePR',   'ratePitchRoll',  v => `${v}°/s`);
-    bindSlider('slRateYaw',  'valRateYaw',  'rateYaw',        v => `${v}°/s`);
-    bindSlider('slExpo',     'valExpo',     'expo',           v => v.toFixed(2));
-    bindSlider('slDeadzone', 'valDeadzone', 'deadzone',       v => v.toFixed(2));
+    bindSlider('slUptilt',   'valUptilt',   'camUptiltDeg',    v => `${v}°`);
+    bindSlider('slHover',    'valHover',    'neutralThrottle', v => `${v}%`);
+    bindSlider('slThrust',   'valThrust',   'maxThrustAccel',  v => v.toFixed(1));
+    bindSlider('slGravity',  'valGravity',  'gravity',         v => v.toFixed(2));
+    bindSlider('slDrag',     'valDrag',     'dragLinear',      v => v.toFixed(2));
+    bindSlider('slRatePR',   'valRatePR',   'ratePitchRoll',   v => `${v}°/s`);
+    bindSlider('slRateYaw',  'valRateYaw',  'rateYaw',         v => `${v}°/s`);
+    bindSlider('slExpo',     'valExpo',     'expo',            v => v.toFixed(2));
+    bindSlider('slDeadzone', 'valDeadzone', 'deadzone',        v => v.toFixed(2));
 
     document.getElementById('btnResetParams').addEventListener('click', () => {
-      document.getElementById('slUptilt').value = 18;
-      document.getElementById('slThrust').value = 23.4;
+      document.getElementById('slUptilt').value = 20;
+      document.getElementById('slHover').value = 35;
+      document.getElementById('slThrust').value = 26.0;
       document.getElementById('slGravity').value = 9.81;
-      document.getElementById('slDrag').value = 0.24;
-      document.getElementById('slRatePR').value = 260;
-      document.getElementById('slRateYaw').value = 180;
-      document.getElementById('slExpo').value = 0.45;
-      document.getElementById('slDeadzone').value = 0.06;
-      ['slUptilt','slThrust','slGravity','slDrag','slRatePR','slRateYaw','slExpo','slDeadzone']
+      document.getElementById('slDrag').value = 0.08;
+      document.getElementById('slRatePR').value = 360;
+      document.getElementById('slRateYaw').value = 240;
+      document.getElementById('slExpo').value = 0.20;
+      document.getElementById('slDeadzone').value = 0.03;
+      ['slUptilt','slHover','slThrust','slGravity','slDrag','slRatePR','slRateYaw','slExpo','slDeadzone']
         .forEach(id => document.getElementById(id).dispatchEvent(new Event('input')));
     });
 
@@ -1568,7 +1666,8 @@
       document.getElementById('uiGate').textContent = `${activeGateIdx + 1}/${gates.length}`;
       document.getElementById('uiSpeed').textContent = `${speed.toFixed(1)}m/s`;
       document.getElementById('uiAlt').textContent = `${drone.py.toFixed(1)}m`;
-      document.getElementById('uiThr').textContent = `${Math.round(drone.throttleCmd * 100)}%`;
+      document.getElementById('uiAttitude').textContent =
+        `${Math.round(drone.pitchDeg)}°/${Math.round(drone.rollDeg)}°`;
 
       fpsFrames++;
       if (now - fpsClock >= 500) {
