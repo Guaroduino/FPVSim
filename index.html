@@ -6,19 +6,24 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="mobile-web-app-capable" content="yes" />
-  <meta name="theme-color" content="#0d111a" />
-  <title>ESP32-S3 Retro-Go Handheld — Firmware & Multi-Game SDK (128×64)</title>
+  <meta name="theme-color" content="#121318" />
+  <title>RETRO-GO // ESP32-S3 N16R8 Handheld Console</title>
   <style>
     :root {
-      --shell-bg: #181f2c;
-      --shell-edge: #2b374f;
-      --bezel-bg: #070a10;
-      --accent: #00e5ff;
-      --amber: #ffb300;
-      --green: #00e676;
-      --red: #ff5252;
-      --text: #e6edf3;
-      --muted: #8b9bb4;
+      --case-main: #252730;
+      --case-dark: #181a20;
+      --case-highlight: #383b47;
+      --bezel-black: #0a0b0e;
+      --rg-red: #e53935;
+      --rg-gold: #ffb300;
+      --rg-cyan: #00e5ff;
+      --rg-green: #00e676;
+      --btn-a: #d32f2f;
+      --btn-b: #f57c00;
+      --btn-x: #1976d2;
+      --btn-y: #388e3c;
+      --text: #eceff4;
+      --muted: #9aa5b4;
     }
 
     * {
@@ -37,7 +42,7 @@
       overflow: hidden;
       position: fixed;
       inset: 0;
-      background: #080b11;
+      background: #090a0d;
       color: var(--text);
       font-family: 'JetBrains Mono', 'Consolas', monospace;
       touch-action: none;
@@ -46,107 +51,137 @@
       align-items: center;
     }
 
-    /* Vertical Handheld Console Shell (GameBoy / Retro-Go Format) */
-    .console-body {
+    /* Classic Retro Handheld Vertical Shell (ODROID-GO / GameBoy / Anbernic Style) */
+    .retrogo-shell {
       width: 100%;
-      max-width: 440px;
+      max-width: 430px;
       height: 100dvh;
       max-height: 920px;
-      background: linear-gradient(165deg, #212b3d 0%, #141a26 60%, #0e131d 100%);
-      border: 2px solid var(--shell-edge);
-      border-radius: 26px;
+      background: linear-gradient(175deg, #2d303b 0%, #20222a 65%, #17181f 100%);
+      border: 3px solid #3c404f;
+      border-radius: 22px 22px 38px 38px;
       padding: env(safe-area-inset-top, 8px) 12px env(safe-area-inset-bottom, 10px);
       display: flex;
       flex-direction: column;
       justify-content: space-between;
       gap: 6px;
-      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.85), inset 0 1px 2px rgba(255, 255, 255, 0.12);
+      box-shadow:
+        0 20px 60px rgba(0, 0, 0, 0.9),
+        inset 0 2px 3px rgba(255, 255, 255, 0.15),
+        inset 0 -6px 14px rgba(0, 0, 0, 0.6);
       position: relative;
     }
 
-    @media (max-width: 460px) {
-      .console-body {
+    @media (max-width: 450px) {
+      .retrogo-shell {
         border-radius: 0;
         border: none;
         max-height: 100dvh;
       }
     }
 
-    /* Top Hardware Status Strip */
-    .hw-header {
+    /* Molded Top Groove & Power/SD Indicators */
+    .shell-top-groove {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 4px 6px;
-      background: rgba(8, 12, 18, 0.65);
-      border: 1px solid #27344a;
-      border-radius: 8px;
-      font-size: 0.62rem;
+      padding: 3px 8px;
+      background: #16181f;
+      border: 1px solid #323644;
+      border-radius: 6px;
+      font-size: 0.58rem;
       flex-shrink: 0;
     }
 
-    .hw-badge {
+    .led-cluster {
       display: flex;
       align-items: center;
       gap: 6px;
     }
 
-    .led-dot {
+    .led {
       width: 7px;
       height: 7px;
       border-radius: 50%;
-      background: var(--green);
-      box-shadow: 0 0 6px var(--green);
+      background: var(--rg-green);
+      box-shadow: 0 0 6px var(--rg-green);
     }
 
-    .hw-controls {
+    .led.sd-act {
+      background: var(--rg-gold);
+      box-shadow: 0 0 6px var(--rg-gold);
+      opacity: 0.35;
+      transition: opacity 0.08s;
+    }
+
+    .led.sd-act.blink {
+      opacity: 1;
+    }
+
+    .top-hw-pills {
       display: flex;
       gap: 4px;
     }
 
-    .mini-btn {
-      background: #172133;
+    .pill-btn {
+      background: #232631;
       color: var(--text);
-      border: 1px solid #2e405e;
+      border: 1px solid #3e4354;
       border-radius: 4px;
-      padding: 3px 6px;
+      padding: 2px 6px;
       font-family: inherit;
-      font-size: 0.60rem;
+      font-size: 0.58rem;
       font-weight: 700;
       cursor: pointer;
     }
 
-    .mini-btn.active {
-      border-color: var(--accent);
-      color: var(--accent);
+    .pill-btn.active {
+      border-color: var(--rg-gold);
+      color: var(--rg-gold);
     }
 
-    /* OLED 128x64 Screen Bezel */
-    .screen-bezel {
-      background: var(--bezel-bg);
-      border: 3px solid #2b3952;
-      border-radius: 12px;
-      padding: 8px 10px 10px;
-      box-shadow: inset 0 0 18px rgba(0, 0, 0, 0.95), 0 4px 14px rgba(0, 0, 0, 0.5);
+    /* Retro-Go Screen Lens & Bezel */
+    .screen-lens {
+      background: var(--bezel-black);
+      border: 4px solid #14161c;
+      border-radius: 10px 10px 18px 10px;
+      padding: 7px 10px 8px;
+      box-shadow:
+        inset 0 0 20px rgba(0, 0, 0, 1),
+        0 3px 0 rgba(255, 255, 255, 0.07);
       display: flex;
       flex-direction: column;
-      gap: 5px;
+      gap: 4px;
       flex-shrink: 0;
     }
 
-    .bezel-top-info {
+    .lens-header {
       display: flex;
       justify-content: space-between;
-      font-size: 0.56rem;
-      color: #6b7d99;
-      letter-spacing: 0.5px;
+      align-items: center;
+      font-size: 0.54rem;
+      color: #7c8594;
+      letter-spacing: 0.8px;
     }
 
-    .oled-viewport {
+    .rg-stripe {
+      display: inline-flex;
+      gap: 3px;
+      align-items: center;
+    }
+
+    .rg-stripe i {
+      width: 10px;
+      height: 3px;
+      display: inline-block;
+      border-radius: 1px;
+    }
+
+    .oled-container {
       width: 100%;
       aspect-ratio: 2 / 1;
-      background: #04070b;
-      border: 1px solid #1c283a;
+      background: #040609;
+      border: 1px solid #222630;
       position: relative;
       overflow: hidden;
     }
@@ -159,35 +194,51 @@
       display: block;
     }
 
-    .oled-viewport.pixel-grid::after {
+    .oled-container.pixel-grid::after {
       content: "";
       position: absolute;
       inset: 0;
       background-image:
-        linear-gradient(to right, rgba(0, 0, 0, 0.25) 1px, transparent 1px),
-        linear-gradient(to bottom, rgba(0, 0, 0, 0.25) 1px, transparent 1px);
+        linear-gradient(to right, rgba(0, 0, 0, 0.26) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(0, 0, 0, 0.26) 1px, transparent 1px);
       background-size: calc(100% / 128) calc(100% / 64);
       pointer-events: none;
     }
 
-    .bezel-bottom-info {
+    .lens-branding {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      font-size: 0.60rem;
-      color: var(--accent);
+      padding-top: 2px;
     }
 
-    /* Middle Section: 4 Physical Buttons (SELECT, START/MENU, B, A) + L3/R3 Clicks */
-    .mid-controls-deck {
+    .rg-logo-text {
+      font-size: 0.68rem;
+      font-weight: 900;
+      font-style: italic;
+      letter-spacing: 1.2px;
+      color: #d8dee9;
+    }
+
+    .rg-logo-text span {
+      color: var(--rg-red);
+    }
+
+    .rg-sub-status {
+      font-size: 0.56rem;
+      color: var(--rg-gold);
+    }
+
+    /* Controls Deck: System Pills + 4 Retro Buttons + Dual Sticks with L3/R3 */
+    .controls-deck {
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      gap: 7px;
       flex-shrink: 0;
     }
 
-    /* System & L3/R3 Click Row */
-    .shoulder-click-row {
+    /* Retro-Go System Row: L3, SELECT, START/MENU (In-Game OSD), R3 */
+    .sys-row {
       display: grid;
       grid-template-columns: 1fr auto auto 1fr;
       gap: 6px;
@@ -195,73 +246,80 @@
     }
 
     .hw-btn {
-      background: linear-gradient(180deg, #273449 0%, #192231 100%);
-      border: 2px solid #384b69;
-      color: var(--text);
-      border-radius: 10px;
       font-family: inherit;
-      font-weight: 700;
+      font-weight: 800;
+      cursor: pointer;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      cursor: pointer;
-      box-shadow: 0 3px 0 #0d121b, 0 4px 8px rgba(0,0,0,0.45);
-      transition: transform 0.05s;
+      transition: transform 0.04s;
     }
 
     .hw-btn.pressed {
       transform: translateY(2px);
-      box-shadow: 0 1px 0 #0d121b;
-      border-color: var(--accent);
-      background: #1b2d42;
-      color: var(--accent);
+      filter: brightness(1.25);
     }
 
-    .btn-click-stick {
-      height: 36px;
-      font-size: 0.64rem;
+    .btn-l3r3 {
+      height: 34px;
+      background: #1c1f28;
+      border: 2px solid #3c4254;
+      border-radius: 8px;
+      color: var(--rg-cyan);
+      font-size: 0.60rem;
+      box-shadow: 0 3px 0 #0e1015;
     }
 
-    .btn-sys {
-      height: 32px;
-      padding: 0 10px;
-      border-radius: 16px;
-      font-size: 0.58rem;
-      color: var(--amber);
-      border-color: #4b5c78;
+    .btn-pill-sys {
+      height: 28px;
+      padding: 0 11px;
+      background: #181a22;
+      border: 2px solid #454b5e;
+      border-radius: 14px;
+      color: #cfd6e2;
+      font-size: 0.56rem;
+      letter-spacing: 0.5px;
+      box-shadow: 0 2px 0 #0c0d12;
     }
 
-    /* Main Action Buttons Row (4 Tactile Buttons: Y/1, X/2, B, A or Quick Game Switch) */
-    .action-buttons-row {
+    .btn-pill-sys.menu-btn {
+      border-color: var(--rg-red);
+      color: var(--rg-gold);
+    }
+
+    /* 4 Face Buttons (Y, X, B, A) with Retro-Go Color Coding */
+    .face-buttons-row {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
       gap: 8px;
-      padding: 2px 4px;
+      padding: 0 2px;
     }
 
-    .btn-action {
+    .btn-face {
       height: 44px;
-      border-radius: 12px;
-      font-size: 0.78rem;
+      border-radius: 22px;
+      background: radial-gradient(circle at 35% 30%, #373b49, #1d2029);
+      border: 2px solid #484e61;
+      color: #fff;
+      font-size: 0.80rem;
+      box-shadow: 0 4px 0 #0e1015, 0 5px 10px rgba(0,0,0,0.5);
     }
 
-    .btn-action small {
-      font-size: 0.52rem;
-      color: var(--muted);
-      font-weight: 500;
+    .btn-face small {
+      font-size: 0.48rem;
+      color: #b0b8c8;
+      font-weight: 600;
+      margin-top: -1px;
     }
 
-    .btn-action.btn-a {
-      border-color: #00b8d4;
-    }
+    .btn-face.btn-y { border-color: var(--btn-y); }
+    .btn-face.btn-x { border-color: var(--btn-x); }
+    .btn-face.btn-b { border-color: var(--btn-b); }
+    .btn-face.btn-a { border-color: var(--btn-a); }
 
-    .btn-action.btn-b {
-      border-color: #ff5252;
-    }
-
-    /* Bottom Dual Analog Joysticks Section */
-    .dual-sticks-deck {
+    /* Dual Analog Thumbsticks Zone */
+    .dual-sticks-zone {
       flex: 1;
       min-height: 150px;
       display: grid;
@@ -272,7 +330,7 @@
       padding: 2px 0;
     }
 
-    .stick-module {
+    .stick-well {
       width: 100%;
       height: 100%;
       display: flex;
@@ -285,118 +343,114 @@
     .stick-canvas {
       width: min(100%, 172px, 28dvh);
       aspect-ratio: 1 / 1;
-      background: radial-gradient(circle at center, #141d2e 0%, #090d15 100%);
-      border: 2px solid #2e405e;
-      border-radius: 18px;
+      background: radial-gradient(circle at center, #181b24 0%, #0d0f14 100%);
+      border: 2px solid #353a4a;
+      border-radius: 50%;
       touch-action: none;
       display: block;
-      box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.9), 0 4px 12px rgba(0, 0, 0, 0.5);
+      box-shadow: inset 0 4px 16px rgba(0, 0, 0, 0.95), 0 2px 6px rgba(255, 255, 255, 0.05);
     }
 
     .stick-canvas.engaged {
-      border-color: var(--accent);
-      box-shadow: 0 0 12px rgba(0, 229, 255, 0.3);
+      border-color: var(--rg-gold);
+      box-shadow: inset 0 4px 16px rgba(0,0,0,0.95), 0 0 12px rgba(255, 179, 0, 0.35);
     }
 
-    .stick-caption {
-      font-size: 0.56rem;
+    .stick-telemetry {
+      font-size: 0.54rem;
       color: var(--muted);
       font-variant-numeric: tabular-nums;
-      text-align: center;
     }
   </style>
 </head>
 <body>
-  <div class="console-body">
-    <!-- 1. Top ESP32-S3 N16R8 Hardware Header -->
-    <header class="hw-header">
-      <div class="hw-badge">
-        <span class="led-dot"></span>
-        <span><b>ESP32-S3 N16R8</b> (16MB / 8MB PSRAM)</span>
+  <div class="retrogo-shell">
+    <!-- 1. Top Hardware Bar (PWR, SD Activity LED, Display & Sound toggles) -->
+    <header class="shell-top-groove">
+      <div class="led-cluster">
+        <span class="led" title="Power ON"></span>
+        <span>PWR</span>
+        <span id="sdLed" class="led sd-act" title="SPI Flash / SD Activity"></span>
+        <span>SD/ROM</span>
+        <span style="color:#7c8594;margin-left:4px;">ESP32-S3 N16R8</span>
       </div>
-      <div class="hw-controls">
-        <button id="btnColorCycle" class="mini-btn">🎨 OLED</button>
-        <button id="btnAudioToggle" class="mini-btn">🔇 Audio</button>
-        <button id="btnGridToggle" class="mini-btn active">Grid</button>
+      <div class="top-hw-pills">
+        <button id="btnPalette" class="pill-btn">🎨 PAL</button>
+        <button id="btnAudio" class="pill-btn">🔇 SND</button>
+        <button id="btnGrid" class="pill-btn active">GRID</button>
       </div>
     </header>
 
-    <!-- 2. 128x64 Monochrome OLED Screen Bezel -->
-    <section class="screen-bezel">
-      <div class="bezel-top-info">
-        <span id="uiCurrentAppTitle">RETRO-GO LAUNCHER v1.0</span>
-        <span id="uiFpsCounter">60 FPS | 1KB VRAM</span>
+    <!-- 2. Retro-Go Screen Lens (128x64 Native 1-Bit OLED) -->
+    <section class="screen-lens">
+      <div class="lens-header">
+        <div class="rg-stripe">
+          <i style="background:#e53935"></i>
+          <i style="background:#ffb300"></i>
+          <i style="background:#00e676"></i>
+          <i style="background:#00e5ff"></i>
+          <span style="margin-left:4px;">DOT MATRIX 128×64</span>
+        </div>
+        <span id="uiFpsBattery">60FPS | BAT 98%</span>
       </div>
 
-      <div id="oledViewport" class="oled-viewport pixel-grid">
+      <div id="oledContainer" class="oled-container pixel-grid">
         <canvas id="oledCanvas" width="128" height="64"></canvas>
       </div>
 
-      <div class="bezel-bottom-info">
-        <span id="uiControlsHint">Stick: Mover | A: Abrir | MENU: Salir</span>
-        <span id="uiTelemetryMini">ADC 12-Bit OK</span>
+      <div class="lens-branding">
+        <div class="rg-logo-text">RETRO<span>-GO</span> <small style="font-size:0.50rem;color:#8b9bb4;font-style:normal;">FW v1.42-S3</small></div>
+        <div id="uiHintBar" class="rg-sub-status">STICK:NAV | A:RUN | MENU:OSD</div>
       </div>
     </section>
 
-    <!-- 3. Tactile Buttons Deck: L3/R3 Stick Clicks + 4 Physical Console Buttons -->
-    <section class="mid-controls-deck">
-      <!-- Row 1: L3 (Left Stick Click), SELECT, START/MENU, R3 (Right Stick Click) -->
-      <div class="shoulder-click-row">
-        <button class="hw-btn btn-click-stick" data-btn="L3">
-          <span>L3 CLICK</span>
-        </button>
-        <button class="hw-btn btn-sys" data-btn="SELECT">
-          <span>SELECT</span>
-        </button>
-        <button class="hw-btn btn-sys" data-btn="MENU">
-          <span>🏠 MENU</span>
-        </button>
-        <button class="hw-btn btn-click-stick" data-btn="R3">
-          <span>R3 CLICK</span>
-        </button>
+    <!-- 3. Retro-Go Controls Deck -->
+    <section class="controls-deck">
+      <!-- Row 1: L3 Click, SELECT (Tab/Filter), MENU (Retro-Go In-Game OSD), R3 Click -->
+      <div class="sys-row">
+        <button class="hw-btn btn-l3r3" data-btn="L3">L3 CLICK</button>
+        <button class="hw-btn btn-pill-sys" data-btn="SELECT">SELECT</button>
+        <button class="hw-btn btn-pill-sys menu-btn" data-btn="MENU">★ MENU</button>
+        <button class="hw-btn btn-l3r3" data-btn="R3">R3 CLICK</button>
       </div>
 
-      <!-- Row 2: 4 Physical Face Buttons (Y, X, B, A) -->
-      <div class="action-buttons-row">
-        <button class="hw-btn btn-action" data-btn="Y">
+      <!-- Row 2: 4 Colored Retro Action Buttons (Y, X, B, A) -->
+      <div class="face-buttons-row">
+        <button class="hw-btn btn-face btn-y" data-btn="Y">
           <span>Y</span>
-          <small id="lblBtnY">CAM / MODO</small>
+          <small id="lblY">FAV/MOD</small>
         </button>
-        <button class="hw-btn btn-action" data-btn="X">
+        <button class="hw-btn btn-face btn-x" data-btn="X">
           <span>X</span>
-          <small id="lblBtnX">RESET / NITRO</small>
+          <small id="lblX">INFO/RST</small>
         </button>
-        <button class="hw-btn btn-action btn-b" data-btn="B">
+        <button class="hw-btn btn-face btn-b" data-btn="B">
           <span>B</span>
-          <small id="lblBtnB">FRENO / ATRÁS</small>
+          <small id="lblB">BACK/DRFT</small>
         </button>
-        <button class="hw-btn btn-action btn-a" data-btn="A">
+        <button class="hw-btn btn-face btn-a" data-btn="A">
           <span>A</span>
-          <small id="lblBtnA">ACCIÓN / GAS</small>
+          <small id="lblA">BOOT/GAS</small>
         </button>
       </div>
     </section>
 
-    <!-- 4. Dual Self-Centering Analog Joysticks (Mode 2 / Twin-Stick) -->
-    <section class="dual-sticks-deck">
-      <div class="stick-module">
+    <!-- 4. Dual Analog Joysticks (Circular Molded Wells) -->
+    <section class="dual-sticks-zone">
+      <div class="stick-well">
         <canvas id="stickLeft" class="stick-canvas" width="200" height="200"></canvas>
-        <span id="readoutLeft" class="stick-caption">LX:+0.00 LY:+0.00 (L3:0)</span>
+        <span id="readoutLeft" class="stick-telemetry">ADC-L: 2048,2048 [L3:0]</span>
       </div>
-
-      <div class="stick-module">
+      <div class="stick-well">
         <canvas id="stickRight" class="stick-canvas" width="200" height="200"></canvas>
-        <span id="readoutRight" class="stick-caption">RX:+0.00 RY:+0.00 (R3:0)</span>
+        <span id="readoutRight" class="stick-telemetry">ADC-R: 2048,2048 [R3:0]</span>
       </div>
     </section>
   </div>
 
   <script>
     /***************************************************************************
-     * 1. CAPA DE ABSTRACCIÓN DE HARDWARE (HAL) — ESP32-S3 (128x64 1-BIT)
-     *    - Framebuffer estático de 1.024 bytes (`frameBuffer`)
-     *    - Primitivas gráficas 1-bit: píxel, línea Bresenham con recorte,
-     *      rectángulos, círculos y texto bitmap 3x5 / 5x7
+     * 1. HARDWARE ABSTRACTION LAYER (HAL) — 128x64 1-BIT (1024 BYTES VRAM)
      ***************************************************************************/
     const SCREEN_W = 128;
     const SCREEN_H = 64;
@@ -408,55 +462,54 @@
     const oledImgData = oledCtx.createImageData(SCREEN_W, SCREEN_H);
     const rgbaPixels = oledImgData.data;
 
-    const OLED_PALETTES = [
-      { name: 'Blanco Ice', r: 232, g: 252, b: 255 },
-      { name: 'Cyan SSD',   r: 0,   g: 229, b: 255 },
-      { name: 'Ámbar Retro',r: 255, g: 179, b: 0   },
-      { name: 'Verde CRT',  r: 0,   g: 230, b: 118 }
+    const PALETTES = [
+      { name: 'OLED WHITE', r: 235, g: 250, b: 255, bgR: 4,  bgG: 6,  bgB: 9  },
+      { name: 'RETRO AMBER',r: 255, g: 179, b: 0,   bgR: 10, bgG: 6,  bgB: 2  },
+      { name: 'DMG GREEN',  r: 155, g: 188, b: 15,  bgR: 15, bgG: 56, bgB: 15 },
+      { name: 'SSD CYAN',   r: 0,   g: 229, b: 255, bgR: 3,  bgG: 8,  bgB: 14 }
     ];
-    let currentPaletteIdx = 0;
-    const oledBgRGB = { r: 4, g: 7, b: 11 };
+    let paletteIdx = 0;
+
+    function blinkSdLed() {
+      const el = document.getElementById('sdLed');
+      el.classList.add('blink');
+      setTimeout(() => el.classList.remove('blink'), 120);
+    }
 
     function fbClear() {
       frameBuffer.fill(0);
     }
 
     function fbSetPixel(x, y, color = 1) {
-      const ix = x | 0;
-      const iy = y | 0;
+      const ix = x | 0, iy = y | 0;
       if (ix < 0 || ix >= SCREEN_W || iy < 0 || iy >= SCREEN_H) return;
       const bitIndex = (iy << 7) + ix;
-      if (color) {
-        frameBuffer[bitIndex >> 3] |= (1 << (bitIndex & 7));
-      } else {
-        frameBuffer[bitIndex >> 3] &= ~(1 << (bitIndex & 7));
-      }
+      if (color) frameBuffer[bitIndex >> 3] |= (1 << (bitIndex & 7));
+      else frameBuffer[bitIndex >> 3] &= ~(1 << (bitIndex & 7));
     }
 
     function fbRect(x, y, w, h, fill = false, color = 1) {
       const x0 = x | 0, y0 = y | 0, rw = w | 0, rh = h | 0;
       if (fill) {
         for (let py = y0; py < y0 + rh; py++) {
-          for (let px = x0; px < x0 + rw; px++) {
-            fbSetPixel(px, py, color);
-          }
+          for (let px = x0; px < x0 + rw; px++) fbSetPixel(px, py, color);
         }
       } else {
-        fbDrawLine(x0, y0, x0 + rw - 1, y0);
-        fbDrawLine(x0, y0 + rh - 1, x0 + rw - 1, y0 + rh - 1);
-        fbDrawLine(x0, y0, x0, y0 + rh - 1);
-        fbDrawLine(x0 + rw - 1, y0, x0 + rw - 1, y0 + rh - 1);
+        fbDrawLine(x0, y0, x0 + rw - 1, y0, 0, color);
+        fbDrawLine(x0, y0 + rh - 1, x0 + rw - 1, y0 + rh - 1, 0, color);
+        fbDrawLine(x0, y0, x0, y0 + rh - 1, 0, color);
+        fbDrawLine(x0 + rw - 1, y0, x0 + rw - 1, y0 + rh - 1, 0, color);
       }
     }
 
-    function fbCircle(cx, cy, r) {
+    function fbCircle(cx, cy, r, color = 1) {
       let x = r | 0, y = 0, err = 0;
       const x0 = cx | 0, y0 = cy | 0;
       while (x >= y) {
-        fbSetPixel(x0 + x, y0 + y); fbSetPixel(x0 + y, y0 + x);
-        fbSetPixel(x0 - y, y0 + x); fbSetPixel(x0 - x, y0 + y);
-        fbSetPixel(x0 - x, y0 - y); fbSetPixel(x0 - y, y0 - x);
-        fbSetPixel(x0 + y, y0 - x); fbSetPixel(x0 + x, y0 - y);
+        fbSetPixel(x0 + x, y0 + y, color); fbSetPixel(x0 + y, y0 + x, color);
+        fbSetPixel(x0 - y, y0 + x, color); fbSetPixel(x0 - x, y0 + y, color);
+        fbSetPixel(x0 - x, y0 - y, color); fbSetPixel(x0 - y, y0 - x, color);
+        fbSetPixel(x0 + y, y0 - x, color); fbSetPixel(x0 + x, y0 - y, color);
         y += 1;
         if (err <= 0) err += 2 * y + 1;
         if (err > 0) { x -= 1; err -= 2 * x + 1; }
@@ -465,53 +518,36 @@
 
     const CLIP_LEFT = 1, CLIP_RIGHT = 2, CLIP_BOTTOM = 4, CLIP_TOP = 8;
     function computeOutCode(x, y) {
-      let code = 0;
-      if (x < 0) code |= CLIP_LEFT;
-      else if (x >= SCREEN_W) code |= CLIP_RIGHT;
-      if (y < 0) code |= CLIP_TOP;
-      else if (y >= SCREEN_H) code |= CLIP_BOTTOM;
-      return code;
+      let c = 0;
+      if (x < 0) c |= CLIP_LEFT; else if (x >= SCREEN_W) c |= CLIP_RIGHT;
+      if (y < 0) c |= CLIP_TOP;  else if (y >= SCREEN_H) c |= CLIP_BOTTOM;
+      return c;
     }
 
-    function fbDrawLine(x0, y0, x1, y1, dashedMask = 0) {
-      let out0 = computeOutCode(x0, y0);
-      let out1 = computeOutCode(x1, y1);
-      let accept = false;
-
+    function fbDrawLine(x0, y0, x1, y1, dashedMask = 0, color = 1) {
+      let out0 = computeOutCode(x0, y0), out1 = computeOutCode(x1, y1), accept = false;
       while (true) {
         if (!(out0 | out1)) { accept = true; break; }
-        else if (out0 & out1) { break; }
+        else if (out0 & out1) break;
         else {
           let x = 0, y = 0;
           const out = out0 ? out0 : out1;
-          if (out & CLIP_BOTTOM) {
-            x = x0 + (x1 - x0) * (SCREEN_H - 1 - y0) / (y1 - y0);
-            y = SCREEN_H - 1;
-          } else if (out & CLIP_TOP) {
-            x = x0 + (x1 - x0) * (0 - y0) / (y1 - y0);
-            y = 0;
-          } else if (out & CLIP_RIGHT) {
-            y = y0 + (y1 - y0) * (SCREEN_W - 1 - x0) / (x1 - x0);
-            x = SCREEN_W - 1;
-          } else if (out & CLIP_LEFT) {
-            y = y0 + (y1 - y0) * (0 - x0) / (x1 - x0);
-            x = 0;
-          }
+          if (out & CLIP_BOTTOM) { x = x0 + (x1 - x0) * (SCREEN_H - 1 - y0) / (y1 - y0); y = SCREEN_H - 1; }
+          else if (out & CLIP_TOP) { x = x0 + (x1 - x0) * (0 - y0) / (y1 - y0); y = 0; }
+          else if (out & CLIP_RIGHT) { y = y0 + (y1 - y0) * (SCREEN_W - 1 - x0) / (x1 - x0); x = SCREEN_W - 1; }
+          else if (out & CLIP_LEFT) { y = y0 + (y1 - y0) * (0 - x0) / (x1 - x0); x = 0; }
           if (out === out0) { x0 = x; y0 = y; out0 = computeOutCode(x0, y0); }
           else { x1 = x; y1 = y; out1 = computeOutCode(x1, y1); }
         }
       }
-
       if (!accept) return;
-
       let ix0 = x0 | 0, iy0 = y0 | 0;
       const ix1 = x1 | 0, iy1 = y1 | 0;
       const dx = Math.abs(ix1 - ix0), sx = ix0 < ix1 ? 1 : -1;
       const dy = -Math.abs(iy1 - iy0), sy = iy0 < iy1 ? 1 : -1;
       let err = dx + dy, step = 0;
-
       while (true) {
-        if (!dashedMask || (step & dashedMask) === 0) fbSetPixel(ix0, iy0);
+        if (!dashedMask || (step & dashedMask) === 0) fbSetPixel(ix0, iy0, color);
         if (ix0 === ix1 && iy0 === iy1) break;
         const e2 = err << 1;
         if (e2 >= dy) { err += dy; ix0 += sx; }
@@ -520,7 +556,6 @@
       }
     }
 
-    // Fuente compacta 3x5 para textos en pantalla 128x64
     const FONT_3X5 = {
       '0': [7,5,5,5,7], '1': [2,6,2,2,7], '2': [7,1,7,4,7], '3': [7,1,7,1,7],
       '4': [5,5,7,1,1], '5': [7,4,7,1,7], '6': [7,4,7,5,7], '7': [7,1,1,2,2],
@@ -533,7 +568,8 @@
       'U': [5,5,5,5,7], 'V': [5,5,5,5,2], 'W': [5,5,7,7,5], 'X': [5,5,2,5,5],
       'Y': [5,5,2,2,2], 'Z': [7,1,2,4,7],
       ':': [0,2,0,2,0], '-': [0,0,7,0,0], '/': [1,1,2,4,4], '.': [0,0,0,0,2],
-      '+': [0,2,7,2,0], '>': [4,2,1,2,4], '<': [1,2,4,2,1], '%': [5,1,2,4,5]
+      '+': [0,2,7,2,0], '>': [4,2,1,2,4], '<': [1,2,4,2,1], '%': [5,1,2,4,5],
+      '[': [7,4,4,4,7], ']': [7,1,1,1,7], '*': [5,2,7,2,5]
     };
 
     function fbDrawText(str, x, y, color = 1) {
@@ -555,7 +591,7 @@
     }
 
     function fbPresentToCanvas() {
-      const pal = OLED_PALETTES[currentPaletteIdx];
+      const pal = PALETTES[paletteIdx];
       let pIdx = 0;
       for (let byteIdx = 0; byteIdx < FB_BYTES; byteIdx++) {
         const b = frameBuffer[byteIdx];
@@ -566,9 +602,9 @@
             rgbaPixels[pIdx + 2] = pal.b;
             rgbaPixels[pIdx + 3] = 255;
           } else {
-            rgbaPixels[pIdx]     = oledBgRGB.r;
-            rgbaPixels[pIdx + 1] = oledBgRGB.g;
-            rgbaPixels[pIdx + 2] = oledBgRGB.b;
+            rgbaPixels[pIdx]     = pal.bgR;
+            rgbaPixels[pIdx + 1] = pal.bgG;
+            rgbaPixels[pIdx + 2] = pal.bgB;
             rgbaPixels[pIdx + 3] = 255;
           }
           pIdx += 4;
@@ -578,12 +614,12 @@
     }
 
     /***************************************************************************
-     * 2. AUDIO SINTETIZADO DE CONSOLA (BEEPER / MOTOR PWM)
+     * 2. AUDIO SINTETIZADO RETRO-GO
      ***************************************************************************/
     let audioCtx = null;
     let soundEnabled = false;
 
-    function playTone(freq = 600, dur = 0.08, type = 'square', vol = 0.05) {
+    function playTone(freq = 600, dur = 0.06, type = 'square', vol = 0.04) {
       if (!soundEnabled) return;
       if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       if (audioCtx.state === 'suspended') audioCtx.resume();
@@ -600,8 +636,7 @@
     }
 
     /***************************************************************************
-     * 3. ENTRADAS DE LA CONSOLA: 2 JOYSTICKS + L3/R3 + 4 BOTONES + MENU/SELECT
-     *    - Doble clic sobre cualquier joystick también activa L3 / R3
+     * 3. ENTRADAS HARDWARE: 2 JOYSTICKS + L3/R3 + Y/X/B/A + SELECT/MENU
      ***************************************************************************/
     const stickLeftCanvas = document.getElementById('stickLeft');
     const stickRightCanvas = document.getElementById('stickRight');
@@ -618,40 +653,28 @@
       justPressed(k) { return this.btn[k] && !this.prevBtn[k]; }
     };
 
-    const touchTrack = {
-      leftId: null,
-      rightId: null,
-      lastTapLeft: 0,
-      lastTapRight: 0
-    };
+    const touchTrack = { leftId: null, rightId: null, lastTapLeft: 0, lastTapRight: 0 };
 
     function computeStickXY(canvasEl, clientX, clientY) {
       const rect = canvasEl.getBoundingClientRect();
       const cx = rect.left + rect.width * 0.5;
       const cy = rect.top + rect.height * 0.5;
       const maxR = Math.max(24, rect.width * 0.40);
-      const dx = clientX - cx;
-      const dy = clientY - cy;
+      const dx = clientX - cx, dy = clientY - cy;
       const dist = Math.hypot(dx, dy);
       const scale = dist > maxR ? (maxR / dist) : 1.0;
-      return {
-        x: (dx * scale) / maxR,
-        y: (-dy * scale) / maxR
-      };
+      return { x: (dx * scale) / maxR, y: (-dy * scale) / maxR };
     }
 
     function handleStickTouches(e) {
-      // No interceptar botones superiores ni botones de acción
-      if (e.target && (e.target.closest('.hw-header') || e.target.closest('.mid-controls-deck'))) {
+      if (e.target && (e.target.closest('.shell-top-groove') || e.target.closest('.controls-deck'))) {
         return;
       }
       e.preventDefault();
 
       const midX = window.innerWidth * 0.5;
-      let leftFound = false;
-      let rightFound = false;
+      let leftFound = false, rightFound = false;
 
-      // Detectar doble tap en el stick para emular L3/R3 físicamente
       if (e.type === 'touchstart') {
         const now = performance.now();
         for (let i = 0; i < e.changedTouches.length; i++) {
@@ -668,19 +691,13 @@
 
       for (let i = 0; i < e.touches.length; i++) {
         const t = e.touches[i];
-        // Ignorar toques que empezaron sobre un botón físico
         if (t.target && t.target.closest('.hw-btn')) continue;
 
         let side = null;
         if (touchTrack.leftId === t.identifier) side = 'left';
         else if (touchTrack.rightId === t.identifier) side = 'right';
-        else if (t.clientX < midX && !leftFound) {
-          side = 'left';
-          touchTrack.leftId = t.identifier;
-        } else if (t.clientX >= midX && !rightFound) {
-          side = 'right';
-          touchTrack.rightId = t.identifier;
-        }
+        else if (t.clientX < midX && !leftFound) { side = 'left'; touchTrack.leftId = t.identifier; }
+        else if (t.clientX >= midX && !rightFound) { side = 'right'; touchTrack.rightId = t.identifier; }
 
         if (side === 'left') {
           leftFound = true;
@@ -708,7 +725,6 @@
     window.addEventListener('touchend',    handleStickTouches, { passive: false });
     window.addEventListener('touchcancel', handleStickTouches, { passive: false });
 
-    // Soporte de Mouse en PC para los sticks
     let mouseSide = null;
     stickLeftCanvas.addEventListener('mousedown', (e) => {
       mouseSide = 'left';
@@ -735,28 +751,23 @@
       mouseSide = null;
     });
 
-    // Botones físicos táctiles (A, B, X, Y, L3, R3, SELECT, MENU)
     const btnTouchCounts = {};
     document.querySelectorAll('.hw-btn').forEach((btnEl) => {
       const key = btnEl.getAttribute('data-btn');
       btnTouchCounts[key] = 0;
-
       const press = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
+        e.preventDefault(); e.stopPropagation();
         btnTouchCounts[key] = 1;
         hwInput.btn[key] = true;
         btnEl.classList.add('pressed');
-        playTone(520, 0.03, 'square', 0.02);
+        playTone(540, 0.025, 'square', 0.02);
       };
       const release = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
+        e.preventDefault(); e.stopPropagation();
         btnTouchCounts[key] = 0;
         hwInput.btn[key] = false;
         btnEl.classList.remove('pressed');
       };
-
       btnEl.addEventListener('touchstart', press, { passive: false });
       btnEl.addEventListener('touchend', release, { passive: false });
       btnEl.addEventListener('touchcancel', release, { passive: false });
@@ -765,7 +776,6 @@
       btnEl.addEventListener('mouseleave', release);
     });
 
-    // Teclado en PC
     const keyMap = {
       KeyZ: 'A', Space: 'A', Enter: 'A',
       KeyX: 'B', Backspace: 'B',
@@ -784,12 +794,13 @@
       if (keyMap[e.code]) hwInput.btn[keyMap[e.code]] = false;
     });
 
-    function drawStickWidget(ctxG, canvasEl, x, y, active, clicked, title) {
+    function drawThumbstickWell(ctxG, canvasEl, x, y, active, clicked, label) {
       const w = canvasEl.width, h = canvasEl.height;
-      const cx = w * 0.5, cy = h * 0.5, maxR = w * 0.38;
+      const cx = w * 0.5, cy = h * 0.5, maxR = w * 0.37;
       ctxG.clearRect(0, 0, w, h);
 
-      ctxG.strokeStyle = active ? 'rgba(0, 229, 255, 0.35)' : 'rgba(139, 155, 180, 0.2)';
+      // Anillos concéntricos estilo stick analógico de consola portátil
+      ctxG.strokeStyle = active ? 'rgba(255, 179, 0, 0.4)' : 'rgba(154, 165, 180, 0.16)';
       ctxG.lineWidth = 1.5;
       ctxG.beginPath(); ctxG.arc(cx, cy, maxR, 0, Math.PI * 2); ctxG.stroke();
       ctxG.beginPath(); ctxG.arc(cx, cy, maxR * 0.5, 0, Math.PI * 2); ctxG.stroke();
@@ -802,22 +813,30 @@
       const kx = cx + x * maxR;
       const ky = cy - y * maxR;
 
-      ctxG.strokeStyle = clicked ? '#ffb300' : '#00e5ff';
-      ctxG.lineWidth = 3;
+      // Eje metálico del stick
+      ctxG.strokeStyle = '#525866';
+      ctxG.lineWidth = 6;
       ctxG.beginPath(); ctxG.moveTo(cx, cy); ctxG.lineTo(kx, ky); ctxG.stroke();
 
-      ctxG.fillStyle = clicked ? '#ffb300' : (active ? '#00e5ff' : '#0088aa');
-      ctxG.beginPath(); ctxG.arc(kx, ky, 22, 0, Math.PI * 2); ctxG.fill();
-      ctxG.lineWidth = 2; ctxG.strokeStyle = '#fff'; ctxG.stroke();
+      // Capuchón cóncavo de goma del joystick
+      ctxG.fillStyle = clicked ? '#e53935' : (active ? '#3a3f4d' : '#282c37');
+      ctxG.beginPath(); ctxG.arc(kx, ky, 27, 0, Math.PI * 2); ctxG.fill();
+      ctxG.lineWidth = 2;
+      ctxG.strokeStyle = clicked ? '#ffb300' : (active ? '#00e5ff' : '#4d5466');
+      ctxG.stroke();
 
-      ctxG.fillStyle = '#8b9bb4';
-      ctxG.font = 'bold 11px monospace';
-      ctxG.fillText(title, 10, 16);
+      // Textura interior del capuchón
+      ctxG.beginPath(); ctxG.arc(kx, ky, 17, 0, Math.PI * 2);
+      ctxG.strokeStyle = 'rgba(255,255,255,0.15)';
+      ctxG.stroke();
+
+      ctxG.fillStyle = '#9aa5b4';
+      ctxG.font = 'bold 10px monospace';
+      ctxG.fillText(label, 58, 18);
       canvasEl.classList.toggle('engaged', active || clicked);
     }
 
     function updateInputPolling() {
-      // Mezclar teclado y Gamepad USB/BT si están activos
       if (!hwInput.leftActive) {
         hwInput.lx = (rawKeys['KeyD'] ? 0.8 : 0) - (rawKeys['KeyA'] ? 0.8 : 0);
         hwInput.ly = (rawKeys['KeyW'] ? 0.8 : 0) - (rawKeys['KeyS'] ? 0.8 : 0);
@@ -841,130 +860,354 @@
           if (gp.buttons[3]?.pressed) hwInput.btn.Y = true;
           if (gp.buttons[10]?.pressed) hwInput.btn.L3 = true;
           if (gp.buttons[11]?.pressed) hwInput.btn.R3 = true;
+          if (gp.buttons[8]?.pressed) hwInput.btn.SELECT = true;
           if (gp.buttons[9]?.pressed) hwInput.btn.MENU = true;
           break;
         }
       }
 
-      drawStickWidget(ctxLeft, stickLeftCanvas, hwInput.lx, hwInput.ly, hwInput.leftActive, hwInput.btn.L3, 'STICK IZQ (L3)');
-      drawStickWidget(ctxRight, stickRightCanvas, hwInput.rx, hwInput.ry, hwInput.rightActive, hwInput.btn.R3, 'STICK DER (R3)');
+      drawThumbstickWell(ctxLeft, stickLeftCanvas, hwInput.lx, hwInput.ly, hwInput.leftActive, hwInput.btn.L3, 'LEFT STICK');
+      drawThumbstickWell(ctxRight, stickRightCanvas, hwInput.rx, hwInput.ry, hwInput.rightActive, hwInput.btn.R3, 'RIGHT STICK');
 
-      document.getElementById('readoutLeft').textContent =
-        `LX:${hwInput.lx >= 0 ? '+' : ''}${hwInput.lx.toFixed(2)} LY:${hwInput.ly >= 0 ? '+' : ''}${hwInput.ly.toFixed(2)} L3:${hwInput.btn.L3 ? 1 : 0}`;
-      document.getElementById('readoutRight').textContent =
-        `RX:${hwInput.rx >= 0 ? '+' : ''}${hwInput.rx.toFixed(2)} RY:${hwInput.ry >= 0 ? '+' : ''}${hwInput.ry.toFixed(2)} R3:${hwInput.btn.R3 ? 1 : 0}`;
+      const adcLX = Math.round((hwInput.lx + 1) * 2047.5);
+      const adcLY = Math.round((hwInput.ly + 1) * 2047.5);
+      const adcRX = Math.round((hwInput.rx + 1) * 2047.5);
+      const adcRY = Math.round((hwInput.ry + 1) * 2047.5);
+
+      document.getElementById('readoutLeft').textContent  = `ADC-L: ${adcLX},${adcLY} [L3:${hwInput.btn.L3 ? 1 : 0}]`;
+      document.getElementById('readoutRight').textContent = `ADC-R: ${adcRX},${adcRY} [R3:${hwInput.btn.R3 ? 1 : 0}]`;
     }
 
     function snapshotPrevButtons() {
-      for (const k in hwInput.btn) {
-        hwInput.prevBtn[k] = hwInput.btn[k];
-      }
+      for (const k in hwInput.btn) hwInput.prevBtn[k] = hwInput.btn[k];
     }
 
-    function setButtonLabels(yTxt, xTxt, bTxt, aTxt, hintTxt) {
-      document.getElementById('lblBtnY').textContent = yTxt;
-      document.getElementById('lblBtnX').textContent = xTxt;
-      document.getElementById('lblBtnB').textContent = bTxt;
-      document.getElementById('lblBtnA').textContent = aTxt;
-      document.getElementById('uiControlsHint').textContent = hintTxt;
+    function setFaceLabels(y, x, b, a, hint) {
+      document.getElementById('lblY').textContent = y;
+      document.getElementById('lblX').textContent = x;
+      document.getElementById('lblB').textContent = b;
+      document.getElementById('lblA').textContent = a;
+      document.getElementById('uiHintBar').textContent = hint;
     }
 
     /***************************************************************************
-     * 4. SISTEMA DE CARTUCHOS / APPS DEL FIRMWARE RETRO-GO (5 APPS INTEGRADAS)
+     * 4. SISTEMA OPERATIVO RETRO-GO:
+     *    - Splash de arranque con particiones ESP32-S3 (ota_0 / roms / nvs)
+     *    - pestañas de sistemas ([ROMS], [FAV], [SYS]) + Vista previa animada (BoxArt)
+     *    - Menú In-Game OSD genuino de Retro-Go al pulsar `★ MENU`
+     *      (Continue, Save State, Load State, Reset Game, Quit to Menu)
      ***************************************************************************/
-    const APPS = [
-      { id: 'fpv',    title: '1. FPV DRONE 3D ACRO',   sub: 'Simulador Vuelo 8 Puertas' },
-      { id: 'rally',  title: '2. RALLY STAGE 3D',      sub: 'WRC Wireframe + Drift' },
-      { id: 'space',  title: '3. STARFIGHTER 3D',      sub: 'Combate Espacial 6-DOF' },
-      { id: 'arena',  title: '4. TWIN-STICK ARENA',    sub: 'Shooter 360 Dual-Stick' },
-      { id: 'hwtest', title: '5. HW & ADC DIAGNOSTIC', sub: 'Test Sticks, L3/R3 y RAM' }
+    const ROM_LIST = [
+      { id: 'fpv',    sys: 'S3-3D', name: 'FPV DRONE ACRO',  size: '64KB', fav: true  },
+      { id: 'rally',  sys: 'S3-3D', name: 'WRC RALLY STAGE', size: '96KB', fav: true  },
+      { id: 'space',  sys: 'S3-3D', name: 'STARFIGHTER 3D',  size: '80KB', fav: false },
+      { id: 'arena',  sys: 'ARCDE', name: 'TWIN-STICK ARENA',size: '48KB', fav: true  },
+      { id: 'hwtest', sys: 'TOOLS', name: 'ADC & GPIO DIAG', size: '32KB', fav: false }
     ];
 
-    let currentApp = 'launcher';
-    let menuIndex = 0;
-    let menuCooldown = 0;
+    let osState = 'boot'; // 'boot' | 'launcher' | 'ingame'
+    let bootTimer = 1.35;
+    let activeRomId = 'fpv';
+    let rgTabIdx = 0; // 0 = ALL ROMS, 1 = FAVORITES, 2 = SYS INFO
+    let rgCursor = 0;
+    let navCooldown = 0;
+    let previewAnimT = 0;
 
-    function switchApp(appId) {
-      currentApp = appId;
-      playTone(780, 0.07, 'square', 0.05);
-      if (appId === 'launcher') {
-        document.getElementById('uiCurrentAppTitle').textContent = 'RETRO-GO LAUNCHER // S3-N16R8';
-        setButtonLabels('COLOR', 'INFO', 'SALIR', 'ABRIR JUEGO', 'Stick: Elegir | A: Iniciar');
-      } else if (appId === 'fpv') {
-        document.getElementById('uiCurrentAppTitle').textContent = 'APP 1: FPV DRONE 3D ACRO';
-        setButtonLabels('ACRO/STAB', 'RESET', 'CAM 3RA', 'TURBO', 'Izq:Thr/Yaw | Der:Pitch/Roll');
+    // In-Game Retro-Go Overlay Menu ('★ MENU' button)
+    let rgOverlayOpen = false;
+    let rgOverlayCursor = 0;
+    const RG_OVERLAY_ITEMS = [
+      'CONTINUE GAME',
+      'SAVE STATE (NVS)',
+      'LOAD STATE (NVS)',
+      'RESET CART',
+      'QUIT TO RETRO-GO'
+    ];
+    const savedStates = {};
+    let toastMsg = '';
+    let toastTimer = 0;
+
+    function showToast(msg) {
+      toastMsg = msg;
+      toastTimer = 1.4;
+      blinkSdLed();
+    }
+
+    function launchRom(romId) {
+      blinkSdLed();
+      activeRomId = romId;
+      osState = 'ingame';
+      rgOverlayOpen = false;
+      playTone(820, 0.08);
+
+      if (romId === 'fpv') {
+        setFaceLabels('ACRO/STB', 'RESET', 'CAM 3RA', 'BOOST', 'L:THR/YAW R:PIT/ROL MENU:OSD');
         fpvGame.reset();
-      } else if (appId === 'rally') {
-        document.getElementById('uiCurrentAppTitle').textContent = 'APP 2: RALLY STAGE 3D WRC';
-        setButtonLabels('CAMARA', 'RESET', 'FRENO/DRIFT', 'ACELERAR', 'Izq:Giro | Der/A:Gas B:Drift');
+      } else if (romId === 'rally') {
+        setFaceLabels('CAMARA', 'RESET', 'DRIFT/BRK', 'GAS', 'L:GIRO A:GAS B:DRIFT MENU:OSD');
         rallyGame.reset();
-      } else if (appId === 'space') {
-        document.getElementById('uiCurrentAppTitle').textContent = 'APP 3: STARFIGHTER 3D';
-        setButtonLabels('RADAR', 'RESET', 'TURBO', 'LASER (R3)', 'Izq:Vel/Roll | Der:Pitch/Yaw');
+      } else if (romId === 'space') {
+        setFaceLabels('RADAR', 'RESET', 'TURBO', 'LASER', 'STICKS:NAVE A/R3:LASER MENU:OSD');
         spaceGame.reset();
-      } else if (appId === 'arena') {
-        document.getElementById('uiCurrentAppTitle').textContent = 'APP 4: TWIN-STICK ARENA';
-        setButtonLabels('PAUSA', 'REINICIAR', 'BOMBA EMP', 'DISPARO', 'Izq:Mover | Der:Apuntar 360');
+      } else if (romId === 'arena') {
+        setFaceLabels('BOMBA', 'RESET', 'EMP', 'FIRE', 'L:MOVER R:APUNTAR 360 MENU:OSD');
         arenaGame.reset();
-      } else if (appId === 'hwtest') {
-        document.getElementById('uiCurrentAppTitle').textContent = 'APP 5: HARDWARE & ADC TEST';
-        setButtonLabels('TEST Y', 'TEST X', 'TEST B', 'TEST A', 'Pulsa MENU para volver');
+      } else if (romId === 'hwtest') {
+        setFaceLabels('TEST Y', 'TEST X', 'TEST B', 'TEST A', 'PULSA ★ MENU PARA SALIR');
       }
     }
 
-    /***************************************************************************
-     * LAUNCHER: RETRO-GO FIRMWARE MENU
-     ***************************************************************************/
-    function updateAndRenderLauncher(dt) {
-      if (menuCooldown > 0) menuCooldown -= dt;
+    // Dibuja el icono / BoxArt animado de 38x36 en el panel derecho del Launcher Retro-Go
+    function drawRomBoxArt(romId, t) {
+      const bx = 86, by = 13, bw = 39, bh = 37;
+      fbRect(bx, by, bw, bh, false, 1);
+
+      if (romId === 'fpv') {
+        // Icono Dron + Puerta 3D
+        fbRect(bx + 11, by + 8, 17, 14, false, 1);
+        const dy = Math.round(Math.sin(t * 4) * 3);
+        const cx = bx + 19, cy = by + 22 + dy;
+        fbDrawLine(cx - 8, cy - 3, cx + 8, cy + 3);
+        fbDrawLine(cx - 8, cy + 3, cx + 8, cy - 3);
+        fbCircle(cx - 8, cy - 3, 2);
+        fbCircle(cx + 8, cy - 3, 2);
+        fbDrawText('ACRO', bx + 11, by + 29);
+      } else if (romId === 'rally') {
+        // Icono Carretera en perspectiva + Coche WRC
+        fbDrawLine(bx + 19, by + 4, bx + 4, by + 28);
+        fbDrawLine(bx + 19, by + 4, bx + 34, by + 28);
+        fbRect(bx + 12, by + 20, 15, 7, false);
+        fbDrawText('WRC', bx + 14, by + 29);
+      } else if (romId === 'space') {
+        // Icono Caza TIE Wireframe
+        const cx = bx + 19, cy = by + 16;
+        fbCircle(cx, cy, 5);
+        fbDrawLine(cx - 10, cy - 8, cx - 10, cy + 8);
+        fbDrawLine(cx + 10, cy - 8, cx + 10, cy + 8);
+        fbDrawLine(cx - 10, cy, cx + 10, cy);
+        fbDrawText('3D', bx + 16, by + 29);
+      } else if (romId === 'arena') {
+        // Icono Twin-Stick 360
+        const cx = bx + 19, cy = by + 16;
+        fbCircle(cx, cy, 4);
+        const ang = t * 3;
+        fbDrawLine(cx, cy, cx + Math.cos(ang) * 11, cy + Math.sin(ang) * 11);
+        fbDrawText('360', bx + 14, by + 29);
+      } else {
+        // Icono Chip ESP32-S3
+        fbRect(bx + 11, by + 7, 16, 16, false);
+        for (let i = 0; i < 3; i++) {
+          fbSetPixel(bx + 9, by + 10 + i * 5);
+          fbSetPixel(bx + 28, by + 10 + i * 5);
+        }
+        fbDrawText('ADC', bx + 14, by + 29);
+      }
+    }
+
+    function updateAndRenderRetroGoBoot(dt) {
+      bootTimer -= dt;
+      fbClear();
+      fbRect(2, 2, 124, 60, false);
+      fbDrawText('RETRO-GO BOOTLOADER', 24, 10);
+      fbDrawLine(10, 18, 118, 18);
+      fbDrawText('MCU : ESP32-S3 LX7 240MHZ', 12, 23);
+      fbDrawText('MEM : 16MB FLASH / 8MB PSRAM', 12, 31);
+      fbDrawText('PART: RETRO-GO + 5 ROMS', 12, 39);
+
+      // Barra de progreso de montaje de partición SD/Flash
+      const pct = Math.min(1.0, (1.35 - bootTimer) / 1.1);
+      fbRect(12, 49, 104, 6, false);
+      fbRect(14, 51, Math.round(pct * 100), 2, true);
+
+      if (bootTimer <= 0 || hwInput.justPressed('A') || hwInput.justPressed('MENU')) {
+        osState = 'launcher';
+        setFaceLabels('FAV *', 'PART INFO', 'TAB <<', 'RUN ROM', 'STICK:NAV | A:RUN | SELECT:TAB');
+      }
+    }
+
+    function updateAndRenderRetroGoLauncher(dt) {
+      previewAnimT += dt;
+      if (navCooldown > 0) navCooldown -= dt;
+
+      const filteredRoms = rgTabIdx === 1 ? ROM_LIST.filter(r => r.fav) : ROM_LIST;
+      if (rgCursor >= filteredRoms.length) rgCursor = Math.max(0, filteredRoms.length - 1);
 
       const navY = Math.abs(hwInput.ly) > Math.abs(hwInput.ry) ? hwInput.ly : hwInput.ry;
-      if (menuCooldown <= 0) {
-        if (navY < -0.45 || hwInput.justPressed('SELECT')) {
-          menuIndex = (menuIndex + 1) % APPS.length;
-          menuCooldown = 0.18;
-          playTone(440, 0.03);
+      const navX = Math.abs(hwInput.lx) > Math.abs(hwInput.rx) ? hwInput.lx : hwInput.rx;
+
+      if (navCooldown <= 0) {
+        if (navY < -0.45) {
+          rgCursor = (rgCursor + 1) % (filteredRoms.length || 1);
+          navCooldown = 0.17;
+          playTone(480, 0.025);
         } else if (navY > 0.45) {
-          menuIndex = (menuIndex - 1 + APPS.length) % APPS.length;
-          menuCooldown = 0.18;
-          playTone(440, 0.03);
+          rgCursor = (rgCursor - 1 + (filteredRoms.length || 1)) % (filteredRoms.length || 1);
+          navCooldown = 0.17;
+          playTone(480, 0.025);
+        } else if (navX > 0.55 || hwInput.justPressed('SELECT')) {
+          rgTabIdx = (rgTabIdx + 1) % 3;
+          navCooldown = 0.22;
+          playTone(620, 0.03);
+        } else if (navX < -0.55 || hwInput.justPressed('B')) {
+          rgTabIdx = (rgTabIdx + 2) % 3;
+          navCooldown = 0.22;
+          playTone(620, 0.03);
         }
       }
 
-      if (hwInput.justPressed('A') || hwInput.justPressed('L3') || hwInput.justPressed('R3')) {
-        switchApp(APPS[menuIndex].id);
+      // Botón Y marca/desmarca favorito en Retro-Go
+      if (hwInput.justPressed('Y') && filteredRoms[rgCursor]) {
+        filteredRoms[rgCursor].fav = !filteredRoms[rgCursor].fav;
+        blinkSdLed();
+        playTone(700, 0.04);
+      }
+
+      // Botón X cambia a la pestaña de particiones / sistema
+      if (hwInput.justPressed('X')) {
+        rgTabIdx = rgTabIdx === 2 ? 0 : 2;
+        playTone(580, 0.03);
+      }
+
+      // Botón A o Click de Stick lanza la ROM seleccionada
+      if ((hwInput.justPressed('A') || hwInput.justPressed('L3') || hwInput.justPressed('R3')) && rgTabIdx !== 2) {
+        const rom = filteredRoms[rgCursor];
+        if (rom) {
+          launchRom(rom.id);
+          return;
+        }
+      }
+
+      // Renderizar GUI Clásica de Retro-Go en 128x64
+      fbClear();
+
+      // 1. Barra de pestañas superior estilo Retro-Go
+      fbRect(0, 0, 128, 10, true, 1);
+      const tabs = ['[ROMS]', '[FAV]', '[S3-FW]'];
+      let tx = 2;
+      for (let i = 0; i < tabs.length; i++) {
+        if (i === rgTabIdx) {
+          fbRect(tx - 1, 1, tabs[i].length * 4 + 2, 8, true, 0);
+          fbDrawText(tabs[i], tx, 2, 1);
+        } else {
+          fbDrawText(tabs[i], tx, 2, 0);
+        }
+        tx += tabs[i].length * 4 + 5;
+      }
+      fbDrawText('98%', 110, 2, 0);
+
+      if (rgTabIdx === 2) {
+        // Pestaña de información técnica de particiones Retro-Go en ESP32-S3 N16R8
+        fbDrawText('TARGET: ESP32-S3-WROOM-1', 4, 14);
+        fbDrawText('FLASH : 16MB QIO 80MHZ', 4, 22);
+        fbDrawText('PSRAM : 8MB OPI PSRAM', 4, 30);
+        fbDrawText('VRAM  : 1024B STATIC DMA', 4, 38);
+        fbDrawText('STICKS: DUAL ADC1 12-BIT', 4, 46);
+        fbDrawLine(0, 54, 127, 54);
+        fbDrawText('SELECT/B: VOLVER A ROMS', 4, 57);
         return;
       }
 
-      // Renderizar interfaz estilo Retro-Go en 128x64
-      fbClear();
-      // Barra superior invertida
-      fbRect(0, 0, 128, 9, true, 1);
-      fbDrawText('RETRO-GO S3 // 16MB FLASH', 4, 2, 0);
-
-      for (let i = 0; i < APPS.length; i++) {
-        const y = 12 + i * 8;
-        const selected = (i === menuIndex);
-        if (selected) {
-          fbRect(2, y - 1, 124, 7, true, 1);
-          fbDrawText('>' + APPS[i].title, 4, y, 0);
+      // 2. Lista de ROMs a la izquierda (x: 2..83)
+      for (let i = 0; i < filteredRoms.length; i++) {
+        const rom = filteredRoms[i];
+        const y = 13 + i * 8;
+        const sel = (i === rgCursor);
+        const label = (rom.fav ? '*' : ' ') + rom.name.slice(0, 18);
+        if (sel) {
+          fbRect(1, y - 1, 82, 7, true, 1);
+          fbDrawText('>' + label, 2, y, 0);
         } else {
-          fbDrawText(' ' + APPS[i].title, 4, y, 1);
+          fbDrawText(' ' + label, 2, y, 1);
         }
       }
 
-      // Pie de página con descripción del cartucho seleccionado
-      fbDrawLine(0, 54, 127, 54);
-      fbDrawText(APPS[menuIndex].sub, 4, 57, 1);
-      document.getElementById('uiTelemetryMini').textContent = `SLOT ${menuIndex + 1}/5 READY`;
+      // 3. Recuadro derecho de BoxArt / Preview animado
+      const currentRom = filteredRoms[rgCursor];
+      if (currentRom) {
+        drawRomBoxArt(currentRom.id, previewAnimT);
+        fbDrawLine(0, 53, 127, 53);
+        fbDrawText(`${currentRom.sys} | ${currentRom.size} | A:BOOT`, 2, 56);
+      }
+    }
+
+    // Menú superpuesto In-Game genuino de Retro-Go (al pulsar ★ MENU durante un juego)
+    function updateAndRenderRetroGoOverlay(dt) {
+      if (navCooldown > 0) navCooldown -= dt;
+
+      const navY = Math.abs(hwInput.ly) > Math.abs(hwInput.ry) ? hwInput.ly : hwInput.ry;
+      if (navCooldown <= 0) {
+        if (navY < -0.45 || hwInput.justPressed('SELECT')) {
+          rgOverlayCursor = (rgOverlayCursor + 1) % RG_OVERLAY_ITEMS.length;
+          navCooldown = 0.17;
+          playTone(500, 0.025);
+        } else if (navY > 0.45) {
+          rgOverlayCursor = (rgOverlayCursor - 1 + RG_OVERLAY_ITEMS.length) % RG_OVERLAY_ITEMS.length;
+          navCooldown = 0.17;
+          playTone(500, 0.025);
+        }
+      }
+
+      if (hwInput.justPressed('B')) {
+        rgOverlayOpen = false;
+        return;
+      }
+
+      if (hwInput.justPressed('A')) {
+        playTone(740, 0.05);
+        if (rgOverlayCursor === 0) {
+          rgOverlayOpen = false;
+        } else if (rgOverlayCursor === 1) {
+          // Save State
+          if (activeRomId === 'fpv') savedStates.fpv = JSON.stringify({ px: fpvGame.px, py: fpvGame.py, pz: fpvGame.pz, gate: fpvGame.activeGate });
+          if (activeRomId === 'rally') savedStates.rally = JSON.stringify({ z: rallyGame.trackZ, x: rallyGame.playerX, spd: rallyGame.speed });
+          showToast('STATE SAVED TO NVS');
+          rgOverlayOpen = false;
+        } else if (rgOverlayCursor === 2) {
+          // Load State
+          if (activeRomId === 'fpv' && savedStates.fpv) {
+            const s = JSON.parse(savedStates.fpv);
+            fpvGame.px = s.px; fpvGame.py = s.py; fpvGame.pz = s.pz; fpvGame.activeGate = s.gate;
+          }
+          if (activeRomId === 'rally' && savedStates.rally) {
+            const s = JSON.parse(savedStates.rally);
+            rallyGame.trackZ = s.z; rallyGame.playerX = s.x; rallyGame.speed = s.spd;
+          }
+          showToast('STATE LOADED');
+          rgOverlayOpen = false;
+        } else if (rgOverlayCursor === 3) {
+          launchRom(activeRomId);
+          showToast('CART RESET');
+        } else if (rgOverlayCursor === 4) {
+          rgOverlayOpen = false;
+          osState = 'launcher';
+          setFaceLabels('FAV *', 'PART INFO', 'TAB <<', 'RUN ROM', 'STICK:NAV | A:RUN | SELECT:TAB');
+        }
+        return;
+      }
+
+      // Dibujar ventana modal de Retro-Go sobre el frame actual del juego
+      fbRect(16, 6, 96, 52, true, 0);
+      fbRect(16, 6, 96, 52, false, 1);
+      fbRect(16, 6, 96, 9, true, 1);
+      fbDrawText('RETRO-GO IN-GAME MENU', 22, 8, 0);
+
+      for (let i = 0; i < RG_OVERLAY_ITEMS.length; i++) {
+        const y = 18 + i * 7;
+        if (i === rgOverlayCursor) {
+          fbRect(19, y - 1, 90, 7, true, 1);
+          fbDrawText('>' + RG_OVERLAY_ITEMS[i], 21, y, 0);
+        } else {
+          fbDrawText(' ' + RG_OVERLAY_ITEMS[i], 21, y, 1);
+        }
+      }
     }
 
     /***************************************************************************
-     * JUEGO 1: FPV DRONE 3D ACRO (Fórmula SO(3) de Rodrigues + Horizonte 3D Real)
+     * 5. LOS 5 CARTUCHOS / JUEGOS (FPV 3D, RALLY WRC 3D, STARFIGHTER, ARENA, ADC)
      ***************************************************************************/
     const DEG2RAD = Math.PI / 180.0;
-    const RAD2DEG = 180.0 / Math.PI;
 
+    // CARTUCHO 1: FPV DRONE 3D ACRO
     const fpvGame = {
       px: 0, py: 2.2, pz: -10,
       vx: 0, vy: 0, vz: 0,
@@ -975,7 +1218,7 @@
       mode: 'ACRO',
       chaseCam: false,
       activeGate: 0,
-      lapTime: 0,
+      thrCmd: 0.36,
       gates: [
         { x:  0, y: 2.5, z:   5, w: 5.0, h: 4.0 },
         { x:  6, y: 3.0, z:  22, w: 5.0, h: 4.0 },
@@ -991,21 +1234,23 @@
         this.rx = 1; this.ry = 0; this.rz = 0;
         this.ux = 0; this.uy = 1; this.uz = 0;
         this.fx = 0; this.fy = 0; this.fz = 1;
-        this.activeGate = 0; this.lapTime = 0;
+        this.activeGate = 0;
       },
       step(dt) {
         if (hwInput.justPressed('Y') || hwInput.justPressed('L3')) {
           this.mode = this.mode === 'ACRO' ? 'STAB' : 'ACRO';
-          playTone(660, 0.05);
+          showToast(`MODE: ${this.mode}`);
         }
-        if (hwInput.justPressed('X')) this.reset();
-        if (hwInput.justPressed('B') || hwInput.justPressed('R3')) this.chaseCam = !this.chaseCam;
+        if (hwInput.justPressed('X')) { this.reset(); showToast('DRONE RESET'); }
+        if (hwInput.justPressed('B') || hwInput.justPressed('R3')) {
+          this.chaseCam = !this.chaseCam;
+          showToast(this.chaseCam ? 'CAM: 3RD PERSON' : 'CAM: FPV');
+        }
 
         const baseThr = 0.36;
-        let thrCmd = hwInput.ly >= 0
-          ? baseThr + hwInput.ly * (1.0 - baseThr)
-          : baseThr * (1.0 + hwInput.ly);
-        if (hwInput.btn.A) thrCmd = Math.min(1.0, thrCmd + 0.25); // Botón A = Boost
+        let thr = hwInput.ly >= 0 ? baseThr + hwInput.ly * (1 - baseThr) : baseThr * (1 + hwInput.ly);
+        if (hwInput.btn.A) thr = Math.min(1.0, thr + 0.25);
+        this.thrCmd = thr;
 
         const curPitch = Math.atan2(-this.fy, this.uy);
         const curRoll  = Math.atan2(-this.ry, this.uy);
@@ -1024,7 +1269,6 @@
         this.rollRate  += (tRoll  - this.rollRate)  * alpha;
         this.yawRate   += (tYaw   - this.yawRate)   * alpha;
 
-        // Rodrigues SO(3)
         const p = this.pitchRate * dt, r = this.rollRate * dt, y = this.yawRate * dt;
         const thSq = p*p + r*r + y*y;
         if (thSq > 1e-12) {
@@ -1057,31 +1301,26 @@
           this.rz = this.ux*this.fy - this.uy*this.fx;
         }
 
-        const thrust = thrCmd * 26.0;
+        const thrust = thr * 26.0;
         const spd = Math.hypot(this.vx, this.vy, this.vz);
         const drag = 0.08 + 0.008 * spd;
         this.vx += (this.ux * thrust - this.vx * drag) * dt;
         this.vy += (this.uy * thrust - 9.81 - this.vy * drag) * dt;
         this.vz += (this.uz * thrust - this.vz * drag) * dt;
 
-        this.px += this.vx * dt;
-        this.py += this.vy * dt;
-        this.pz += this.vz * dt;
-
+        this.px += this.vx * dt; this.py += this.vy * dt; this.pz += this.vz * dt;
         if (this.py < 0.25) {
           this.py = 0.25;
           if (this.vy < 0) this.vy = -this.vy * 0.2;
           this.vx *= 0.92; this.vz *= 0.92;
         }
 
-        // Check gate
         const g = this.gates[this.activeGate];
-        if (Math.hypot(this.px - g.x, this.py - g.y, this.pz - g.z) < 3.4) {
+        if (Math.hypot(this.px - g.x, this.py - g.y, this.pz - g.z) < 3.5) {
           this.activeGate = (this.activeGate + 1) % this.gates.length;
+          showToast(`GATE ${this.activeGate}/${this.gates.length} OK!`);
           playTone(880, 0.08);
         }
-        this.lapTime += dt;
-        this.thrCmd = thrCmd;
       },
       render() {
         fbClear();
@@ -1108,13 +1347,11 @@
           fbDrawLine(64 + cx0*f/cz0, 32 - cy0*f/cz0, 64 + cx1*f/cz1, 32 - cy1*f/cz1, dash);
         };
 
-        // Cuadrícula suelo
         for (let i = -48; i <= 48; i += 8) {
           projLine(i, 0, -48, i, 0, 48, 1);
           projLine(-48, 0, i, 48, 0, i, 1);
         }
 
-        // Puertas
         for (let i = 0; i < this.gates.length; i++) {
           const g = this.gates[i];
           const hw = g.w * 0.5, hh = g.h * 0.5;
@@ -1128,105 +1365,62 @@
           }
         }
 
-        // Horizonte 3D real
         let hFx = cFx, hFz = cFz, hN = Math.hypot(hFx, hFz) || 1;
         hFx /= hN; hFz /= hN;
         const hRx = hFz, hRz = -hFx;
         projLine(camX + hFx*45 - hRx*14, camY, camZ + hFz*45 - hRz*14,
                  camX + hFx*45 + hRx*14, camY, camZ + hFz*45 + hRz*14, 1);
 
-        // OSD
         fbDrawText(this.mode, 2, 2);
         fbDrawText(`G${this.activeGate + 1}/6`, 104, 2);
         const spd = Math.hypot(this.vx, this.vy, this.vz);
         fbDrawText(`V${Math.round(spd)}`, 2, 58);
         fbDrawText(`A${this.py.toFixed(1)}`, 100, 58);
-        document.getElementById('uiTelemetryMini').textContent =
-          `${this.mode} | THR ${Math.round(this.thrCmd*100)}%`;
       }
     };
 
-    /***************************************************************************
-     * JUEGO 2: RALLY STAGE 3D WRC (Carreras Wireframe + Física de Derrape/Drift)
-     ***************************************************************************/
+    // CARTUCHO 2: RALLY STAGE 3D WRC
     const rallyGame = {
-      trackZ: 0,
-      playerX: 0,      // Posición lateral (-1..+1 es dentro del asfalto)
-      lateralVel: 0,
-      speed: 0,        // km/h (0..220)
-      steerAngle: 0,
-      driftAngle: 0,
-      stageTime: 0,
-      distance: 0,
-      camChase: true,
-      reset() {
-        this.trackZ = 0; this.playerX = 0; this.lateralVel = 0;
-        this.speed = 0; this.steerAngle = 0; this.driftAngle = 0;
-        this.stageTime = 0; this.distance = 0;
-      },
-      // Curvatura y elevación de la pista en función de Z
-      getCurveAt(z) {
-        return Math.sin(z * 0.035) * 1.4 + Math.cos(z * 0.08) * 0.9;
-      },
-      getHillAt(z) {
-        return Math.sin(z * 0.05) * 1.8;
-      },
+      trackZ: 0, playerX: 0, speed: 0, driftAngle: 0, distance: 0, camChase: true,
+      reset() { this.trackZ = 0; this.playerX = 0; this.speed = 0; this.driftAngle = 0; this.distance = 0; },
+      getCurveAt(z) { return Math.sin(z * 0.035) * 1.4 + Math.cos(z * 0.08) * 0.9; },
+      getHillAt(z) { return Math.sin(z * 0.05) * 1.8; },
       step(dt) {
-        if (hwInput.justPressed('X')) this.reset();
-        if (hwInput.justPressed('Y') || hwInput.justPressed('L3')) this.camChase = !this.camChase;
+        if (hwInput.justPressed('X')) { this.reset(); showToast('STAGE RESTART'); }
+        if (hwInput.justPressed('Y') || hwInput.justPressed('L3')) {
+          this.camChase = !this.camChase;
+          showToast(this.camChase ? 'CAM: CHASE WRC' : 'CAM: BUMPER');
+        }
 
-        // Dirección con Stick Izquierdo X (o Derecho X)
         const steerInput = Math.abs(hwInput.lx) > Math.abs(hwInput.rx) ? hwInput.lx : hwInput.rx;
-        // Acelerador con Stick Derecho Y hacia arriba o Botón A
-        const gasInput = Math.max(hwInput.btn.A ? 1.0 : 0.0, Math.max(0, hwInput.ry), Math.max(0, hwInput.ly));
-        // Freno / Freno de mano (Drift) con Botón B, R3 o Stick hacia abajo
+        const gasInput   = Math.max(hwInput.btn.A ? 1.0 : 0.0, Math.max(0, hwInput.ry), Math.max(0, hwInput.ly));
         const brakeInput = Math.max(hwInput.btn.B || hwInput.btn.R3 ? 1.0 : 0.0, Math.max(0, -hwInput.ry));
 
         const offRoad = Math.abs(this.playerX) > 1.05;
         const maxSpd = offRoad ? 105 : 215;
 
-        if (gasInput > 0.05) {
-          this.speed += gasInput * 75 * dt;
-        } else {
-          this.speed -= 22 * dt;
-        }
-
-        if (brakeInput > 0.05) {
-          this.speed -= brakeInput * 95 * dt;
-        }
-        if (offRoad) {
-          this.speed -= 45 * dt;
-        }
+        if (gasInput > 0.05) this.speed += gasInput * 75 * dt;
+        else this.speed -= 22 * dt;
+        if (brakeInput > 0.05) this.speed -= brakeInput * 95 * dt;
+        if (offRoad) this.speed -= 45 * dt;
         this.speed = Math.max(0, Math.min(maxSpd, this.speed));
 
         const spdNorm = this.speed / 180.0;
         const dz = (this.speed * 0.28) * dt;
         this.trackZ += dz;
         this.distance += dz;
-        this.stageTime += dt;
 
-        // Fuerza centrífuga de la curva actual + giro del volante + ángulo de derrape (Drift)
         const roadCurve = this.getCurveAt(this.trackZ);
         const isDrifting = brakeInput > 0.2 && Math.abs(steerInput) > 0.25 && this.speed > 60;
-
         const targetDrift = isDrifting ? steerInput * 0.85 : steerInput * 0.25;
         this.driftAngle += (targetDrift - this.driftAngle) * Math.min(1, 8 * dt);
 
-        // Desplazamiento lateral en la carretera
         const turnRate = steerInput * (isDrifting ? 2.3 : 1.75) * Math.min(1.0, this.speed / 45.0);
         const centrifugal = roadCurve * spdNorm * spdNorm * 1.15;
-
-        this.playerX += (turnRate - centrifugal) * dt;
-        this.playerX = Math.max(-2.2, Math.min(2.2, this.playerX));
-
-        if (this.speed > 5 && soundEnabled && (Math.random() < 0.25)) {
-          playTone(65 + this.speed * 1.3, 0.03, 'sawtooth', 0.015);
-        }
+        this.playerX = Math.max(-2.2, Math.min(2.2, this.playerX + (turnRate - centrifugal) * dt));
       },
       render() {
         fbClear();
-
-        // Horizonte montañoso wireframe que rota con la curva de la pista
         const bgOffset = ((this.trackZ * 2) | 0) % 32;
         fbDrawLine(0, 21, 127, 21, 1);
         fbDrawLine(0, 21, 24 - (bgOffset >> 2), 11);
@@ -1234,349 +1428,184 @@
         fbDrawLine(60, 21, 88, 9);
         fbDrawLine(88, 9, 120, 21);
 
-        // Renderizado de segmentos 3D de la etapa de Rally (de cerca a lejos)
-        const numSegs = 26;
-        const segLen = 2.2;
+        const numSegs = 26, segLen = 2.2;
         const baseZ = Math.floor(this.trackZ / segLen) * segLen;
         const fracZ = (this.trackZ - baseZ) / segLen;
-
-        let prevLeftX = 0, prevRightX = 0, prevY = 0;
-        let accumCurve = 0;
-        let curveVel = 0;
+        let prevLeftX = 0, prevRightX = 0, prevY = 0, accumCurve = 0, curveVel = 0;
 
         for (let i = 1; i <= numSegs; i++) {
           const worldZ = baseZ + i * segLen;
           const relZ = (i - fracZ) * segLen;
           if (relZ < 0.5) continue;
 
-          const c = this.getCurveAt(worldZ);
-          curveVel += c * 0.14;
+          curveVel += this.getCurveAt(worldZ) * 0.14;
           accumCurve += curveVel;
-
           const hill = this.getHillAt(worldZ) - this.getHillAt(this.trackZ);
           const scale = 38.0 / relZ;
 
           const roadCenterX = 64 + (accumCurve - this.playerX * 3.4) * scale;
           const roadHalfW   = 3.2 * scale;
           const sy = Math.max(21, Math.min(63, Math.round(22 + (1.45 - hill * 0.15) * scale)));
-
-          const lx = roadCenterX - roadHalfW;
-          const rx = roadCenterX + roadHalfW;
+          const lx = roadCenterX - roadHalfW, rx = roadCenterX + roadHalfW;
 
           if (i > 1) {
-            // Bordes de la pista (pianos alternados)
             fbDrawLine(prevLeftX, prevY, lx, sy);
             fbDrawLine(prevRightX, prevY, rx, sy);
-
-            // Líneas transversales del asfalto cada 2 segmentos para sensación de velocidad
             const segIdx = Math.floor(worldZ / segLen);
             if (segIdx % 2 === 0) {
               fbDrawLine(lx, sy, rx, sy, 1);
-              // Postes/Árboles laterales de referencia en el tramo de rally
               if (segIdx % 4 === 0 && i < 18) {
                 const postH = Math.max(2, Math.round(2.0 * scale));
-                const pLx = lx - 1.2 * scale;
-                const pRx = rx + 1.2 * scale;
-                fbDrawLine(pLx, sy, pLx, sy - postH);
-                fbDrawLine(pRx, sy, pRx, sy - postH);
+                fbDrawLine(lx - 1.2 * scale, sy, lx - 1.2 * scale, sy - postH);
+                fbDrawLine(rx + 1.2 * scale, sy, rx + 1.2 * scale, sy - postH);
               }
             }
           }
-
-          prevLeftX = lx;
-          prevRightX = rx;
-          prevY = sy;
+          prevLeftX = lx; prevRightX = rx; prevY = sy;
         }
 
-        // Dibujar coche de Rally en vista Chase (con ángulo de derrape visual)
         if (this.camChase) {
-          const carCx = 64 + Math.round(this.driftAngle * 10);
-          const carCy = 55;
+          const carCx = 64 + Math.round(this.driftAngle * 10), carCy = 55;
           const skew = Math.round(this.driftAngle * 7);
-
-          // Carrocería hatchback WRC wireframe
           fbRect(carCx - 11 + skew, carCy - 5, 22, 6, false);
-          // Techo / Cabina
           fbDrawLine(carCx - 7 + skew, carCy - 9, carCx + 7 + skew, carCy - 9);
           fbDrawLine(carCx - 11 + skew, carCy - 5, carCx - 7 + skew, carCy - 9);
           fbDrawLine(carCx + 11 + skew, carCy - 5, carCx + 7 + skew, carCy - 9);
-          // Alerón trasero + Ruedas
           fbRect(carCx - 13 + skew, carCy - 2, 4, 4, true);
           fbRect(carCx + 9 + skew,  carCy - 2, 4, 4, true);
-
-          // Partículas de tierra/humo al derrapar
-          if (Math.abs(this.driftAngle) > 0.35 && this.speed > 60) {
-            fbSetPixel(carCx - 14, carCy + 2);
-            fbSetPixel(carCx + 14, carCy + 2);
-            fbSetPixel(carCx - 16, carCy + 3);
-            fbSetPixel(carCx + 16, carCy + 3);
-          }
         }
 
-        // HUD del Rally
         fbDrawText(`${Math.round(this.speed)}KMH`, 2, 2);
         const gear = this.speed < 5 ? 'N' : Math.min(6, Math.ceil(this.speed / 36));
         fbDrawText(`G:${gear}`, 54, 2);
         fbDrawText(`${(this.distance / 100).toFixed(1)}KM`, 92, 2);
-
-        document.getElementById('uiTelemetryMini').textContent =
-          `WRC ${Math.round(this.speed)} KM/H | GEAR ${gear}`;
       }
     };
 
-    /***************************************************************************
-     * JUEGO 3: STARFIGHTER 3D (Combate Espacial 6-DOF Wireframe + Láseres)
-     ***************************************************************************/
+    // CARTUCHO 3: STARFIGHTER 3D
     const spaceGame = {
-      score: 0,
-      shield: 100,
-      speed: 22,
-      enemies: [],
-      stars: [],
-      lasers: [],
-      cooldown: 0,
+      score: 0, shield: 100, speed: 22, enemies: [], stars: [], lasers: [], cooldown: 0,
       reset() {
-        this.score = 0;
-        this.shield = 100;
-        this.enemies = [];
-        this.lasers = [];
-        this.stars = [];
-        for (let i = 0; i < 35; i++) {
-          this.stars.push({
-            x: (Math.random() - 0.5) * 90,
-            y: (Math.random() - 0.5) * 50,
-            z: Math.random() * 60 + 2
-          });
-        }
-        for (let i = 0; i < 4; i++) {
-          this.spawnEnemy(25 + i * 14);
-        }
+        this.score = 0; this.shield = 100; this.enemies = []; this.lasers = []; this.stars = [];
+        for (let i = 0; i < 35; i++) this.stars.push({ x: (Math.random() - 0.5) * 90, y: (Math.random() - 0.5) * 50, z: Math.random() * 60 + 2 });
+        for (let i = 0; i < 4; i++) this.spawnEnemy(25 + i * 14);
       },
       spawnEnemy(zDist = 55) {
-        this.enemies.push({
-          x: (Math.random() - 0.5) * 32,
-          y: (Math.random() - 0.5) * 18,
-          z: zDist,
-          vx: (Math.random() - 0.5) * 6,
-          vy: (Math.random() - 0.5) * 4
-        });
+        this.enemies.push({ x: (Math.random() - 0.5) * 32, y: (Math.random() - 0.5) * 18, z: zDist, vx: (Math.random() - 0.5) * 6, vy: (Math.random() - 0.5) * 4 });
       },
       step(dt) {
-        if (hwInput.justPressed('X')) this.reset();
+        if (hwInput.justPressed('X')) { this.reset(); showToast('MISSION RESET'); }
         if (this.cooldown > 0) this.cooldown -= dt;
 
-        // Stick Derecho (o Izquierdo) gira la nave (Pitch / Yaw) y desplaza el campo 3D
         const yawIn   = Math.abs(hwInput.rx) > Math.abs(hwInput.lx) ? hwInput.rx : hwInput.lx;
         const pitchIn = Math.abs(hwInput.ry) > Math.abs(hwInput.ly) ? hwInput.ry : hwInput.ly;
-        const rollIn  = hwInput.lx;
+        this.speed = hwInput.btn.B ? 42 : (20 + Math.max(0, hwInput.ly) * 18);
 
-        const boost = hwInput.btn.B ? 42 : (20 + Math.max(0, hwInput.ly) * 18);
-        this.speed = boost;
-
-        // Disparo láser con Botón A o Click R3/L3
         if ((hwInput.btn.A || hwInput.btn.R3 || hwInput.btn.L3) && this.cooldown <= 0) {
-          this.lasers.push({ x: 0, y: -1.2, z: 2.0 });
+          this.lasers.push({ z: 2.0 });
           this.cooldown = 0.16;
           playTone(920, 0.05, 'sawtooth', 0.04);
         }
 
-        const rotCos = Math.cos(-rollIn * 2.2 * dt);
-        const rotSin = Math.sin(-rollIn * 2.2 * dt);
-
-        // Mover estrellas
         for (const s of this.stars) {
-          s.x -= yawIn * 26 * dt;
-          s.y -= pitchIn * 18 * dt;
-          const nx = s.x * rotCos - s.y * rotSin;
-          const ny = s.x * rotSin + s.y * rotCos;
-          s.x = nx; s.y = ny;
-          s.z -= this.speed * dt;
-          if (s.z < 1) {
-            s.z = 60;
-            s.x = (Math.random() - 0.5) * 90;
-            s.y = (Math.random() - 0.5) * 50;
-          }
+          s.x -= yawIn * 26 * dt; s.y -= pitchIn * 18 * dt; s.z -= this.speed * dt;
+          if (s.z < 1) { s.z = 60; s.x = (Math.random() - 0.5) * 90; s.y = (Math.random() - 0.5) * 50; }
         }
-
-        // Mover láseres
         for (let i = this.lasers.length - 1; i >= 0; i--) {
           this.lasers[i].z += 85 * dt;
           if (this.lasers[i].z > 65) this.lasers.splice(i, 1);
         }
-
-        // Mover cazas enemigos TIE/Wireframe
         for (let i = this.enemies.length - 1; i >= 0; i--) {
           const e = this.enemies[i];
-          e.x += (e.vx - yawIn * 22) * dt;
-          e.y += (e.vy - pitchIn * 16) * dt;
-          e.z -= (this.speed * 0.65) * dt;
-
-          // Comprobar impacto de láser
+          e.x += (e.vx - yawIn * 22) * dt; e.y += (e.vy - pitchIn * 16) * dt; e.z -= (this.speed * 0.65) * dt;
           let hit = false;
           for (let j = this.lasers.length - 1; j >= 0; j--) {
-            const l = this.lasers[j];
-            if (Math.abs(l.z - e.z) < 4.5 && Math.hypot(e.x, e.y) < 4.8) {
-              hit = true;
-              this.lasers.splice(j, 1);
-              break;
+            if (Math.abs(this.lasers[j].z - e.z) < 4.5 && Math.hypot(e.x, e.y) < 4.8) {
+              hit = true; this.lasers.splice(j, 1); break;
             }
           }
-
           if (hit) {
-            this.score += 100;
-            playTone(220, 0.12, 'square', 0.06);
-            this.enemies.splice(i, 1);
-            this.spawnEnemy(58);
+            this.score += 100; playTone(220, 0.12); this.enemies.splice(i, 1); this.spawnEnemy(58);
           } else if (e.z < 1.5) {
-            if (Math.hypot(e.x, e.y) < 4.5) {
-              this.shield = Math.max(0, this.shield - 15);
-              playTone(110, 0.15, 'sawtooth', 0.07);
-            }
-            this.enemies.splice(i, 1);
-            this.spawnEnemy(58);
+            if (Math.hypot(e.x, e.y) < 4.5) this.shield = Math.max(0, this.shield - 15);
+            this.enemies.splice(i, 1); this.spawnEnemy(58);
           }
         }
       },
       render() {
         fbClear();
         const f = 58.0;
-
-        // Estrellas 3D
-        for (const s of this.stars) {
-          const sx = 64 + (s.x * f) / s.z;
-          const sy = 32 - (s.y * f) / s.z;
-          fbSetPixel(sx, sy);
-        }
-
-        // Cazas enemigos Wireframe (Hexágono + Alas tipo TIE)
+        for (const s of this.stars) fbSetPixel(64 + (s.x * f) / s.z, 32 - (s.y * f) / s.z);
         for (const e of this.enemies) {
-          const sx = 64 + (e.x * f) / e.z;
-          const sy = 32 - (e.y * f) / e.z;
+          const sx = 64 + (e.x * f) / e.z, sy = 32 - (e.y * f) / e.z;
           const r = Math.max(2, Math.round((2.2 * f) / e.z));
           fbCircle(sx, sy, r);
           fbDrawLine(sx - r * 1.6, sy - r * 1.4, sx - r * 1.6, sy + r * 1.4);
           fbDrawLine(sx + r * 1.6, sy - r * 1.4, sx + r * 1.6, sy + r * 1.4);
           fbDrawLine(sx - r * 1.6, sy, sx + r * 1.6, sy);
         }
-
-        // Rayos láser dobles desde las alas de la cabina
         for (const l of this.lasers) {
-          const z0 = Math.max(1, l.z);
           const z1 = l.z + 6;
           fbDrawLine(20, 56, 64 - (8 * f) / z1, 32 + (2 * f) / z1);
           fbDrawLine(108, 56, 64 + (8 * f) / z1, 32 + (2 * f) / z1);
         }
-
-        // Mira central y cabina espacial
-        fbCircle(64, 32, 6);
-        fbSetPixel(64, 32);
-        fbDrawLine(0, 63, 28, 48);
-        fbDrawLine(127, 63, 99, 48);
-        fbDrawLine(28, 48, 99, 48);
-
+        fbCircle(64, 32, 6); fbSetPixel(64, 32);
         fbDrawText(`SCR:${this.score}`, 2, 2);
         fbDrawText(`SHD:${this.shield}%`, 88, 2);
-        document.getElementById('uiTelemetryMini').textContent =
-          `SCORE ${this.score} | SHIELD ${this.shield}%`;
       }
     };
 
-    /***************************************************************************
-     * JUEGO 4: TWIN-STICK ARENA (Prueba ideal de los 2 Joysticks Simultáneos)
-     *          - Stick Izquierdo: Mueve tu nave en el mapa 128x64
-     *          - Stick Derecho: Apunta y dispara automáticamente en 360°
-     ***************************************************************************/
+    // CARTUCHO 4: TWIN-STICK ARENA
     const arenaGame = {
-      px: 64, py: 32,
-      aimX: 1, aimY: 0,
-      bullets: [],
-      foes: [],
-      score: 0,
-      lives: 3,
-      bombs: 3,
-      fireTimer: 0,
-      spawnTimer: 0,
-      reset() {
-        this.px = 64; this.py = 32;
-        this.bullets = []; this.foes = [];
-        this.score = 0; this.lives = 3; this.bombs = 3;
-      },
+      px: 64, py: 32, aimX: 1, aimY: 0, bullets: [], foes: [], score: 0, lives: 3, bombs: 3, fireTimer: 0, spawnTimer: 0,
+      reset() { this.px = 64; this.py = 32; this.bullets = []; this.foes = []; this.score = 0; this.lives = 3; this.bombs = 3; },
       step(dt) {
         if (hwInput.justPressed('X')) this.reset();
-
-        // Movimiento con Stick Izquierdo
         this.px = Math.max(6, Math.min(121, this.px + hwInput.lx * 52 * dt));
         this.py = Math.max(10, Math.min(59, this.py - hwInput.ly * 52 * dt));
 
-        // Bomba EMP con Botón B o Click L3
         if ((hwInput.justPressed('B') || hwInput.justPressed('L3')) && this.bombs > 0) {
-          this.bombs--;
-          this.score += this.foes.length * 10;
-          this.foes.length = 0;
-          playTone(180, 0.18, 'sawtooth', 0.07);
+          this.bombs--; this.score += this.foes.length * 10; this.foes.length = 0;
+          showToast('EMP DETONATED!');
         }
 
-        // Apuntado y disparo 360 con Stick Derecho (o Botón A / R3)
         const rMag = Math.hypot(hwInput.rx, hwInput.ry);
-        if (rMag > 0.2) {
-          this.aimX = hwInput.rx / rMag;
-          this.aimY = -hwInput.ry / rMag;
-        }
+        if (rMag > 0.2) { this.aimX = hwInput.rx / rMag; this.aimY = -hwInput.ry / rMag; }
 
         this.fireTimer -= dt;
         if ((rMag > 0.25 || hwInput.btn.A || hwInput.btn.R3) && this.fireTimer <= 0) {
-          this.bullets.push({
-            x: this.px + this.aimX * 4,
-            y: this.py + this.aimY * 4,
-            vx: this.aimX * 115,
-            vy: this.aimY * 115
-          });
-          this.fireTimer = 0.11;
-          playTone(760, 0.03, 'square', 0.03);
+          this.bullets.push({ x: this.px + this.aimX * 4, y: this.py + this.aimY * 4, vx: this.aimX * 115, vy: this.aimY * 115 });
+          this.fireTimer = 0.11; playTone(760, 0.03);
         }
 
         for (let i = this.bullets.length - 1; i >= 0; i--) {
-          const b = this.bullets[i];
-          b.x += b.vx * dt;
-          b.y += b.vy * dt;
-          if (b.x < 2 || b.x > 125 || b.y < 9 || b.y > 62) {
-            this.bullets.splice(i, 1);
-          }
+          const b = this.bullets[i]; b.x += b.vx * dt; b.y += b.vy * dt;
+          if (b.x < 2 || b.x > 125 || b.y < 9 || b.y > 62) this.bullets.splice(i, 1);
         }
 
-        // Generar enemigos geométricos
         this.spawnTimer -= dt;
         if (this.spawnTimer <= 0 && this.foes.length < 14) {
           const edge = (Math.random() * 4) | 0;
-          const fx = edge === 0 ? 4 : (edge === 1 ? 123 : Math.random() * 120 + 4);
-          const fy = edge === 2 ? 10 : (edge === 3 ? 60 : Math.random() * 50 + 10);
-          this.foes.push({ x: fx, y: fy });
+          this.foes.push({
+            x: edge === 0 ? 4 : (edge === 1 ? 123 : Math.random() * 120 + 4),
+            y: edge === 2 ? 10 : (edge === 3 ? 60 : Math.random() * 50 + 10)
+          });
           this.spawnTimer = 0.65;
         }
 
         for (let i = this.foes.length - 1; i >= 0; i--) {
           const f = this.foes[i];
-          const dx = this.px - f.x, dy = this.py - f.y;
-          const dist = Math.hypot(dx, dy) || 1;
-          f.x += (dx / dist) * 24 * dt;
-          f.y += (dy / dist) * 24 * dt;
-
+          const dx = this.px - f.x, dy = this.py - f.y, dist = Math.hypot(dx, dy) || 1;
+          f.x += (dx / dist) * 24 * dt; f.y += (dy / dist) * 24 * dt;
           if (dist < 4.5) {
-            this.lives = Math.max(0, this.lives - 1);
-            this.foes.splice(i, 1);
-            playTone(130, 0.15, 'sawtooth', 0.07);
+            this.lives = Math.max(0, this.lives - 1); this.foes.splice(i, 1);
             if (this.lives === 0) this.reset();
             continue;
           }
-
           for (let j = this.bullets.length - 1; j >= 0; j--) {
             const b = this.bullets[j];
             if (Math.hypot(b.x - f.x, b.y - f.y) < 4.0) {
-              this.score += 25;
-              this.foes.splice(i, 1);
-              this.bullets.splice(j, 1);
-              playTone(480, 0.04);
-              break;
+              this.score += 25; this.foes.splice(i, 1); this.bullets.splice(j, 1); break;
             }
           }
         }
@@ -1584,131 +1613,129 @@
       render() {
         fbClear();
         fbRect(0, 8, 128, 56, false);
-
-        // Jugador + cañón direccional
         fbCircle(this.px, this.py, 3);
         fbDrawLine(this.px, this.py, this.px + this.aimX * 7, this.py + this.aimY * 7);
-
-        // Balas
-        for (const b of this.bullets) {
-          fbRect(b.x - 1, b.y - 1, 2, 2, true);
-        }
-
-        // Enemigos (rombos wireframe)
+        for (const b of this.bullets) fbRect(b.x - 1, b.y - 1, 2, 2, true);
         for (const f of this.foes) {
-          fbDrawLine(f.x, f.y - 3, f.x + 3, f.y);
-          fbDrawLine(f.x + 3, f.y, f.x, f.y + 3);
-          fbDrawLine(f.x, f.y + 3, f.x - 3, f.y);
-          fbDrawLine(f.x - 3, f.y, f.x, f.y - 3);
+          fbDrawLine(f.x, f.y - 3, f.x + 3, f.y); fbDrawLine(f.x + 3, f.y, f.x, f.y + 3);
+          fbDrawLine(f.x, f.y + 3, f.x - 3, f.y); fbDrawLine(f.x - 3, f.y, f.x, f.y - 3);
         }
-
         fbDrawText(`PTS:${this.score}`, 2, 1);
         fbDrawText(`HP:${this.lives}`, 62, 1);
         fbDrawText(`EMP:${this.bombs}`, 96, 1);
-        document.getElementById('uiTelemetryMini').textContent =
-          `TWIN-STICK | PTS ${this.score}`;
       }
     };
 
-    /***************************************************************************
-     * JUEGO 5: HARDWARE & ADC DIAGNOSTIC (Utilidad de Firmware ESP32-S3)
-     ***************************************************************************/
+    // CARTUCHO 5: HARDWARE & ADC DIAGNOSTIC
     function renderHwDiagnostic() {
       fbClear();
       fbRect(0, 0, 128, 8, true, 1);
-      fbDrawText('ESP32-S3 ADC & GPIO TEST', 4, 2, 0);
+      fbDrawText('RETRO-GO HW & ADC TEST', 4, 2, 0);
 
-      // Visualizador Stick Izquierdo en OLED
       fbRect(6, 12, 34, 34, false);
-      fbSetPixel(23, 29);
-      const lxPx = 23 + Math.round(hwInput.lx * 14);
-      const lyPx = 29 - Math.round(hwInput.ly * 14);
+      const lxPx = 23 + Math.round(hwInput.lx * 14), lyPx = 29 - Math.round(hwInput.ly * 14);
       fbDrawLine(23, 29, lxPx, lyPx);
       fbRect(lxPx - 1, lyPx - 1, 3, 3, true);
       fbDrawText(`L3:${hwInput.btn.L3 ? 1 : 0}`, 8, 48);
 
-      // Visualizador Stick Derecho en OLED
       fbRect(88, 12, 34, 34, false);
-      fbSetPixel(105, 29);
-      const rxPx = 105 + Math.round(hwInput.rx * 14);
-      const ryPx = 29 - Math.round(hwInput.ry * 14);
+      const rxPx = 105 + Math.round(hwInput.rx * 14), ryPx = 29 - Math.round(hwInput.ry * 14);
       fbDrawLine(105, 29, rxPx, ryPx);
       fbRect(rxPx - 1, ryPx - 1, 3, 3, true);
       fbDrawText(`R3:${hwInput.btn.R3 ? 1 : 0}`, 90, 48);
 
-      // Estado de los 4 botones de acción + SELECT/MENU en el centro
       const btns = ['Y', 'X', 'B', 'A'];
       for (let i = 0; i < 4; i++) {
-        const bx = 46 + i * 9;
-        const pressed = hwInput.btn[btns[i]];
+        const bx = 46 + i * 9, pressed = hwInput.btn[btns[i]];
         fbRect(bx, 16, 7, 9, pressed, 1);
         fbDrawText(btns[i], bx + 2, 18, pressed ? 0 : 1);
       }
 
-      // Simulación de lectura ADC de 12 bits (0..4095) del ESP32-S3
       const adcLX = Math.round((hwInput.lx + 1) * 2047.5);
       const adcRX = Math.round((hwInput.rx + 1) * 2047.5);
       fbDrawText(`ADC L:${adcLX}`, 44, 30);
       fbDrawText(`ADC R:${adcRX}`, 44, 38);
-      fbDrawText('16MB FLASH OK', 38, 57);
-
-      document.getElementById('uiTelemetryMini').textContent =
-        `ADC12: ${adcLX} / ${adcRX}`;
+      fbDrawText('N16R8 PSRAM OK', 36, 57);
     }
 
     /***************************************************************************
-     * 5. BUCLE PRINCIPAL DEL FIRMWARE (60 FPS)
+     * 6. BUCLE PRINCIPAL DE SISTEMA RETRO-GO (60 FPS)
      ***************************************************************************/
-    document.getElementById('btnColorCycle').addEventListener('click', () => {
-      currentPaletteIdx = (currentPaletteIdx + 1) % OLED_PALETTES.length;
+    document.getElementById('btnPalette').addEventListener('click', () => {
+      paletteIdx = (paletteIdx + 1) % PALETTES.length;
+      showToast(PALETTES[paletteIdx].name);
     });
 
-    document.getElementById('btnAudioToggle').addEventListener('click', (e) => {
+    document.getElementById('btnAudio').addEventListener('click', (e) => {
       soundEnabled = !soundEnabled;
-      e.currentTarget.textContent = soundEnabled ? '🔊 Audio' : '🔇 Audio';
+      e.currentTarget.textContent = soundEnabled ? '🔊 SND' : '🔇 SND';
       e.currentTarget.classList.toggle('active', soundEnabled);
-      if (soundEnabled) playTone(660, 0.06);
     });
 
-    document.getElementById('btnGridToggle').addEventListener('click', (e) => {
-      const vp = document.getElementById('oledViewport');
-      vp.classList.toggle('pixel-grid');
-      e.currentTarget.classList.toggle('active', vp.classList.contains('pixel-grid'));
+    document.getElementById('btnGrid').addEventListener('click', (e) => {
+      const c = document.getElementById('oledContainer');
+      c.classList.toggle('pixel-grid');
+      e.currentTarget.classList.toggle('active', c.classList.contains('pixel-grid'));
     });
 
     let lastTime = performance.now();
     let fpsFrames = 0;
     let fpsClock = performance.now();
 
-    function firmwareMainLoop(now) {
-      requestAnimationFrame(firmwareMainLoop);
+    function retroGoMainLoop(now) {
+      requestAnimationFrame(retroGoMainLoop);
 
       const dt = Math.min(0.05, (now - lastTime) / 1000.0);
       lastTime = now;
 
       updateInputPolling();
 
-      // El botón físico MENU regresa en cualquier momento al Launcher Retro-Go
-      if (currentApp !== 'launcher' && hwInput.justPressed('MENU')) {
-        switchApp('launcher');
+      if (osState === 'boot') {
+        updateAndRenderRetroGoBoot(dt);
+      } else if (osState === 'launcher') {
+        updateAndRenderRetroGoLauncher(dt);
+      } else if (osState === 'ingame') {
+        // El botón ★ MENU abre/cierra el menú superpuesto In-Game genuino de Retro-Go
+        if (hwInput.justPressed('MENU')) {
+          rgOverlayOpen = !rgOverlayOpen;
+          rgOverlayCursor = 0;
+          playTone(600, 0.04);
+        }
+
+        if (!rgOverlayOpen) {
+          if (activeRomId === 'fpv') {
+            for (let s = 0; s < 4; s++) fpvGame.step(dt / 4);
+            fpvGame.render();
+          } else if (activeRomId === 'rally') {
+            rallyGame.step(dt);
+            rallyGame.render();
+          } else if (activeRomId === 'space') {
+            spaceGame.step(dt);
+            spaceGame.render();
+          } else if (activeRomId === 'arena') {
+            arenaGame.step(dt);
+            arenaGame.render();
+          } else if (activeRomId === 'hwtest') {
+            renderHwDiagnostic();
+          }
+        } else {
+          // Dibujar primero el frame congelado del juego y encima el modal de Retro-Go
+          if (activeRomId === 'fpv') fpvGame.render();
+          else if (activeRomId === 'rally') rallyGame.render();
+          else if (activeRomId === 'space') spaceGame.render();
+          else if (activeRomId === 'arena') arenaGame.render();
+          else if (activeRomId === 'hwtest') renderHwDiagnostic();
+
+          updateAndRenderRetroGoOverlay(dt);
+        }
       }
 
-      if (currentApp === 'launcher') {
-        updateAndRenderLauncher(dt);
-      } else if (currentApp === 'fpv') {
-        for (let s = 0; s < 4; s++) fpvGame.step(dt / 4);
-        fpvGame.render();
-      } else if (currentApp === 'rally') {
-        rallyGame.step(dt);
-        rallyGame.render();
-      } else if (currentApp === 'space') {
-        spaceGame.step(dt);
-        spaceGame.render();
-      } else if (currentApp === 'arena') {
-        arenaGame.step(dt);
-        arenaGame.render();
-      } else if (currentApp === 'hwtest') {
-        renderHwDiagnostic();
+      // Notificación Toast estilo Retro-Go en la esquina superior de la pantalla OLED
+      if (toastTimer > 0) {
+        toastTimer -= dt;
+        const tw = toastMsg.length * 4 + 6;
+        fbRect(64 - (tw >> 1), 1, tw, 9, true, 1);
+        fbDrawText(toastMsg, 64 - (tw >> 1) + 3, 3, 0);
       }
 
       fbPresentToCanvas();
@@ -1717,14 +1744,13 @@
       fpsFrames++;
       if (now - fpsClock >= 500) {
         const fps = Math.round((fpsFrames * 1000) / (now - fpsClock));
-        document.getElementById('uiFpsCounter').textContent = `${fps} FPS | 1KB VRAM`;
+        document.getElementById('uiFpsBattery').textContent = `${fps}FPS | BAT 98%`;
         fpsFrames = 0;
         fpsClock = now;
       }
     }
 
-    switchApp('launcher');
-    requestAnimationFrame(firmwareMainLoop);
+    requestAnimationFrame(retroGoMainLoop);
   </script>
 </body>
 </html>
