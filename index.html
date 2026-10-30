@@ -472,7 +472,7 @@
         <span>PWR</span>
         <span id="sdLed" class="led sd-act" title="Flash / SD Activity"></span>
         <span>SPI</span>
-        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + AIR FLOAT (v31)</span>
+        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + WING/TAIL (v32)</span>
       </div>
       <div class="top-hw-pills">
         <button id="btnRcPad" class="pill-btn" title="Configurar Emisora TX16S USB/BT y Gamepad Bluetooth">🎮 RC/PAD</button>
@@ -2636,10 +2636,13 @@
     ];
 
     const WING_PRESETS = [
-      { name: 'SPORT Z84', pitchRate: 210, rollRate: 290, yawRate: 115, expo: 0.38, wingLoad: 1.00, maxThrustAcc: 18.0, cgOffset:  0.00, tipStall: 1.0, thrHold: 1 },
-      { name: 'ACRO 3D',   pitchRate: 310, rollRate: 420, yawRate: 165, expo: 0.45, wingLoad: 0.82, maxThrustAcc: 24.5, cgOffset: -0.03, tipStall: 1.3, thrHold: 1 },
-      { name: 'CRUISER',   pitchRate: 145, rollRate: 200, yawRate:  85, expo: 0.50, wingLoad: 0.90, maxThrustAcc: 15.0, cgOffset:  0.03, tipStall: 0.5, thrHold: 1 },
-      { name: 'HEAVY LR',  pitchRate: 175, rollRate: 240, yawRate:  95, expo: 0.42, wingLoad: 1.32, maxThrustAcc: 20.5, cgOffset:  0.01, tipStall: 1.4, thrHold: 1 }
+      // Alas volantes puras (2 servos / elevones): SIN timón de dirección (hasRudder: 0, yawRate: 0)
+      { name: 'Z-84 WING',   hasRudder: 0, pitchRate: 210, rollRate: 290, yawRate:   0, rudderRoll: 0.00, expo: 0.38, wingLoad: 1.00, maxThrustAcc: 18.0, cgOffset:  0.00, tipStall: 1.0, thrHold: 1 },
+      { name: 'AR WING LR',  hasRudder: 0, pitchRate: 175, rollRate: 240, yawRate:   0, rudderRoll: 0.00, expo: 0.42, wingLoad: 1.25, maxThrustAcc: 20.5, cgOffset:  0.01, tipStall: 1.2, thrHold: 1 },
+      // Aviones con fuselaje y cola (Alerón + Elevador + Timón de dirección Rudder activo)
+      { name: 'BIXLER TAIL', hasRudder: 1, pitchRate: 145, rollRate: 195, yawRate:  95, rudderRoll: 0.48, expo: 0.48, wingLoad: 0.85, maxThrustAcc: 15.5, cgOffset:  0.02, tipStall: 0.5, thrHold: 1 },
+      { name: 'TALON VTAIL', hasRudder: 1, pitchRate: 185, rollRate: 250, yawRate: 115, rudderRoll: 0.32, expo: 0.40, wingLoad: 1.15, maxThrustAcc: 19.5, cgOffset:  0.01, tipStall: 0.9, thrHold: 1 },
+      { name: 'EDGE 540 3D', hasRudder: 1, pitchRate: 320, rollRate: 430, yawRate: 190, rudderRoll: 0.18, expo: 0.45, wingLoad: 0.82, maxThrustAcc: 25.0, cgOffset: -0.02, tipStall: 1.3, thrHold: 1 }
     ];
 
     const fcProfile = {
@@ -2670,9 +2673,11 @@
       const p = WING_PRESETS[fcProfile.wingPresetIdx];
       const keepThrHold = fcProfile.wing.thrHold !== undefined ? fcProfile.wing.thrHold : p.thrHold;
       fcProfile.wing.name         = p.name;
+      fcProfile.wing.hasRudder    = p.hasRudder;
       fcProfile.wing.pitchRate    = p.pitchRate;
       fcProfile.wing.rollRate     = p.rollRate;
       fcProfile.wing.yawRate      = p.yawRate;
+      fcProfile.wing.rudderRoll   = p.rudderRoll;
       fcProfile.wing.expo         = p.expo;
       fcProfile.wing.wingLoad     = p.wingLoad;
       fcProfile.wing.maxThrustAcc = p.maxThrustAcc;
@@ -3226,9 +3231,11 @@
         // Nota de signo en stepRotationSO3:
         //   pitchRate > 0 baja el morro (-U); pitchRate < 0 sube el morro (+U).
         //   pullUpCmd > 0 cuando el piloto tira del stick hacia abajo (hwInput.ry < 0) para subir el morro.
+        //   En Alas Volantes puras (!cfg.hasRudder || cfg.yawRate <= 0), el stick de Rudder (lx) NO actúa.
+        const hasRudder = !!(cfg.hasRudder && cfg.yawRate > 0);
         const rcPitch   = applySuperExpo(hwInput.ry, 1.0, cfg.expo);
         const rcRoll    = applySuperExpo(hwInput.rx, 1.0, cfg.expo);
-        const rcYaw     = applySuperExpo(hwInput.lx, 1.0, cfg.expo * 0.75);
+        const rcYaw     = hasRudder ? applySuperExpo(hwInput.lx, 1.0, cfg.expo * 0.75) : 0.0;
         const pullUpCmd = -rcPitch;
 
         this.elevL = Math.max(-1.0, Math.min(1.0, pullUpCmd - rcRoll * 0.80));
@@ -3276,12 +3283,14 @@
         const coordTurnYaw   = turnOmegaWorld * uyPos * 0.92;
         const coordTurnPitch = turnOmegaWorld * this.ry * 0.82; // Negativo -> mantiene el morro en el horizonte durante el viraje
 
-        // Estabilidad longitudinal (Cm_alpha) y direccional de winglets (Cn_beta) con el signo exacto de stepRotationSO3:
+        // Estabilidad longitudinal (Cm_alpha) y direccional de winglets/cola (Cn_beta) con el signo exacto de stepRotationSO3:
         // Si alpha > alphaTrim (morro demasiado alto), weathervanePitch > 0 (baja el morro suavemente hacia el viento relativo)
         const alphaTrim        = 0.048 - cfg.cgOffset * 0.30;
         const weathervanePitch = (alpha - alphaTrim) * (2.6 + cfg.cgOffset * 18.0) * ctrlAuth;
-        const weathervaneYaw   = beta * 3.4 * ctrlAuth;
-        const sweptDihedralRoll = -beta * 1.4 * ctrlAuth;
+        const weathervaneYaw   = beta * (hasRudder ? 4.2 : 3.4) * ctrlAuth;
+        const sweptDihedralRoll = -beta * (hasRudder ? 1.85 : 1.4) * ctrlAuth;
+        // En aviones con timón de cola, meter Rudder induce también alabeo pro-verso por diedro
+        const rudderCoupledRoll = hasRudder ? (rcYaw * (cfg.rudderRoll || 0.30) * 1.8 * ctrlAuth) : 0.0;
 
         // Ángulos de actitud actuales para modos asistidos (LAUNCH y HORIZON)
         // En convención stepRotationSO3 (+pitch = morro abajo), noseDownAngle = asin(-fy)
@@ -3301,7 +3310,7 @@
         } else if (this.mode === 'MANU') {
           // Modo MANU (Passthrough): elevones directos con amortiguación aerodinámica real (C_mq, C_lp, C_nr) sin oscilación
           const cmdPitchRate = rcPitch * cfg.pitchRate * DEG2RAD * ctrlAuth;
-          const cmdRollRate  = rcRoll  * cfg.rollRate  * DEG2RAD * ctrlAuth;
+          const cmdRollRate  = rcRoll  * cfg.rollRate  * DEG2RAD * ctrlAuth + rudderCoupledRoll;
           const cmdYawRate   = rcYaw   * cfg.yawRate   * DEG2RAD * ctrlAuth;
 
           const targetPitch = cmdPitchRate + coordTurnPitch + weathervanePitch + stallPitchRate + aeroEnv.turbPitch * 0.45;
@@ -3315,7 +3324,7 @@
         } else if (this.mode === 'ACRO') {
           // Modo ACRO (INAV Rate): bloquea la actitud comandada y coordina el giro automáticamente
           const cmdPitchRate = rcPitch * cfg.pitchRate * DEG2RAD * ctrlAuth;
-          const cmdRollRate  = rcRoll  * cfg.rollRate  * DEG2RAD * ctrlAuth;
+          const cmdRollRate  = rcRoll  * cfg.rollRate  * DEG2RAD * ctrlAuth + rudderCoupledRoll * 0.75;
           const cmdYawRate   = rcYaw   * cfg.yawRate   * DEG2RAD * ctrlAuth;
 
           const targetPitch = cmdPitchRate + coordTurnPitch + weathervanePitch * 0.45 + stallPitchRate + aeroEnv.turbPitch * 0.28;
@@ -3333,7 +3342,7 @@
           //   para que el ala cabecee con las térmicas (fugoide), balancee con las bolsas de aire (±7°..12°),
           //   sienta el par de la hélice y el Dutch-Roll sin ir clavada como un carro sobre asfalto.
           const cmdPitchRate = rcPitch * cfg.pitchRate * DEG2RAD * ctrlAuth;
-          const cmdRollRate  = rcRoll  * cfg.rollRate  * DEG2RAD * ctrlAuth;
+          const cmdRollRate  = rcRoll  * cfg.rollRate  * DEG2RAD * ctrlAuth + rudderCoupledRoll;
           const cmdYawRate   = rcYaw   * cfg.yawRate   * DEG2RAD * ctrlAuth;
 
           const stickMag  = Math.hypot(hwInput.rx, hwInput.ry);
@@ -3346,10 +3355,11 @@
                                 + 2.6 * Math.cos(this.flightTime * 2.35 - this.pz * 0.032)
                                 + 1.4 * Math.sin(this.flightTime * 4.10)) * wVar * DEG2RAD;
           const propTorqueDeg  = (this.motorRpm - 0.45) * 4.5;
+          const rudderBankDeg  = hasRudder ? (rcYaw * (cfg.rudderRoll || 0.30) * 28.0) : 0.0;
           const ahrsDriftRoll  = (7.8 * Math.sin(this.flightTime * 0.92 + this.pz * 0.025)
                                 + 4.8 * Math.cos(this.flightTime * 1.85 + this.px * 0.032)
                                 + 2.8 * Math.sin(this.flightTime * 3.40 - this.pz * 0.05)
-                                + propTorqueDeg + this.yawRate * 6.5) * wVar * DEG2RAD;
+                                + propTorqueDeg + rudderBankDeg + this.yawRate * 6.5) * wVar * DEG2RAD;
 
           const targetNoseDown = (hwInput.ry * 42.0 - 2.0 - speedTrimDeg) * DEG2RAD + ahrsDriftPitch;
           const targetBank     = (hwInput.rx * 58.0) * DEG2RAD + ahrsDriftRoll;
@@ -3468,16 +3478,26 @@
           projLine(nx, ny, nz, rx, ry, rz, 0, 1);
           projLine(lx, ly, lz, tx, ty, tz, 0, 4);
           projLine(rx, ry, rz, tx, ty, tz, 0, 4);
+          // Si es un avión con cola y timón (hasRudder), dibujar fuselaje trasero y deriva vertical/estabilizador
+          if (fcProfile.wing.hasRudder && fcProfile.wing.yawRate > 0) {
+            const tailX = this.px - this.fx * 1.25, tailY = this.py - this.fy * 1.25, tailZ = this.pz - this.fz * 1.25;
+            const finX  = tailX + this.ux * 0.48,   finY  = tailY + this.uy * 0.48,   finZ  = tailZ + this.uz * 0.48;
+            const hLx   = tailX - this.rx * 0.55,   hLy   = tailY - this.ry * 0.55,   hLz   = tailZ - this.rz * 0.55;
+            const hRx   = tailX + this.rx * 0.55,   hRy   = tailY + this.ry * 0.55,   hRz   = tailZ + this.rz * 0.55;
+            projLine(nx, ny, nz, tailX, tailY, tailZ, 0, 1);
+            projLine(tailX, tailY, tailZ, finX, finY, finZ, 0, 2);
+            projLine(hLx, hLy, hLz, hRx, hRy, hRz, 0, 2);
+          }
         }
 
-        // 3. OSD estilo INAV a pantalla completa (Z-84 INAV-S3)
+        // 3. OSD estilo INAV a pantalla completa (indica si es Ala sin Rudder o Avión con Cola)
         const g = isFreeFlightNoGates() ? { x: 0, y: 12, z: 0 } : CIRCUIT_GATES[this.activeGate];
         const dxG = g.x - this.px, dzG = g.z - this.pz;
         const gateDist = Math.hypot(dxG, g.y - this.py, dzG);
         const gateBearingRad = Math.atan2(dxG * this.rx + dzG * this.rz, dxG * this.fx + dzG * this.fz);
 
         renderInavOsd320({
-          callsign: `Z84 ${fcProfile.wing.name.slice(0, 7)}`,
+          callsign: fcProfile.wing.name.slice(0, 11),
           modeLabel: this.launchTimer > 0 ? 'LAUNCH' : this.mode,
           spdMs: this.spd,
           thrPct: this.thrCmd * 100,
@@ -3838,19 +3858,22 @@
         const w = fcProfile.wing;
         if (row === 0) {
           applyWingPreset(fcProfile.wingPresetIdx + dir);
-          showToast(`WING: ${w.name}`);
+          showToast(`${w.name} (${w.hasRudder ? 'CON RUDDER' : 'SIN RUDDER'})`);
         } else if (row === 1) {
           w.pitchRate = Math.max(90, Math.min(420, w.pitchRate + dir * 15));
         } else if (row === 2) {
           w.rollRate = Math.max(120, Math.min(540, w.rollRate + dir * 20));
         } else if (row === 3) {
-          w.expo = Math.max(0.0, Math.min(0.80, Math.round((w.expo + dir * 0.04) * 100) / 100));
+          w.yawRate = Math.max(0, Math.min(240, w.yawRate + dir * 15));
+          w.hasRudder = w.yawRate > 0 ? 1 : 0;
+          if (w.hasRudder && !w.rudderRoll) w.rudderRoll = 0.30;
+          showToast(w.hasRudder ? `RUDDER ACTIVO: ${w.yawRate} D/S` : 'ALA VOLANTE: SIN RUDDER');
         } else if (row === 4) {
-          w.wingLoad = Math.max(0.65, Math.min(1.50, Math.round((w.wingLoad + dir * 0.05) * 100) / 100));
+          w.expo = Math.max(0.0, Math.min(0.80, Math.round((w.expo + dir * 0.04) * 100) / 100));
         } else if (row === 5) {
-          w.maxThrustAcc = Math.max(11.0, Math.min(30.0, Math.round((w.maxThrustAcc + dir * 1.5) * 10) / 10));
+          w.wingLoad = Math.max(0.65, Math.min(1.50, Math.round((w.wingLoad + dir * 0.05) * 100) / 100));
         } else if (row === 6) {
-          w.cgOffset = Math.max(-0.06, Math.min(0.06, Math.round((w.cgOffset + dir * 0.01) * 100) / 100));
+          w.maxThrustAcc = Math.max(11.0, Math.min(30.0, Math.round((w.maxThrustAcc + dir * 1.5) * 10) / 10));
         } else if (row === 7) {
           w.thrHold = w.thrHold ? 0 : 1;
           if (rcInputConfig.thrMode === 2 || rcInputConfig.thrMode === 3) rcInputConfig.thrMode = 0;
@@ -3999,13 +4022,13 @@
         `AIRM:${d.airMode ? 'ON (BF)' : 'OFF'}`,
         `WIND:${Math.round(fcProfile.windScale * 100)}%`
       ] : (rgTuningTab === 1 ? [
-        `PSET:${w.name}`,
+        `TYPE:${w.name}`,
         `PIT :${w.pitchRate} D/S`,
         `ROL :${w.rollRate} D/S`,
+        `RUDD:${w.hasRudder && w.yawRate > 0 ? w.yawRate + ' D/S' : 'OFF (WING)'}`,
         `EXPO:${Math.round(w.expo * 100)}%`,
         `LOAD:${Math.round(w.wingLoad * 100)}%`,
         `PWR :${Math.round(w.maxThrustAcc)}M/S2`,
-        `CG  :${w.cgOffset >= 0 ? '+' : ''}${Math.round(w.cgOffset * 100)}%`,
         `THRL:${w.thrHold ? 'FIJO (INC)' : 'RESORTE'}`,
         `WIND:${Math.round(fcProfile.windScale * 100)}%`
       ] : [
