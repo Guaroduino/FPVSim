@@ -472,7 +472,7 @@
         <span>PWR</span>
         <span id="sdLed" class="led sd-act" title="Flash / SD Activity"></span>
         <span>SPI</span>
-        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + COMANCHE 3D (v38)</span>
+        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + COMANCHE 3D (v39)</span>
       </div>
       <div class="top-hw-pills">
         <button id="btnFollowCam" class="pill-btn" title="Alternar Vista Externa 3D Follow Cam (SELECT)">🎥 FOLLOW</button>
@@ -3622,11 +3622,11 @@
       aeroEnv.windZ = Math.sin(windDir) * baseSpd + gustZ;
       aeroEnv.windY = thermalY;
 
-      // 3. Gradientes rotacionales de turbulencia + bolsas de aire asimétricas en cada semiala
-      const turbAmp = (1.0 + treeWake * 1.25) * wScale;
-      aeroEnv.turbRoll  = (0.72 * Math.sin(t * 1.85 + px * 0.028) + 0.54 * Math.cos(t * 4.2 + pz * 0.055) + 0.35 * Math.sin(t * 9.6  + px * 0.09)) * turbAmp;
-      aeroEnv.turbPitch = (0.48 * Math.cos(t * 1.55 + pz * 0.026) + 0.36 * Math.sin(t * 3.9 - px * 0.050) + 0.24 * Math.cos(t * 8.7  - pz * 0.08)) * turbAmp;
-      aeroEnv.turbYaw   = (0.42 * Math.sin(t * 1.40 - px * 0.030) + 0.28 * Math.cos(t * 3.6 + pz * 0.048) + 0.18 * Math.sin(t * 7.8  + px * 0.06)) * turbAmp;
+      // 3. Gradientes rotacionales de turbulencia moderados + bolsas de aire suaves en cada semiala
+      const turbAmp = (0.75 + treeWake * 0.65) * wScale;
+      aeroEnv.turbRoll  = (0.36 * Math.sin(t * 1.45 + px * 0.025) + 0.24 * Math.cos(t * 3.1 + pz * 0.045) + 0.14 * Math.sin(t * 6.4 + px * 0.07)) * turbAmp;
+      aeroEnv.turbPitch = (0.26 * Math.cos(t * 1.25 + pz * 0.022) + 0.18 * Math.sin(t * 2.8 - px * 0.040) + 0.10 * Math.cos(t * 5.8 - pz * 0.06)) * turbAmp;
+      aeroEnv.turbYaw   = (0.24 * Math.sin(t * 1.15 - px * 0.026) + 0.15 * Math.cos(t * 2.6 + pz * 0.040) + 0.08 * Math.sin(t * 5.2 + px * 0.05)) * turbAmp;
     }
 
     function stepRotationSO3(craft, dt) {
@@ -3754,19 +3754,19 @@
           tPitch = ((dirHomeF * 18.0 * DEG2RAD) - curPitch) * 4.5;
           tRoll  = ((dirHomeR * 22.0 * DEG2RAD) - curRoll)  * 4.5;
         } else if (this.mode !== 'ACRO') {
-          // Modo HORIZON estilo Betaflight con zona central flotante y balanceo real sobre el colchón de aire
+          // Modo HORIZON estilo Betaflight con flotación suave e intermedia sobre el colchón de aire
           const stickMag = Math.max(Math.abs(hwInput.rx), Math.abs(hwInput.ry));
           const acroBlend = Math.max(0, (stickMag - 0.45) / 0.55);
-          const wVar = 0.55 + fcProfile.windScale * 0.65;
-          const ahrsWanderP = (0.065 * Math.sin(this.flightTime * 1.25 + this.px * 0.03) + 0.042 * Math.cos(this.flightTime * 2.45 - this.pz * 0.035)) * wVar;
-          const ahrsWanderR = (0.105 * Math.sin(this.flightTime * 1.05 + this.pz * 0.03) + 0.068 * Math.cos(this.flightTime * 2.15 + this.px * 0.04)) * wVar;
+          const wVar = 0.45 + fcProfile.windScale * 0.45;
+          const ahrsWanderP = (0.026 * Math.sin(this.flightTime * 0.95 + this.px * 0.022) + 0.016 * Math.cos(this.flightTime * 1.85 - this.pz * 0.028)) * wVar;
+          const ahrsWanderR = (0.038 * Math.sin(this.flightTime * 0.82 + this.pz * 0.022) + 0.024 * Math.cos(this.flightTime * 1.65 + this.px * 0.030)) * wVar;
           const errP = (hwInput.ry * 52 * DEG2RAD + ahrsWanderP) - curPitch;
           const errR = (hwInput.rx * 55 * DEG2RAD + ahrsWanderR) - curRoll;
-          // Zona central suave (no clava el ángulo a 0.0° como un riel) + ganancia progresiva en inclinaciones grandes
-          const gainP = 1.65 + 2.85 * Math.min(1.0, Math.abs(errP) / 0.28);
-          const gainR = 1.75 + 3.05 * Math.min(1.0, Math.abs(errR) / 0.32);
-          const lvlPitch = errP * gainP + aeroEnv.turbPitch * 0.58;
-          const lvlRoll  = errR * gainR + aeroEnv.turbRoll  * 0.72;
+          // Nivelado orgánico: punto medio entre firmeza de rescate y respiración natural (±2°..3°)
+          const gainP = 2.65 + 2.15 * Math.min(1.0, Math.abs(errP) / 0.25);
+          const gainR = 2.80 + 2.30 * Math.min(1.0, Math.abs(errR) / 0.28);
+          const lvlPitch = errP * gainP + aeroEnv.turbPitch * 0.22;
+          const lvlRoll  = errR * gainR + aeroEnv.turbRoll  * 0.26;
           tPitch = lvlPitch * (1.0 - acroBlend) + ratePitchCmd * 0.88 * acroBlend;
           tRoll  = lvlRoll  * (1.0 - acroBlend) + rateRollCmd  * 0.88 * acroBlend;
         }
@@ -4236,54 +4236,51 @@
           this.rollRate  += (targetRoll  - this.rollRate)  * rateGain;
           this.yawRate   += (targetYaw   - this.yawRate)   * rateGain;
         } else {
-          // Modo HOR (INAV Horizon con flotación real sobre el aire):
-          // - En ángulos grandes (>18°) rescata y nivela el avión con seguridad al soltar el stick.
-          // - Dentro de la ventana central (±10° en Roll, ±6° en Pitch), la ganancia es blanda/elástica
-          //   para que el ala cabecee con las térmicas (fugoide), balancee con las bolsas de aire (±7°..12°),
-          //   sienta el par de la hélice y el Dutch-Roll sin ir clavada como un carro sobre asfalto.
+          // Modo HOR (INAV Horizon con punto medio ideal: estable pero vivo en el aire):
+          // - Nivela con firmeza y suavidad al soltar el stick, manteniendo rumbo limpio.
+          // - En vuelo recto presenta una respiración sutil y natural (±1.5°..2.2° en Pitch, ±2.5°..3.5° en Roll)
+          //   al cruzar térmicas suaves, sin quedar rígido como un riel ni oscilar bruscamente.
           const cmdPitchRate = rcPitch * cfg.pitchRate * DEG2RAD * ctrlAuth;
           const cmdRollRate  = rcRoll  * cfg.rollRate  * DEG2RAD * ctrlAuth + rudderCoupledRoll;
           const cmdYawRate   = rcYaw   * cfg.yawRate   * DEG2RAD * ctrlAuth;
 
           const stickMag  = Math.hypot(hwInput.rx, hwInput.ry);
-          const acroBlend = Math.min(1.0, Math.max(0.0, (stickMag - 0.30) / 0.70));
+          const acroBlend = Math.min(1.0, Math.max(0.0, (stickMag - 0.35) / 0.65));
 
-          // Ondulación atmosférica real (bolsas térmicas asimétricas + fugoide de velocidad + par de hélice)
-          const wVar = 0.65 + fcProfile.windScale * 0.65;
-          const speedTrimDeg = Math.max(-5.5, Math.min(5.0, (Va - 14.6) * 0.48 + (this.motorRpm - 0.50) * 4.0));
-          const ahrsDriftPitch = (4.2 * Math.sin(this.flightTime * 1.15 + this.px * 0.024)
-                                + 2.6 * Math.cos(this.flightTime * 2.35 - this.pz * 0.032)
-                                + 1.4 * Math.sin(this.flightTime * 4.10)) * wVar * DEG2RAD;
-          const propTorqueDeg  = (this.motorRpm - 0.45) * 4.5;
-          const rudderBankDeg  = hasRudder ? (rcYaw * (cfg.rudderRoll || 0.30) * 28.0) : 0.0;
-          const ahrsDriftRoll  = (7.8 * Math.sin(this.flightTime * 0.92 + this.pz * 0.025)
-                                + 4.8 * Math.cos(this.flightTime * 1.85 + this.px * 0.032)
-                                + 2.8 * Math.sin(this.flightTime * 3.40 - this.pz * 0.05)
-                                + propTorqueDeg + rudderBankDeg + this.yawRate * 6.5) * wVar * DEG2RAD;
+          // Ondulación atmosférica suave (térmicas lentas + trim ligero de velocidad + par sutil de hélice)
+          const wVar = 0.45 + fcProfile.windScale * 0.45;
+          const speedTrimDeg = Math.max(-2.2, Math.min(2.2, (Va - 14.6) * 0.18 + (this.motorRpm - 0.50) * 1.4));
+          const ahrsDriftPitch = (1.35 * Math.sin(this.flightTime * 0.78 + this.px * 0.018)
+                                + 0.85 * Math.cos(this.flightTime * 1.55 - this.pz * 0.022)) * wVar * DEG2RAD;
+          const propTorqueDeg  = (this.motorRpm - 0.48) * 1.3;
+          const rudderBankDeg  = hasRudder ? (rcYaw * (cfg.rudderRoll || 0.30) * 20.0) : 0.0;
+          const ahrsDriftRoll  = (2.40 * Math.sin(this.flightTime * 0.68 + this.pz * 0.018)
+                                + 1.45 * Math.cos(this.flightTime * 1.35 + this.px * 0.022)
+                                + propTorqueDeg + rudderBankDeg) * wVar * DEG2RAD;
 
-          const targetNoseDown = (hwInput.ry * 42.0 - 2.0 - speedTrimDeg) * DEG2RAD + ahrsDriftPitch;
-          const targetBank     = (hwInput.rx * 58.0) * DEG2RAD + ahrsDriftRoll;
+          const targetNoseDown = (hwInput.ry * 40.0 - 2.0 - speedTrimDeg) * DEG2RAD + ahrsDriftPitch;
+          const targetBank     = (hwInput.rx * 55.0) * DEG2RAD + ahrsDriftRoll;
 
           const errPitch = targetNoseDown - noseDownAngle;
           const errRoll  = targetBank     - bankRightAngle;
 
-          // Curva no lineal de auto-nivelado: muy flotante cerca de 0° (0.65 s^-1) y firme en alabeos fuertes (2.85 s^-1)
-          const gainPitch = (0.68 + 2.05 * Math.min(1.0, Math.abs(errPitch) / (14.0 * DEG2RAD))) * ctrlAuth;
-          const gainRoll  = (0.62 + 2.25 * Math.min(1.0, Math.abs(errRoll)  / (20.0 * DEG2RAD))) * ctrlAuth;
+          // Curva progresiva equilibrada: centro elástico pero controlado (2.15..2.25 s^-1) y rescate firme (4.1 s^-1)
+          const gainPitch = (2.15 + 1.85 * Math.min(1.0, Math.abs(errPitch) / (12.0 * DEG2RAD))) * ctrlAuth;
+          const gainRoll  = (2.25 + 2.05 * Math.min(1.0, Math.abs(errRoll)  / (15.0 * DEG2RAD))) * ctrlAuth;
 
           const lvlPitch = errPitch * gainPitch;
           const lvlRoll  = errRoll  * gainRoll;
 
-          const tPitch = lvlPitch * (1.0 - acroBlend * 0.68) + cmdPitchRate * (0.38 + 0.62 * acroBlend)
-                       + coordTurnPitch * 0.42 + weathervanePitch * 0.72 + stallPitchRate * 0.90 + aeroEnv.turbPitch * 0.88;
-          const tRoll  = lvlRoll  * (1.0 - acroBlend * 0.68) + cmdRollRate  * (0.38 + 0.62 * acroBlend)
-                       + sweptDihedralRoll * 0.95 + stallRollRate * 0.85 + aeroEnv.turbRoll * 1.08;
-          const tYaw   = cmdYawRate * 0.92 + coordTurnYaw * 0.88 + weathervaneYaw * 0.82 + aeroEnv.turbYaw * 0.68;
+          const tPitch = lvlPitch * (1.0 - acroBlend * 0.65) + cmdPitchRate * (0.35 + 0.65 * acroBlend)
+                       + coordTurnPitch * 0.55 + weathervanePitch * 0.50 + stallPitchRate * 0.85 + aeroEnv.turbPitch * 0.30;
+          const tRoll  = lvlRoll  * (1.0 - acroBlend * 0.65) + cmdRollRate  * (0.35 + 0.65 * acroBlend)
+                       + sweptDihedralRoll * 0.40 + stallRollRate * 0.75 + aeroEnv.turbRoll * 0.36;
+          const tYaw   = cmdYawRate * 0.90 + coordTurnYaw * 0.90 + weathervaneYaw * 0.85 + aeroEnv.turbYaw * 0.30;
 
-          // Inercia aerodinámica suave (permite que el ala respire con cada ráfaga antes de corregir)
-          this.pitchRate += (tPitch - this.pitchRate) * Math.min(1.0, (6.8 + 0.18 * Va) * dt);
-          this.rollRate  += (tRoll  - this.rollRate)  * Math.min(1.0, (7.5 + 0.20 * Va) * dt);
-          this.yawRate   += (tYaw   - this.yawRate)   * Math.min(1.0, (6.5 + 0.15 * Va) * dt);
+          // Amortiguación limpia y sin rebote
+          this.pitchRate += (tPitch - this.pitchRate) * Math.min(1.0, (10.5 + 0.22 * Va) * dt);
+          this.rollRate  += (tRoll  - this.rollRate)  * Math.min(1.0, (11.5 + 0.25 * Va) * dt);
+          this.yawRate   += (tYaw   - this.yawRate)   * Math.min(1.0, (9.0  + 0.18 * Va) * dt);
         }
 
         stepRotationSO3(this, dt);
