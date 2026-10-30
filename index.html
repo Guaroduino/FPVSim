@@ -472,7 +472,7 @@
         <span>PWR</span>
         <span id="sdLed" class="led sd-act" title="Flash / SD Activity"></span>
         <span>SPI</span>
-        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + 3 CIRCUITOS (v23)</span>
+        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + 3 CIRCUITOS (v24)</span>
       </div>
       <div class="top-hw-pills">
         <button id="btnRates" class="pill-btn active" title="Configurar Rates, PID y Físicas">⚙️ RATES</button>
@@ -1313,10 +1313,10 @@
       {
         id: 'chorobobo',
         name: 'AIA CHOROBOBO 6X4KM',
-        skyZenith:  [48, 94, 175],
-        skyHorizon: [192, 188, 176],
-        cloudCol:   [246, 245, 240],
-        fogCol:     rgb565(186, 182, 170),
+        skyZenith:  [44, 92, 178],
+        skyHorizon: [166, 198, 228],
+        cloudCol:   [246, 248, 252],
+        fogCol:     rgb565(166, 198, 228),
         baseA:      [114, 98, 78],
         baseB:      [98, 84, 68],
         hillCol:    [42, 78, 38]
@@ -1324,10 +1324,10 @@
       {
         id: 'campo',
         name: 'CAMPO INAV DIA',
-        skyZenith:  [52, 98, 175],
-        skyHorizon: [195, 192, 182],
-        cloudCol:   [245, 244, 240],
-        fogCol:     rgb565(188, 186, 175),
+        skyZenith:  [48, 96, 178],
+        skyHorizon: [168, 200, 228],
+        cloudCol:   [246, 248, 252],
+        fogCol:     rgb565(168, 200, 228),
         baseA:      [76, 98, 44],
         baseB:      [88, 110, 50],
         hillCol:    [122, 114, 62]
@@ -1561,11 +1561,12 @@
     const NUM_RAY_STEPS = 128;
     const RAY_S_Q8      = new Int32Array(NUM_RAY_STEPS);
     const RAY_INV_S_Q14 = new Int32Array(NUM_RAY_STEPS);
+    const PROJ_SCALE_Q8 = new Int32Array(NUM_RAY_STEPS);
     const CLOUD_DIST_Q8 = new Int32Array(512);
     const MICRO_TEX_LUT = new Uint8Array(256);
 
     (function initS3FixedPointLuts() {
-      // Distribución de pasos optimizada para volar entre 8m y 20m de altura:
+      // Distribución de pasos optimizada para volar desde ras de suelo hasta >1,500m de altitud:
       // Los primeros 96 pasos (k = 0..95) cubren con alta densidad desde 0.8m hasta 240m frente a la aeronave
       let s = 0.8, ds = 0.25;
       for (let k = 0; k < NUM_RAY_STEPS; k++) {
@@ -1575,8 +1576,8 @@
           s  += ds;
           ds += 0.046; // En k=95 alcanza ~240m con excelente resolución para 8-20m de altura
         } else {
-          // Pasos 96..127 cubren desde 240m hasta ~1,650m hacia el horizonte del valle
-          s *= 1.062;
+          // Pasos 96..127 cubren desde 240m hasta ~3,600m para mantener horizonte completo al subir a >600m
+          s *= 1.088;
         }
       }
       for (let dy = 0; dy < 512; dy++) {
@@ -1630,8 +1631,11 @@
       const invFocalVox = 1.0 / FOCAL_VOX;
       const hProjScale  = (U0y * FOCAL_VOX) / fHClamped;
       const camY_Tex    = Math.round(camY / HEIGHT_SCALE);
-      // Altura proyectada por unidad de voxHeight (en Q2 para multiplicar por RAY_INV_S_Q14 y hacer >> 16)
+      // Pre-escalar (heightFactorQ2 * RAY_INV_S_Q14[k]) >> 8 una sola vez por frame (evita overflow Int32 a >166m de altura)
       const heightFactorQ2 = Math.round(HEIGHT_SCALE * hProjScale * 4);
+      for (let k = 0; k < NUM_RAY_STEPS; k++) {
+        PROJ_SCALE_Q8[k] = (heightFactorQ2 * RAY_INV_S_Q14[k]) >> 8;
+      }
 
       const startX_Q16    = Math.round((SPAWN_MX + camX * MAP_SCALE_X) * 65536);
       const startZ_Q16    = Math.round((SPAWN_MZ + camZ * MAP_SCALE_Z) * 65536);
@@ -1661,8 +1665,8 @@
           const mIdx = (mz << MAP_SHIFT_X) | mx;
 
           const dhTex = voxHeight[mIdx] - camY_Tex;
-          // Proyección perspectiva sin divisiones: multiplicación entera + shift >> 16
-          const v = horizonV - ((dhTex * heightFactorQ2 * RAY_INV_S_Q14[k]) >> 16);
+          // Proyección perspectiva sin divisiones ni overflow Int32 (soporta hasta >40,000m de altitud)
+          const v = horizonV - ((dhTex * PROJ_SCALE_Q8[k]) >> 8);
 
           if (v < yMax) {
             const vTop = v < 0 ? 0 : v;
