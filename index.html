@@ -461,7 +461,7 @@
         <span>PWR</span>
         <span id="sdLed" class="led sd-act" title="Flash / SD Activity"></span>
         <span>SPI</span>
-        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + COMANCHE 3D (v48)</span>
+        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + COMANCHE 3D (v49)</span>
       </div>
       <div class="top-hw-pills">
         <button id="btnPalette" class="pill-btn" title="Cambiar Modo de Pantalla SPI / IPS / 1-Bit">🎨 IPS 60MHz</button>
@@ -5349,24 +5349,55 @@
      *     - Cronometraje por Vuelta (Lap Timer) con 12 Checkpoints y Pórtico de Meta
      ***************************************************************************/
     const RC_TRACK_WPS = [
-      { x: -32.0, z: -16.0 }, // 0: Inicio Recta Principal (frente al podio)
-      { x:   0.0, z: -16.0 }, // 1: Línea de Salida / Meta (START / FINISH)
-      { x:  34.0, z: -16.0 }, // 2: Frenada Curva 1
-      { x:  50.0, z:   2.0 }, // 3: Curva 1 Parabólica Derecha
-      { x:  46.0, z:  28.0 }, // 4: Subida Este
-      { x:  22.0, z:  40.0 }, // 5: Recta Norte (Salto Meseta #1)
-      { x:  -2.0, z:  38.0 }, // 6: Entrada Infield
-      { x:   0.0, z:  12.0 }, // 7: Horquilla Central (Hairpin)
-      { x: -20.0, z:  14.0 }, // 8: Salida Infield
-      { x: -26.0, z:  38.0 }, // 9: Curva Noroeste
-      { x: -48.0, z:  26.0 }, // 10: Bajada Oeste (Salto Meseta #2)
-      { x: -48.0, z:  -4.0 }  // 11: Última Curva hacia Recta Principal
+      { x: -24.0, z: -12.0 }, // 0: Inicio Recta Principal (frente al podio elevado)
+      { x:   0.0, z: -12.0 }, // 1: Línea de Salida / Meta (START / FINISH)
+      { x:  24.0, z: -12.0 }, // 2: Frenada Curva 1
+      { x:  33.0, z:  -1.0 }, // 3: Curva 1 Parabólica Derecha
+      { x:  31.0, z:  15.0 }, // 4: Subida Este
+      { x:  16.0, z:  23.0 }, // 5: Recta Norte (Salto Meseta #1)
+      { x:  -1.0, z:  22.0 }, // 6: Entrada Infield
+      { x:   0.0, z:   5.0 }, // 7: Horquilla Central (Hairpin)
+      { x: -14.0, z:   6.0 }, // 8: Salida Infield
+      { x: -18.0, z:  22.0 }, // 9: Curva Noroeste
+      { x: -32.0, z:  14.0 }, // 10: Bajada Oeste (Salto Meseta #2)
+      { x: -32.0, z:  -3.0 }  // 11: Última Curva hacia Recta Principal
     ];
 
+    // Bordes 3D interior/exterior precalculados 1 sola vez al arrancar (0 allocs por frame) para que la pista se entienda al 100%
+    const RC_NUM_WPS    = RC_TRACK_WPS.length;
+    const RC_EDGE_IN_X  = new Float32Array(RC_NUM_WPS);
+    const RC_EDGE_IN_Z  = new Float32Array(RC_NUM_WPS);
+    const RC_EDGE_OUT_X = new Float32Array(RC_NUM_WPS);
+    const RC_EDGE_OUT_Z = new Float32Array(RC_NUM_WPS);
+
+    (function initRcTrackEdges() {
+      const edgeHalfW = 4.35;
+      for (let i = 0; i < RC_NUM_WPS; i++) {
+        const prev = RC_TRACK_WPS[(i - 1 + RC_NUM_WPS) % RC_NUM_WPS];
+        const curr = RC_TRACK_WPS[i];
+        const next = RC_TRACK_WPS[(i + 1) % RC_NUM_WPS];
+        let d1x = curr.x - prev.x, d1z = curr.z - prev.z;
+        let d2x = next.x - curr.x, d2z = next.z - curr.z;
+        const l1 = Math.hypot(d1x, d1z) || 1.0;
+        const l2 = Math.hypot(d2x, d2z) || 1.0;
+        d1x /= l1; d1z /= l1;
+        d2x /= l2; d2z /= l2;
+        let tx = d1x + d2x, tz = d1z + d2z;
+        const tLen = Math.hypot(tx, tz) || 1.0;
+        tx /= tLen; tz /= tLen;
+        // Normal hacia adentro del circuito antihorario (-tz, tx)
+        const nx = -tz, nz = tx;
+        RC_EDGE_IN_X[i]  = curr.x + nx * edgeHalfW;
+        RC_EDGE_IN_Z[i]  = curr.z + nz * edgeHalfW;
+        RC_EDGE_OUT_X[i] = curr.x - nx * edgeHalfW;
+        RC_EDGE_OUT_Z[i] = curr.z - nz * edgeHalfW;
+      }
+    })();
+
     const RC_CAR_PRESETS = [
-      { name: 'BUGGY 4WD',    topSpd: 18.0, accel: 22.0, grip: 1.05, driftSlip: 0.86, steerRate: 34.0, bodyCol: rgb565(32, 148, 250), wingCol: C565.GOLD  },
-      { name: 'TOURING PRO',  topSpd: 20.5, accel: 25.0, grip: 1.42, driftSlip: 0.94, steerRate: 31.0, bodyCol: rgb565(240, 48,  42), wingCol: C565.WHITE },
-      { name: 'DRIFT SPEC',   topSpd: 16.5, accel: 21.0, grip: 0.62, driftSlip: 0.72, steerRate: 40.0, bodyCol: rgb565(185, 52, 245), wingCol: C565.GREEN }
+      { name: 'BUGGY 4WD',    topSpd: 16.5, accel: 21.0, grip: 1.10, driftSlip: 0.86, steerRate: 35.0, bodyCol: rgb565(32, 148, 250), wingCol: C565.GOLD  },
+      { name: 'TOURING PRO',  topSpd: 18.5, accel: 24.0, grip: 1.45, driftSlip: 0.94, steerRate: 32.0, bodyCol: rgb565(240, 48,  42), wingCol: C565.WHITE },
+      { name: 'DRIFT SPEC',   topSpd: 15.0, accel: 20.0, grip: 0.64, driftSlip: 0.72, steerRate: 42.0, bodyCol: rgb565(185, 52, 245), wingCol: C565.GREEN }
     ];
 
     // Buffer estático de partículas de humo de llanta / polvo de tierra (16 partículas, 0 allocs)
@@ -5398,20 +5429,20 @@
         if (d < minDist) {
           minDist = d;
           bestSeg = i;
-          bestAlong = i + t * Math.sqrt(len2) * 0.25;
+          bestAlong = i + t * Math.sqrt(len2) * 0.32;
         }
       }
 
       // 2 Mesetas de Salto (Tabletop Jumps) sobre el circuito:
-      // Salto #1 en el tramo Norte (cerca de x=34, z=34) y Salto #2 en la bajada Oeste (cerca de x=-48, z=11)
+      // Salto #1 en el tramo Noreste (cerca de x=23.5, z=19) y Salto #2 en la bajada Oeste (cerca de x=-32, z=5.5)
       let jumpH = 0.0;
-      if (minDist < 4.8) {
-        const dJ1 = Math.hypot(wx - 34.0, wz - 34.0);
-        const dJ2 = Math.hypot(wx + 48.0, wz - 11.0);
-        if (dJ1 < 5.5) {
-          jumpH = Math.cos((dJ1 / 5.5) * Math.PI * 0.5) * 1.15;
-        } else if (dJ2 < 5.5) {
-          jumpH = Math.cos((dJ2 / 5.5) * Math.PI * 0.5) * 1.15;
+      if (minDist < 4.6) {
+        const dJ1 = Math.hypot(wx - 23.5, wz - 19.0);
+        const dJ2 = Math.hypot(wx + 32.0, wz - 5.5);
+        if (dJ1 < 4.5) {
+          jumpH = Math.cos((dJ1 / 4.5) * Math.PI * 0.5) * 1.15;
+        } else if (dJ2 < 4.5) {
+          jumpH = Math.cos((dJ2 / 4.5) * Math.PI * 0.5) * 1.15;
         }
       }
 
@@ -5421,8 +5452,8 @@
     function generateRcCarTrackVoxelMap() {
       activeWorldMapMode = 'rccar';
       choroBakedInPsram  = false;
-      WORLD_W_M   = 260.0;
-      WORLD_H_M   = 180.0;
+      WORLD_W_M   = 160.0;
+      WORLD_H_M   = 120.0;
       MAP_SCALE_X = MAP_W / WORLD_W_M;
       MAP_SCALE_Z = MAP_H / WORLD_H_M;
 
@@ -5440,9 +5471,9 @@
         }
       }
 
-      // 2. Hornear el Circuito de Asfalto + Pianos Rojo/Blanco + 2 Rampas + Césped en PSRAM
+      // 2. Hornear el Circuito de Asfalto Oscuro de Alto Contraste + Pianos Rojo/Blanco + 2 Rampas + Césped en PSRAM
       const TRACK_HALF_W = 4.2;
-      const CURB_OUTER_W = 5.3;
+      const CURB_OUTER_W = 5.55;
 
       for (let mz = 0; mz < MAP_H; mz++) {
         const zOff = mz << MAP_SHIFT_X;
@@ -5451,14 +5482,14 @@
         for (let mx = 0; mx < MAP_W; mx++) {
           const wx = (mx - SPAWN_MX) / MAP_SCALE_X;
 
-          // Optimización rápida fuera del rectángulo del circuito (-62..+62, -28..+52)
-          if (wx < -62.0 || wx > 62.0 || wz < -28.0 || wz > 52.0) {
-            const borderDist = Math.max(Math.abs(wx) - 62.0, Math.abs(wz - 12.0) - 42.0);
-            const hHill = borderDist > 12.0 ? Math.min(48, Math.round(2 + (borderDist - 12.0) * 0.65)) : 2;
+          // Optimización rápida fuera del rectángulo del circuito (-44..+44, -22..+34)
+          if (wx < -44.0 || wx > 44.0 || wz < -22.0 || wz > 34.0) {
+            const borderDist = Math.max(Math.abs(wx) - 44.0, Math.abs(wz - 6.0) - 28.0);
+            const hHill = borderDist > 10.0 ? Math.min(48, Math.round(2 + (borderDist - 10.0) * 0.75)) : 2;
             voxHeight[zOff + mx] = hHill;
             const mowerStripe = ((mx >> 4) + ((mz >> 4) & 1)) & 1;
-            const r = mowerStripe ? 46 : 56;
-            const g = mowerStripe ? 102 : 116;
+            const r = mowerStripe ? 46 : 58;
+            const g = mowerStripe ? 112 : 128;
             const b = mowerStripe ? 42 : 48;
             voxColor[zOff + mx] = rgb565(r, g, b);
             continue;
@@ -5468,50 +5499,49 @@
           const d = info.dist;
 
           if (d <= TRACK_HALF_W) {
-            // Asfalto del circuito + líneas de salida/meta y 2 rampas de salto
+            // Asfalto oscuro de alto contraste + líneas blancas de borde + línea central y 2 rampas de salto
             const hVox = Math.min(64, Math.round(2 + (info.jumpH / HEIGHT_SCALE)));
             voxHeight[zOff + mx] = hVox;
 
             const grain = ((mx * 17 ^ mz * 31) & 3) * 2;
-            let r = 64 + grain, g = 68 + grain, b = 76 + grain;
+            let r = 38 + grain, g = 42 + grain, b = 50 + grain;
 
-            // Línea de Salida/Meta ajedrezada blanca/negra en wx ~ 0, wz ~ -16
-            if (Math.abs(wx) < 1.2 && Math.abs(wz + 16.0) <= TRACK_HALF_W) {
+            // Línea de Salida/Meta ajedrezada blanca/negra en wx ~ 0, wz ~ -12
+            if (Math.abs(wx) < 1.25 && Math.abs(wz + 12.0) <= TRACK_HALF_W) {
               const check = ((mx >> 2) ^ (mz >> 2)) & 1;
-              r = check ? 245 : 28;
-              g = check ? 245 : 28;
-              b = check ? 245 : 32;
-            } else if (info.jumpH > 0.15) {
-              // Franjas amarillas/naranjas de advertencia en las 2 rampas de salto
+              r = check ? 250 : 20;
+              g = check ? 250 : 20;
+              b = check ? 250 : 24;
+            } else if (info.jumpH > 0.12) {
+              // Franjas amarillas/naranjas de alta visibilidad en las 2 rampas de salto
               const stripe = ((mx + mz) >> 2) & 1;
-              if (stripe && d > TRACK_HALF_W - 1.1) {
-                r = 240; g = 185; b = 32;
+              if (stripe) {
+                r = 245; g = 190; b = 28;
               } else {
-                r += 14; g += 12; b += 8;
+                r = 68; g = 72; b = 82;
               }
-            } else if (Math.abs(d - TRACK_HALF_W) < 0.32) {
-              // Línea blanca continua de límite de pista
-              r = 228; g = 232; b = 236;
+            } else if (d > TRACK_HALF_W - 0.52) {
+              // Línea blanca ancha continua en ambos bordes del asfalto
+              r = 244; g = 248; b = 252;
+            } else if (d < 0.28 && (Math.floor(info.along * 2.5) & 1)) {
+              // Línea discontinua amarilla central de guía de trazada
+              r = 230; g = 195; b = 45;
             }
             voxColor[zOff + mx] = rgb565(clampByte(r), clampByte(g), clampByte(b));
           } else if (d <= CURB_OUTER_W) {
-            // Pianos (Curbs) alternados Rojo y Blanco en los bordes de la pista
+            // Pianos (Curbs) anchos alternados Rojo y Blanco en los bordes de la pista
             voxHeight[zOff + mx] = 3;
-            const curbBand = (Math.floor(info.along * 3.2) & 1);
+            const curbBand = (Math.floor(info.along * 3.0) & 1);
             if (curbBand) {
-              voxColor[zOff + mx] = rgb565(232, 44, 38); // Rojo Racing
+              voxColor[zOff + mx] = rgb565(242, 38, 32); // Rojo Racing Brillante
             } else {
-              voxColor[zOff + mx] = rgb565(242, 244, 248); // Blanco
+              voxColor[zOff + mx] = rgb565(248, 250, 254); // Blanco Puro
             }
           } else {
-            // Infield de césped cortado en franjas y borde de tierra compactada junto al piano
+            // Infield de césped verde vivo en franjas para máximo contraste con el asfalto oscuro
             voxHeight[zOff + mx] = 2;
-            if (d <= CURB_OUTER_W + 1.4) {
-              voxColor[zOff + mx] = rgb565(136, 110, 76); // Tierra exterior (Run-off)
-            } else {
-              const mowerStripe = ((mx >> 4) + ((mz >> 4) & 1)) & 1;
-              voxColor[zOff + mx] = mowerStripe ? rgb565(46, 106, 44) : rgb565(58, 120, 50);
-            }
+            const mowerStripe = ((mx >> 4) + ((mz >> 4) & 1)) & 1;
+            voxColor[zOff + mx] = mowerStripe ? rgb565(48, 118, 44) : rgb565(62, 136, 54);
           }
         }
       }
@@ -5602,8 +5632,24 @@
     }
 
     function renderRcTrackPropsAndParticles320(sim, projPoint320, projLine) {
-      // 1. Pórtico de Salida / Meta (START / FINISH) en (0, -16)
-      const gX = 0.0, gZ = -16.0, gH = 4.6, gW = 4.8;
+      // 1. Bordes 3D Interior y Exterior de toda la pista (hace que cada curva y horquilla se entienda al 100% desde el podio)
+      for (let i = 0; i < RC_NUM_WPS; i++) {
+        const nxt = (i + 1) % RC_NUM_WPS;
+        const yA  = getTerrainHeightMeters(RC_TRACK_WPS[i].x,   RC_TRACK_WPS[i].z)   + 0.12;
+        const yB  = getTerrainHeightMeters(RC_TRACK_WPS[nxt].x, RC_TRACK_WPS[nxt].z) + 0.12;
+        const isNextSeg = (i === sim.activeGate || nxt === sim.activeGate);
+        const edgeCol   = isNextSeg ? 3 : 1; // 3 = Verde brillante en el tramo activo, 1 = Blanco en el resto
+        projLine(RC_EDGE_IN_X[i],  yA, RC_EDGE_IN_Z[i],  RC_EDGE_IN_X[nxt],  yB, RC_EDGE_IN_Z[nxt],  0, edgeCol);
+        projLine(RC_EDGE_OUT_X[i], yA, RC_EDGE_OUT_Z[i], RC_EDGE_OUT_X[nxt], yB, RC_EDGE_OUT_Z[nxt], 0, edgeCol);
+
+        // Línea guía central punteada hacia la siguiente curva (si CAMINO GUIA está activo)
+        if (fcProfile.showSplinePath !== 0) {
+          projLine(RC_TRACK_WPS[i].x, yA + 0.05, RC_TRACK_WPS[i].z, RC_TRACK_WPS[nxt].x, yB + 0.05, RC_TRACK_WPS[nxt].z, 2, 2);
+        }
+      }
+
+      // 2. Pórtico de Salida / Meta (START / FINISH) en (0, -12)
+      const gX = 0.0, gZ = -12.0, gH = 4.4, gW = 4.5;
       projLine(gX, 0.25, gZ - gW, gX, gH, gZ - gW, 0, 1);
       projLine(gX, 0.25, gZ + gW, gX, gH, gZ + gW, 0, 1);
       const b0 = projPoint320(gX, gH - 0.8, gZ - gW);
@@ -5617,18 +5663,24 @@
         drawOsdSmall320('START', midX, midY, C565.WHITE);
       }
 
-      // 2. Conos / Balizas en los 12 vértices del circuito (resaltando el siguiente checkpoint)
-      for (let i = 0; i < RC_TRACK_WPS.length; i++) {
+      // 3. Arco / Baliza 3D en el Siguiente Checkpoint (sim.activeGate) + Conos en los vértices
+      for (let i = 0; i < RC_NUM_WPS; i++) {
         const wp = RC_TRACK_WPS[i];
         const isNext = (i === sim.activeGate);
         const y0 = getTerrainHeightMeters(wp.x, wp.z) + 0.15;
-        const pt = projPoint320(wp.x, y0 + (isNext ? 0.9 : 0.35), wp.z);
+        if (isNext) {
+          // Postes laterales verdes en los bordes de la curva objetivo
+          projLine(RC_EDGE_IN_X[i],  y0, RC_EDGE_IN_Z[i],  RC_EDGE_IN_X[i],  y0 + 2.4, RC_EDGE_IN_Z[i],  0, 3);
+          projLine(RC_EDGE_OUT_X[i], y0, RC_EDGE_OUT_Z[i], RC_EDGE_OUT_X[i], y0 + 2.4, RC_EDGE_OUT_Z[i], 0, 3);
+          projLine(RC_EDGE_IN_X[i],  y0 + 2.4, RC_EDGE_IN_Z[i], RC_EDGE_OUT_X[i], y0 + 2.4, RC_EDGE_OUT_Z[i], 1, 3);
+        }
+        const pt = projPoint320(wp.x, y0 + (isNext ? 2.6 : 0.45), wp.z);
         if (pt && pt.sx > 4 && pt.sx < DISP_W - 4 && pt.sy > 4 && pt.sy < DISP_H - 4) {
           drawInavCircleDot320(pt.sx, pt.sy, isNext ? 2 : 1, isNext ? C565.GREEN : C565.ORANGE);
         }
       }
 
-      // 3. Partículas de humo de neumáticos (drift) o polvo de tierra
+      // 4. Partículas de humo de neumáticos (drift) o polvo de tierra
       for (let i = 0; i < MAX_CAR_PARTICLES; i++) {
         const age = CAR_PART_AGE[i];
         if (age <= 0.0 || age > 0.65) continue;
@@ -5640,8 +5692,8 @@
     }
 
     const rcCarSim = {
-      px: -12.0, py: 0.25, pz: -16.0,
-      vx: 0.0,   vy: 0.0,  vz: 0.0,
+      px: -8.0, py: 0.25, pz: -12.0,
+      vx: 0.0,  vy: 0.0,  vz: 0.0,
       yaw: Math.PI * 0.5, // Mirando hacia +X en la recta principal frente al podio
       spd: 0.0,
       uFwd: 0.0,
@@ -5654,7 +5706,7 @@
       airborne: false,
       onTrack: true,
       presetIdx: 0,
-      camMode: 0, // 0 = LOS PODIO AUTO-ZOOM, 1 = LOS PODIO WIDE, 2 = CHASE CAM 3D
+      camMode: 0, // 0 = PODIO ALTO ZOOM, 1 = PODIO PANORAMICO, 2 = CHASE CAM 3D
       chaseCam: false,
       activeGate: 1,
       lapCount: 0,
@@ -5672,8 +5724,8 @@
         if (activeWorldMapMode !== 'rccar') {
           generateRcCarTrackVoxelMap();
         }
-        this.px = -10.0;
-        this.pz = -16.0;
+        this.px = -8.0;
+        this.pz = -12.0;
         this.py = getTerrainHeightMeters(this.px, this.pz) + 0.05;
         this.yaw = Math.PI * 0.5;
         this.vx = 0.0; this.vy = 0.0; this.vz = 0.0;
@@ -5730,7 +5782,7 @@
 
         // 3. Evaluar superficie bajo las 4 ruedas (Asfalto vs Piano vs Césped/Tierra + Rampa de Salto)
         const trackInfo = getRcTrackInfoAt(this.px, this.pz);
-        this.onTrack = (trackInfo.dist <= 5.3);
+        this.onTrack = (trackInfo.dist <= 5.4);
         const surfaceGrip = this.onTrack ? 1.0 : 0.65;
         const surfaceDrag = this.onTrack ? 0.55 : 2.15;
 
@@ -5785,9 +5837,9 @@
         this.pz += this.vz * dt;
 
         // Límite perimetral del estadio RC
-        if (Math.abs(this.px) > 64.0) { this.px = Math.sign(this.px) * 64.0; this.vx *= -0.4; }
-        if (this.pz < -26.0)          { this.pz = -26.0; this.vz *= -0.4; }
-        if (this.pz >  52.0)          { this.pz =  52.0; this.vz *= -0.4; }
+        if (Math.abs(this.px) > 42.0) { this.px = Math.sign(this.px) * 42.0; this.vx *= -0.4; }
+        if (this.pz < -21.0)          { this.pz = -21.0; this.vz *= -0.4; }
+        if (this.pz >  32.0)          { this.pz =  32.0; this.vz *= -0.4; }
 
         // 6. Altitud, Rampas de Salto y Suspensión 3D (Pitch / Roll)
         const floorH = getTerrainHeightMeters(this.px, this.pz) + 0.04;
@@ -5795,7 +5847,7 @@
         const rampSlopeVy = (floorH - prevFloorH) / Math.max(0.001, dt);
 
         if (!this.airborne) {
-          if (rampSlopeVy < -0.8 && this.spd > 8.5 && floorH > 0.45) {
+          if (rampSlopeVy < -0.7 && this.spd > 7.5 && floorH > 0.42) {
             // Despegue en la cresta de la meseta de salto
             this.airborne = true;
           } else {
@@ -5837,7 +5889,7 @@
 
         // 8. Checkpoints del circuito y Cronómetro de Vuelta (Lap Timer)
         const wp = RC_TRACK_WPS[this.activeGate];
-        if (Math.hypot(this.px - wp.x, this.pz - wp.z) < 7.8) {
+        if (Math.hypot(this.px - wp.x, this.pz - wp.z) < 6.8) {
           this.activeGate = (this.activeGate + 1) % RC_TRACK_WPS.length;
           if (this.activeGate === 1) {
             // Cruzó el Pórtico de Meta (WP 1)
@@ -5859,8 +5911,8 @@
       },
 
       render() {
-        // Posición fija del Piloto en el Podio Elevado (Driver's Stand) al sur de la Recta Principal
-        const standX = 0.0, standY = 5.6, standZ = -31.0;
+        // Posición fija del Piloto en la Torre / Podio Alto (High Driver's Stand: 21.5m de altura) al sur de la Recta Principal
+        const standX = 0.0, standY = 21.5, standZ = -26.0;
         let camX = standX, camY = standY, camZ = standZ;
         let cRx = 1, cRy = 0, cRz = 0;
         let cUx = 0, cUy = 1, cUz = 0;
@@ -5868,21 +5920,43 @@
         let zoomFactor = 1.0;
 
         if (this.camMode === 2 || this.chaseCam) {
-          // Vista Chase Cam 3D detrás del Carro RC
-          const fc = computeFollowCamPose(this, 4.6, 1.45, 11.0);
-          camX = fc.camX; camY = Math.max(0.9, fc.camY); camZ = fc.camZ;
+          // Vista Chase Cam 3D elevada detrás del Carro RC para ver con claridad las curvas siguientes
+          const fc = computeFollowCamPose(this, 5.0, 2.45, 17.5);
+          camX = fc.camX; camY = Math.max(1.8, fc.camY); camZ = fc.camZ;
           cRx = fc.cRx; cRy = fc.cRy; cRz = fc.cRz;
           cUx = fc.cUx; cUy = fc.cUy; cUz = fc.cUz;
           cFx = fc.cFx; cFy = fc.cFy; cFz = fc.cFz;
         } else {
-          // Vista Piloto LOS desde el Podio siguiendo al Carro RC (Horizonte nivelado roll = 0)
-          const dx = this.px - standX;
-          const dy = (this.py + 0.35) - standY;
-          const dz = this.pz - standZ;
-          const trueDist = Math.hypot(dx, dy, dz) || 1.0;
-          cFx = dx / trueDist;
-          cFy = dy / trueDist;
-          cFz = dz / trueDist;
+          // Vector horizontal LOS desde la Torre/Podio hacia el Carro RC
+          const rawDx = this.px - standX;
+          const rawDz = this.pz - standZ;
+          const horizDist = Math.hypot(rawDx, rawDz) || 1.0;
+          const dirHx = rawDx / horizDist;
+          const dirHz = rawDz / horizDist;
+
+          if (this.camMode === 0) {
+            // PODIO ALTO AUTO-ZOOM: mantiene el acimut LOS exacto del podio y una altura elevada (14.5m..21.5m)
+            // para que SIEMPRE se vea la pista en picado (32°..45°) y se entiendan todas las curvas y pianos
+            const effHoriz = horizDist > 13.5 ? (13.5 + (horizDist - 13.5) * 0.28) : horizDist;
+            zoomFactor = horizDist / Math.max(1.0, effHoriz);
+            camX = this.px - dirHx * effHoriz;
+            camZ = this.pz - dirHz * effHoriz;
+            camY = Math.max(14.5, 21.5 - Math.max(0.0, horizDist - 13.5) * 0.14);
+          } else {
+            // PODIO PANORAMICO (camMode === 1): vista general alta desde la torre a 22.5m
+            camX = standX;
+            camY = 22.5;
+            camZ = standZ;
+            zoomFactor = 1.0;
+          }
+
+          const dx = this.px - camX;
+          const dy = (this.py + 0.30) - camY;
+          const dz = this.pz - camZ;
+          const dLen = Math.hypot(dx, dy, dz) || 1.0;
+          cFx = dx / dLen;
+          cFy = dy / dLen;
+          cFz = dz / dLen;
 
           // Base ortonormal mano derecha sin roll (U = F x R -> cUy = +hLen > 0, horizonte de pista al derecho)
           const hLen = Math.hypot(cFx, cFz) || 1.0;
@@ -5893,26 +5967,17 @@
           cUx = cFy * cRz - cFz * cRy;
           cUy = cFz * cRx - cFx * cRz;
           cUz = cFx * cRy - cFy * cRx;
-
-          // Auto-Zoom Óptico desde el Podio para que el carro siempre tenga tamaño ideal en 320x240
-          if (this.camMode === 0 && trueDist > 10.5) {
-            const effDist = 10.5 + (trueDist - 10.5) * 0.22;
-            zoomFactor = trueDist / effDist;
-            camX = this.px - cFx * effDist;
-            camY = Math.max(1.8, (this.py + 0.35) - cFy * effDist);
-            camZ = this.pz - cFz * effDist;
-          }
         }
 
         // 1. Renderizar Circuito de Asfalto, Pianos, Rampas y Cielo Voxel
         renderVoxelTerrainAndSky(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz);
 
-        // 2. Proyector 3D + Pórtico de Meta + Conos + Humo + Carro RC 3D Sólido
+        // 2. Proyector 3D + Bordes 3D de Pista + Pórtico de Meta + Conos + Humo + Carro RC 3D Sólido
         const { projPoint320, projLine } = createProjector320(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz);
         renderRcTrackPropsAndParticles320(this, projPoint320, projLine);
         renderSolidRcCar320(this, projPoint320, projLine);
 
-        // 3. OSD de Telemetría y Lap Timer RC Car
+        // 3. OSD de Telemetría, Mini-Mapa de Pista en Vivo y Lap Timer RC Car
         this.renderRcCarOsd320(zoomFactor);
       },
 
@@ -5930,7 +5995,7 @@
           statusStr = '!AIRBORNE JUMP!';
           statusCol = C565.GOLD;
         } else if (!this.onTrack) {
-          statusStr = 'OFF-TRACK DIRT!';
+          statusStr = 'OFF-TRACK GRASS!';
           statusCol = C565.ORANGE;
         } else if (this.slipDeg >= 16) {
           statusStr = `DRIFTING ${this.slipDeg} DEG!`;
@@ -5943,11 +6008,26 @@
         drawOsdSmall320(`TIME ${this.lapTime.toFixed(1)}S`,               8, 18, WHITE);
         drawOsdSmall320(`BEST ${this.bestLapTime > 0 ? this.bestLapTime.toFixed(2) + 'S' : '--.--'}`, 8, 28, C565.GREEN);
 
-        // Esquina superior derecha: Cámara LOS Podio + Zoom
-        const camLbl = (this.camMode === 2 || this.chaseCam) ? 'CHASE 3D' : (this.camMode === 0 ? `STAND ${zoomFactor.toFixed(1)}X` : 'STAND WIDE');
-        drawOsdSmall320(camLbl,        260, 8,  C565.CYAN);
-        drawOsdSmall320(`LIPO 8.32V`,  260, 18, WHITE);
+        // Esquina superior derecha: Cámara LOS Podio Alto + Zoom
+        const camLbl = (this.camMode === 2 || this.chaseCam) ? 'CHASE 3D' : (this.camMode === 0 ? `PODIO ${zoomFactor.toFixed(1)}X` : 'PODIO ALTO');
+        drawOsdSmall320(camLbl,        256, 8,  C565.CYAN);
+        drawOsdSmall320(`LIPO 8.32V`,  256, 18, WHITE);
         drawOsdSmall320(`B:CAM Y:MOD`, 255, 28, C565.GOLD);
+
+        // Mini-Radar del Circuito en vivo en la esquina inferior derecha (muestra el trazado completo + tu carro)
+        const mCx = 282, mCy = 178, mScale = 0.72;
+        for (let i = 0; i < RC_NUM_WPS; i++) {
+          const a = RC_TRACK_WPS[i];
+          const b = RC_TRACK_WPS[(i + 1) % RC_NUM_WPS];
+          drawOutlinedLine320(
+            Math.round(mCx + a.x * mScale), Math.round(mCy - (a.z - 5.0) * mScale),
+            Math.round(mCx + b.x * mScale), Math.round(mCy - (b.z - 5.0) * mScale),
+            i === this.activeGate ? C565.GREEN : WHITE
+          );
+        }
+        const carMx = Math.round(mCx + this.px * mScale);
+        const carMy = Math.round(mCy - (this.pz - 5.0) * mScale);
+        drawInavCircleDot320(carMx, carMy, 2, C565.RED);
 
         // Esquina inferior izquierda: Velocidad en KM/H, Acelerador/Freno ESC y Ángulo de Dirección
         const kmh = Math.round(this.spd * 3.6);
@@ -5957,7 +6037,7 @@
         drawOsdSmall320(`ESC ${escPct >= 0 ? '+' : ''}${escPct}%`, 8, 205, escPct < 0 ? C565.ORANGE : WHITE);
         drawOsdSmall320(`STR ${steerDeg >= 0 ? '+' : ''}${steerDeg}D`, 8, 216, C565.CYAN);
 
-        // Esquina inferior derecha: Última vuelta y distancia recorrida
+        // Esquina inferior derecha bajo el mini-mapa: Última vuelta y distancia
         drawOsdSmall320(`LAST ${this.lastLapTime > 0 ? this.lastLapTime.toFixed(2) + 'S' : '--.--'}`, 252, 205, WHITE);
         drawOsdSmall320(`ODO  ${this.totalDistKm.toFixed(2)}K`, 252, 216, C565.GOLD);
       }
@@ -6504,8 +6584,8 @@
       }
 
       const activeSim = getActiveSimObject();
-      const spanX = activeRomId === 'rc_sailboat' ? 60.0 : (activeRomId === 'rc_car' ? 68.0 : WORLD_W_M * 0.46);
-      const spanZ = activeRomId === 'rc_sailboat' ? 55.0 : (activeRomId === 'rc_car' ? 52.0 : WORLD_H_M * 0.46);
+      const spanX = activeRomId === 'rc_sailboat' ? 60.0 : (activeRomId === 'rc_car' ? 44.0 : WORLD_W_M * 0.46);
+      const spanZ = activeRomId === 'rc_sailboat' ? 55.0 : (activeRomId === 'rc_car' ? 34.0 : WORLD_H_M * 0.46);
       const scaleX = (rw * 0.46) / spanX;
       const scaleZ = (rh * 0.46) / spanZ;
 
