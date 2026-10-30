@@ -472,7 +472,7 @@
         <span>PWR</span>
         <span id="sdLed" class="led sd-act" title="Flash / SD Activity"></span>
         <span>SPI</span>
-        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + WING/TAIL (v32)</span>
+        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + MINI OSD (v33)</span>
       </div>
       <div class="top-hw-pills">
         <button id="btnRcPad" class="pill-btn" title="Configurar Emisora TX16S USB/BT y Gamepad Bluetooth">🎮 RC/PAD</button>
@@ -2304,23 +2304,53 @@
     }
 
     // =========================================================================
-    // ROM DE CARACTERES OSD ESTILO CHIP MAX7456 (SPRITES 8x12 PRE-BORDEADOS)
-    // En ESP32-S3 se guarda en Flash/SRAM (~6 KB) y se dibuja en 1 sola pasada
-    // lineal sin bucles vecinos por frame: 0 = transparente, 1 = negro, 2 = blanco
+    // ROM DE CARACTERES OSD ESTILO CHIP MAX7456 (PRE-BORDEADOS 2-BIT)
+    // - OSD_SMALL_ROM (5x7 px: núcleo 3x5 1:1 nativo en 320x240 + borde negro 1px, ~4.3 KB)
+    //   usado en el OSD de vuelo para máxima visibilidad y nitidez real en el panel IPS 2.8".
+    // - OSD_CHAR_ROM  (8x12 px: usado en las tablas del menú de configuración).
+    // Ambos se dibujan en 1 sola pasada lineal sin bucles vecinos por frame:
+    //   0 = transparente, 1 = borde negro 0x0000, 2 = relleno blanco/color
     // =========================================================================
     const TICK_GLYPH = [2, 2, 0, 0, 0];
     const OSD_GLYPH_W = 8;
     const OSD_GLYPH_H = 12;
     const OSD_CHAR_ROM = new Uint8Array(128 * OSD_GLYPH_W * OSD_GLYPH_H);
 
+    const OSD_SM_W = 5;
+    const OSD_SM_H = 7;
+    const OSD_SMALL_ROM = new Uint8Array(128 * OSD_SM_W * OSD_SM_H);
+
     (function buildMax7456CharacterRom() {
       for (let code = 32; code < 128; code++) {
         const ch = String.fromCharCode(code);
         const g = ch === '\'' ? TICK_GLYPH : FONT_3X5[ch];
         if (!g) continue;
-        const baseOff = code * (OSD_GLYPH_W * OSD_GLYPH_H);
 
-        // Pasada 1 (solo al iniciar): marcar borde negro (1) y relleno blanco (2)
+        // 1. Glifo compacto nativo 5x7 (núcleo 3x5 1:1 en 320x240 + contorno negro 1px)
+        const smBase = code * (OSD_SM_W * OSD_SM_H);
+        for (let r = 0; r < 5; r++) {
+          const rowBits = g[r];
+          for (let c = 0; c < 3; c++) {
+            if ((rowBits >> (2 - c)) & 1) {
+              const px = 1 + c;
+              const py = 1 + r;
+              for (let oy = -1; oy <= 1; oy++) {
+                for (let ox = -1; ox <= 1; ox++) {
+                  const gx = px + ox, gy = py + oy;
+                  const idx = smBase + gy * OSD_SM_W + gx;
+                  if (ox === 0 && oy === 0) {
+                    OSD_SMALL_ROM[idx] = 2; // Relleno 1px nativo
+                  } else if (OSD_SMALL_ROM[idx] === 0) {
+                    OSD_SMALL_ROM[idx] = 1; // Borde negro 1px
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        // 2. Glifo 8x12 para el menú interactivo de configuración
+        const baseOff = code * (OSD_GLYPH_W * OSD_GLYPH_H);
         for (let r = 0; r < 5; r++) {
           const rowBits = g[r];
           for (let c = 0; c < 3; c++) {
@@ -2333,9 +2363,9 @@
                   if (gx >= 0 && gx < OSD_GLYPH_W && gy >= 0 && gy < OSD_GLYPH_H) {
                     const idx = baseOff + gy * OSD_GLYPH_W + gx;
                     if (ox >= 0 && ox <= 1 && oy >= 0 && oy <= 1) {
-                      OSD_CHAR_ROM[idx] = 2; // Relleno blanco
+                      OSD_CHAR_ROM[idx] = 2;
                     } else if (OSD_CHAR_ROM[idx] === 0) {
-                      OSD_CHAR_ROM[idx] = 1; // Borde negro 1px
+                      OSD_CHAR_ROM[idx] = 1;
                     }
                   }
                 }
@@ -2346,7 +2376,7 @@
       }
     })();
 
-    // Dibuja texto OSD en 1 sola pasada lineal desde la ROM pre-bordeada (1 a 1 con C en ESP32-S3)
+    // Dibuja texto de menú (8x12) en 1 sola pasada lineal
     function drawInavText320(str, x320, y240, fg565 = 0xFFFF) {
       const s = String(str).toUpperCase();
       let cx = (x320 | 0) - 1;
@@ -2374,28 +2404,56 @@
       }
     }
 
-    // Icono de batería INAV en 320x240
-    function drawBatteryIcon320(x, y) {
-      drawOutlinedLine320(x, y + 2, x + 7, y + 2);
-      drawOutlinedLine320(x, y + 11, x + 7, y + 11);
-      drawOutlinedLine320(x, y + 2, x, y + 11);
-      drawOutlinedLine320(x + 7, y + 2, x + 7, y + 11);
-      drawOutlinedLine320(x + 2, y, x + 5, y);
-      for (let py = y + 4; py <= y + 9; py++) {
-        for (let px = x + 2; px <= x + 5; px++) setPx320(px, py, 0xFFFF);
+    // Dibuja texto OSD compacto (5x7 nativo 1:1 en 320x240) en 1 sola pasada lineal (100% real en ILI9341V)
+    function drawOsdSmall320(str, x320, y240, fg565 = 0xFFFF) {
+      const s = String(str).toUpperCase();
+      let cx = (x320 | 0) - 1;
+      const cy = (y240 | 0) - 1;
+
+      for (let i = 0; i < s.length; i++) {
+        const code = s.charCodeAt(i) & 127;
+        const baseOff = code * (OSD_SM_W * OSD_SM_H);
+        for (let gy = 0; gy < OSD_SM_H; gy++) {
+          const py = cy + gy;
+          if (py < 0 || py >= DISP_H) continue;
+          const dstRow = py * DISP_W;
+          const srcRow = baseOff + gy * OSD_SM_W;
+          for (let gx = 0; gx < OSD_SM_W; gx++) {
+            const v = OSD_SMALL_ROM[srcRow + gx];
+            if (v !== 0) {
+              const px = cx + gx;
+              if (px >= 0 && px < DISP_W) {
+                vram565[dstRow + px] = v === 1 ? 0x0000 : fg565;
+              }
+            }
+          }
+        }
+        cx += 5;
       }
     }
 
-    // Icono de Casa (Home / Gate) INAV en 320x240
-    function drawHomeIcon320(x, y) {
-      drawOutlinedLine320(x + 4, y, x, y + 4);
-      drawOutlinedLine320(x + 4, y, x + 8, y + 4);
-      drawOutlinedLine320(x + 1, y + 4, x + 1, y + 9);
-      drawOutlinedLine320(x + 7, y + 4, x + 7, y + 9);
-      drawOutlinedLine320(x + 1, y + 9, x + 7, y + 9);
+    // Icono de batería compacto (5x7 px) acorde a la fuente OSD nativa 320x240
+    function drawBatteryIcon320(x, y) {
+      drawOutlinedLine320(x, y + 1, x + 4, y + 1);
+      drawOutlinedLine320(x, y + 6, x + 4, y + 6);
+      drawOutlinedLine320(x, y + 1, x, y + 6);
+      drawOutlinedLine320(x + 4, y + 1, x + 4, y + 6);
+      drawOutlinedLine320(x + 1, y, x + 3, y);
+      for (let py = y + 2; py <= y + 5; py++) {
+        for (let px = x + 1; px <= x + 3; px++) setPx320(px, py, 0xFFFF);
+      }
     }
 
-    // Renderizador completo del OSD estilo INAV (basado en la imagen de referencia del usuario)
+    // Icono de Casa (Home / Gate) compacto (7x6 px) en 320x240
+    function drawHomeIcon320(x, y) {
+      drawOutlinedLine320(x + 3, y, x, y + 3);
+      drawOutlinedLine320(x + 3, y, x + 6, y + 3);
+      drawOutlinedLine320(x + 1, y + 3, x + 1, y + 6);
+      drawOutlinedLine320(x + 5, y + 3, x + 5, y + 6);
+      drawOutlinedLine320(x + 1, y + 6, x + 5, y + 6);
+    }
+
+    // Renderizador completo del OSD estilo INAV con tipografía compacta nativa 5x7 en 320x240
     function renderInavOsd320({
       callsign, modeLabel, spdMs, thrPct, altM, vario,
       activeGate, gateDist, gateBearingRad, totalDistKm,
@@ -2405,8 +2463,7 @@
       const WHITE = 0xFFFF;
       const GREEN_DOT = rgb565(120, 245, 120);
 
-      // 1. HORIZONTE ARTIFICIAL INAV (9 círculos proyectados en 3D usando la misma base R0, H0 del Voxel)
-      // Coincide con el horizonte Voxel a 14 decimales en cualquier combinación de Pitch, Roll y Yaw.
+      // 1. HORIZONTE ARTIFICIAL INAV (9 círculos finos proyectados en 3D usando la misma base R0, H0 del Voxel)
       const phi = Math.atan2(cRy, cUy);
       const cosR = Math.cos(phi), sinR = Math.sin(phi);
       let R0x = cosR * cRx - sinR * cUx;
@@ -2417,45 +2474,44 @@
       const H0x = -R0z, H0z = R0x;
 
       for (let i = -4; i <= 4; i++) {
-        const span = i * 4.2;
+        const span = i * 4.0;
         const wx = camX + H0x * 42.0 + R0x * span;
         const wz = camZ + H0z * 42.0 + R0z * span;
         const pt = projPoint320(wx, camY, wz);
-        if (pt && pt.sx >= 48 && pt.sx <= 272 && pt.sy >= 24 && pt.sy <= 218) {
-          drawInavCircleDot320(pt.sx, pt.sy, 2, i === 0 ? GREEN_DOT : WHITE);
+        if (pt && pt.sx >= 44 && pt.sx <= 276 && pt.sy >= 20 && pt.sy <= 220) {
+          drawInavCircleDot320(pt.sx, pt.sy, 1, i === 0 ? GREEN_DOT : WHITE);
         }
       }
 
-      // 2. RETÍCULA CENTRAL FIJA INAV (───┐_┌───) en (160, 120)
-      drawOutlinedLine320(134, 120, 151, 120, WHITE);
-      drawOutlinedLine320(151, 120, 151, 125, WHITE);
-      drawOutlinedLine320(151, 125, 169, 125, WHITE);
-      drawOutlinedLine320(169, 125, 169, 120, WHITE);
-      drawOutlinedLine320(169, 120, 186, 120, WHITE);
+      // 2. RETÍCULA CENTRAL FIJA INAV (───┐_┌───) compacta en (160, 120)
+      drawOutlinedLine320(140, 120, 153, 120, WHITE);
+      drawOutlinedLine320(153, 120, 153, 124, WHITE);
+      drawOutlinedLine320(153, 124, 167, 124, WHITE);
+      drawOutlinedLine320(167, 124, 167, 120, WHITE);
+      drawOutlinedLine320(167, 120, 180, 120, WHITE);
 
-      // Flecha de dirección hacia el próximo Gate justo encima de la retícula central (160, 102)
-      const ax = 160, ay = 101;
+      // Flecha de dirección hacia el próximo Gate justo encima de la retícula central (160, 104)
+      const ax = 160, ay = 104;
       const sB = Math.sin(gateBearingRad), cB = Math.cos(gateBearingRad);
-      const tipX = ax + sB * 7, tipY = ay - cB * 7;
-      const lWingX = ax - sB * 5 - cB * 5, lWingY = ay + cB * 5 - sB * 5;
-      const rWingX = ax - sB * 5 + cB * 5, rWingY = ay + cB * 5 + sB * 5;
+      const tipX = ax + sB * 5, tipY = ay - cB * 5;
+      const lWingX = ax - sB * 4 - cB * 4, lWingY = ay + cB * 4 - sB * 4;
+      const rWingX = ax - sB * 4 + cB * 4, rWingY = ay + cB * 4 + sB * 4;
       drawOutlinedLine320(tipX, tipY, lWingX, lWingY, WHITE);
       drawOutlinedLine320(tipX, tipY, rWingX, rWingY, WHITE);
       drawOutlinedLine320(lWingX, lWingY, rWingX, rWingY, WHITE);
 
-      // 3. ESCALAS VERTICALES LATERALES DE PUNTOS (Izquierda x=78 y Derecha x=242) + cursores '>' y '<'
+      // 3. ESCALAS VERTICALES LATERALES FINAS (Izquierda x=68 y Derecha x=252) + cursores '>' y '<'
       for (let i = -6; i <= 6; i++) {
-        const py = 120 + i * 9;
-        const rad = (i & 1) === 0 ? 2 : 1;
-        drawInavCircleDot320(78,  py, rad, WHITE);
-        drawInavCircleDot320(242, py, rad, WHITE);
+        const py = 120 + i * 8;
+        drawInavCircleDot320(68,  py, 1, WHITE);
+        drawInavCircleDot320(252, py, 1, WHITE);
       }
-      // Indicador '>' a la izquierda (x=83, y=120)
-      drawOutlinedLine320(82, 116, 87, 120, WHITE);
-      drawOutlinedLine320(87, 120, 82, 124, WHITE);
-      // Indicador '<' a la derecha (x=237, y=120)
-      drawOutlinedLine320(238, 116, 233, 120, WHITE);
-      drawOutlinedLine320(233, 120, 238, 124, WHITE);
+      // Indicador '>' a la izquierda (x=72, y=120)
+      drawOutlinedLine320(71, 117, 75, 120, WHITE);
+      drawOutlinedLine320(75, 120, 71, 123, WHITE);
+      // Indicador '<' a la derecha (x=248, y=120)
+      drawOutlinedLine320(249, 117, 245, 120, WHITE);
+      drawOutlinedLine320(245, 120, 249, 123, WHITE);
 
       // 4. BRÚJULA SUPERIOR CENTRAL (W ' | ' N ' | ' E) + NOMBRE DEL MODELO
       const headingDeg = ((Math.atan2(H0x, H0z) * RAD2DEG) % 360 + 360) % 360;
@@ -2467,35 +2523,36 @@
         const idx = (baseIdx + k + 8) % 8;
         compassStr += cardinals[idx] + (k < 2 ? '\'' : '');
       }
-      drawInavText320(compassStr, 124, 10, WHITE);
-      drawInavText320(callsign,   112, 24, WHITE);
+      const callStr = String(callsign);
+      drawOsdSmall320(compassStr, 160 - ((compassStr.length * 5) >> 1), 6, WHITE);
+      drawOsdSmall320(callStr,    160 - ((callStr.length * 5) >> 1),   16, WHITE);
 
       // 5. ESQUINA SUPERIOR DERECHA (Satélites + HDOP) Y ESQUINA SUPERIOR IZQUIERDA (Viento INAV)
-      drawInavText320('SAT 12',   262, 22, WHITE);
-      drawInavText320('HDOP 1.2', 246, 36, WHITE);
+      drawOsdSmall320('SAT 12',   282, 8,  WHITE);
+      drawOsdSmall320('HDOP 1.2', 272, 18, WHITE);
 
-      // Indicador de Viento INAV (Flecha de dirección relativa + velocidad en KMH)
+      // Indicador de Viento INAV compacto (Flecha de dirección relativa + velocidad en KMH)
       const windSpdKmh = Math.round(Math.hypot(aeroEnv.windX, aeroEnv.windZ) * 3.6);
       const windRelAng = Math.atan2(
         aeroEnv.windX * R0x + aeroEnv.windZ * R0z,
         aeroEnv.windX * H0x + aeroEnv.windZ * H0z
       );
-      const wx0 = 20, wy0 = 27;
+      const wx0 = 12, wy0 = 11;
       const sW = Math.sin(windRelAng), cW = Math.cos(windRelAng);
-      drawOutlinedLine320(wx0 - sW * 6, wy0 + cW * 6, wx0 + sW * 6, wy0 - cW * 6, WHITE);
-      drawOutlinedLine320(wx0 + sW * 6, wy0 - cW * 6, wx0 + sW * 1 - cW * 4, wy0 - cW * 1 - sW * 4, WHITE);
-      drawOutlinedLine320(wx0 + sW * 6, wy0 - cW * 6, wx0 + sW * 1 + cW * 4, wy0 - cW * 1 + sW * 4, WHITE);
-      drawInavText320(`W${String(windSpdKmh).padStart(2, ' ')}K`, 30, 22, WHITE);
+      drawOutlinedLine320(wx0 - sW * 4, wy0 + cW * 4, wx0 + sW * 4, wy0 - cW * 4, WHITE);
+      drawOutlinedLine320(wx0 + sW * 4, wy0 - cW * 4, wx0 + sW * 1 - cW * 3, wy0 - cW * 1 - sW * 3, WHITE);
+      drawOutlinedLine320(wx0 + sW * 4, wy0 - cW * 4, wx0 + sW * 1 + cW * 3, wy0 - cW * 1 + sW * 3, WHITE);
+      drawOsdSmall320(`W${String(windSpdKmh).padStart(2, ' ')}K`, 20, 8, WHITE);
       if (aeroEnv.stallWarn) {
-        drawInavText320('!STALL!', 132, 74, WHITE);
+        drawOsdSmall320('!STALL!', 142, 82, C565.RED);
       }
 
-      // 6. COLUMNA IZQUIERDA (Velocidad Tierra + Aire km/h, Throttle %, Amperios, mAh, Voltaje con Sag real)
+      // 6. COLUMNA IZQUIERDA COMPACTA (Velocidad Aire/Tierra km/h, Throttle %, Amperios, mAh, Voltajes)
       const kmh = Math.round(spdMs * 3.6);
       const airKmh = Math.round((aeroEnv.airSpd || spdMs) * 3.6);
-      drawInavText320(`AR${String(airKmh).padStart(2, ' ')}`, 14, 98, WHITE);
-      drawInavText320(`${String(kmh).padStart(2, ' ')}KMH`,  22, 115, WHITE);
-      drawInavText320(`THR ${Math.round(thrPct)}%`,          14, 134, WHITE);
+      drawOsdSmall320(`AR ${String(airKmh).padStart(2, ' ')}`, 8, 102, WHITE);
+      drawOsdSmall320(`GS ${String(kmh).padStart(2, ' ')}K`,   8, 114, WHITE);
+      drawOsdSmall320(`THR ${Math.round(thrPct)}%`,           8, 126, WHITE);
 
       const loadFactor = (thrPct / 100);
       const amps = (1.8 + loadFactor * loadFactor * 22.5).toFixed(1);
@@ -2504,57 +2561,57 @@
       const packV = Math.max(13.6, 16.8 - flightTimeSec * 0.004 - sagV);
       const cellV = (packV / 4).toFixed(2);
 
-      drawInavText320(`A ${amps}`,     14, 156, WHITE);
-      drawInavText320(`MAH ${mah}`,    14, 174, WHITE);
-      drawBatteryIcon320(10, 191);
-      drawInavText320(`${packV.toFixed(2)}V`, 22, 192, WHITE);
-      drawBatteryIcon320(10, 209);
-      drawInavText320(`${cellV}V`,     22, 210, WHITE);
+      drawOsdSmall320(`A ${amps}`,          8,  176, WHITE);
+      drawOsdSmall320(`MAH ${mah}`,         8,  188, WHITE);
+      drawBatteryIcon320(8, 199);
+      drawOsdSmall320(`${packV.toFixed(2)}V`, 16, 200, WHITE);
+      drawBatteryIcon320(8, 211);
+      drawOsdSmall320(`${cellV}V`,          16, 212, WHITE);
 
-      // 7. COLUMNA DERECHA (Altitud Alt m, Variómetro m/s, Rumbo a Gate, Tiempo de Vuelo, Distancia)
-      drawInavText320(`ALT ${Math.round(altM)}M`, 252, 104, WHITE);
-      drawInavText320(`${vario.toFixed(1)}M/S`,   252, 120, WHITE);
+      // 7. COLUMNA DERECHA COMPACTA (Altitud Alt m, Variómetro m/s, Rumbo a Gate, Tiempo de Vuelo, Distancia)
+      drawOsdSmall320(`ALT ${Math.round(altM)}M`, 270, 108, WHITE);
+      drawOsdSmall320(`${vario >= 0 ? '+' : ''}${vario.toFixed(1)}M/S`, 270, 120, WHITE);
 
       const brgDeg = Math.round(gateBearingRad * RAD2DEG);
-      drawHomeIcon320(238, 155);
       if (isFreeFlightNoGates()) {
-        drawInavText320('FREE FLY', 250, 140, GREEN_DOT);
+        drawOsdSmall320('FREE FLY', 270, 164, GREEN_DOT);
       } else {
         const cShort = CHOROBOBO_CIRCUITS[currentCircuitIdx].shortCode;
-        drawInavText320(`${cShort} ${activeGate + 1}/15`, 250, 140, WHITE);
+        drawOsdSmall320(`${cShort} ${activeGate + 1}/15`, 265, 164, WHITE);
       }
-      drawInavText320(`BRG ${brgDeg >= 0 ? '+' : ''}${brgDeg}`, 250, 156, WHITE);
+      drawHomeIcon320(260, 175);
+      drawOsdSmall320(`BRG ${brgDeg >= 0 ? '+' : ''}${brgDeg}`, 270, 176, WHITE);
 
       const mins = String(Math.floor(flightTimeSec / 60)).padStart(2, '0');
       const secs = String(Math.floor(flightTimeSec % 60)).padStart(2, '0');
-      drawInavText320(`FLY ${mins}:${secs}`,      246, 174, WHITE);
-      drawInavText320(`TD ${totalDistKm.toFixed(2)}`, 246, 192, WHITE);
-      drawHomeIcon320(246, 209);
-      drawInavText320(`DST ${Math.min(999, Math.round(gateDist))}M`, 258, 210, WHITE);
+      drawOsdSmall320(`FLY ${mins}:${secs}`,          265, 188, WHITE);
+      drawOsdSmall320(`TD ${totalDistKm.toFixed(2)}K`, 265, 200, WHITE);
+      drawHomeIcon320(260, 211);
+      drawOsdSmall320(`DST ${Math.min(999, Math.round(gateDist))}M`, 270, 212, WHITE);
 
-      // 8. CENTRO INFERIOR (Modo de Vuelo + Telemetría 4 Motores Quad-X o Elevones/AoA en Ala)
-      drawInavText320(modeLabel, 128, 214, WHITE);
+      // 8. CENTRO INFERIOR (Modo de Vuelo + Telemetría 4 Motores Quad-X o AoA en Ala)
+      const mStr = String(modeLabel);
+      drawOsdSmall320(mStr, 160 - ((mStr.length * 5) >> 1), 224, WHITE);
 
       if (activeRomId === 'fpv_drone' && fpvDroneSim.mRpm) {
         // 4 Barras de RPM reales (M1..M4) del mezclador Betaflight Quad-X + AirMode
-        const bx = 92, by = 212;
+        const bx = 114, by = 221;
         for (let m = 0; m < 4; m++) {
-          const mx = bx + m * 7;
-          const h = Math.max(1, Math.min(12, Math.round(fpvDroneSim.mRpm[m] * 12)));
-          for (let py = by; py <= by + 12; py++) {
+          const mx = bx + m * 6;
+          const h = Math.max(1, Math.min(8, Math.round(fpvDroneSim.mRpm[m] * 8)));
+          for (let py = by; py <= by + 8; py++) {
             setPx320(mx, py, 0x0000);
-            setPx320(mx + 4, py, 0x0000);
+            setPx320(mx + 3, py, 0x0000);
           }
-          for (let py = by + 12 - h; py <= by + 12; py++) {
+          for (let py = by + 8 - h; py <= by + 8; py++) {
             const mCol = fpvDroneSim.mRpm[m] > 0.88 ? C565.ORANGE : GREEN_DOT;
             setPx320(mx + 1, py, mCol);
             setPx320(mx + 2, py, mCol);
-            setPx320(mx + 3, py, mCol);
           }
         }
       } else if (activeRomId === 'fpv_wing') {
         const aoaDeg = Math.round((fpvWingSim.lastAlpha || 0) * RAD2DEG);
-        drawInavText320(`AOA ${aoaDeg >= 0 ? '+' : ''}${aoaDeg}`, 72, 214, aeroEnv.stallWarn ? C565.RED : WHITE);
+        drawOsdSmall320(`AOA ${aoaDeg >= 0 ? '+' : ''}${aoaDeg}`, 104, 224, aeroEnv.stallWarn ? C565.RED : WHITE);
       }
     }
 
