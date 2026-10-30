@@ -461,7 +461,7 @@
         <span>PWR</span>
         <span id="sdLed" class="led sd-act" title="Flash / SD Activity"></span>
         <span>SPI</span>
-        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + COMANCHE 3D (v52)</span>
+        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + COMANCHE 3D (v53)</span>
       </div>
       <div class="top-hw-pills">
         <a href="hardware.html" class="pill-btn" style="text-decoration:none;display:inline-flex;align-items:center;" title="Ver Guía y Diagrama de Conexiones ESP32-S3 N16R8">🔌 PINOUT</a>
@@ -5103,86 +5103,105 @@
       { name: 'RG65 CARBON', hullSpdScale: 1.22, keelRighting: 0.95, keelArea: 1.08, rudderAuth: 1.10 }
     ];
 
-    // Calcula el vector de Fuerza Aerodinámica (forceR, forceF) y la Normal de Sotavento (leeR, leeF) de una vela
-    // dado su ángulo actual 'sailAng' respecto al casco y el vector unitario del flujo de viento aparente (wDirR, wDirF).
-    // Combina:
-    //  1) Sustentación laminar de perfil alar (Lift _|_ viento) cuando el flujo corre de grátil a baluma con AoA entre 5° y 32°
-    //  2) Presión normal sobre la tela (perpendicular a la cuerda de la vela) cuando la vela entra en pérdida (Stall) o navega en Popa
+    // =========================================================================
+    // MODELO DE ARQUITECTURA NAVAL RC (v53):
+    // Evalúa las fuerzas aerodinámicas reales sobre una vela individual (Mayor o Foque)
+    // sin duplicar CL + CN:
+    //  - Régimen Laminar (AoA 5°..32°): Sustentación alar (Lift _|_ viento) con pico claro a ~22° de AoA.
+    //  - Régimen en Pérdida / Popa (AoA > 32°): Transición limpia (blend) a presión normal sobre la tela (leeR, leeF),
+    //    de modo que sobrecazar la vela al centro en través/popa frena el avance y aumenta la escora hasta que sueltas escota.
+    // =========================================================================
     function computeSingleSailForce(sailAng, wDirR, wDirF, qDynamic) {
-      // Cuerda unitaria de la vela desde el mástil/estay hacia el puño de escota: C = (sin(d), -cos(d))
+      // Cuerda unitaria desde el grátil (mástil/estay) hacia el puño de escota: C = (sin(d), -cos(d))
       const cR = Math.sin(sailAng);
       const cF = -Math.cos(sailAng);
-      // Normal perpendicular a la tela de la vela: N0 = (cos(d), sin(d))
+      // Normal perpendicular a la tela: N0 = (cos(d), sin(d))
       const n0R = Math.cos(sailAng);
       const n0F = Math.sin(sailAng);
 
-      // Proyección del flujo de viento sobre la normal y sobre la cuerda
       const dotNW = n0R * wDirR + n0F * wDirF;
       const dotCW = cR * wDirR + cF * wDirF;
 
-      // Normal de sotavento (hacia donde el viento infla y empuja la tela: N_lee . W >= 0)
+      // Normal de sotavento (dirección hacia donde el viento infla la tela: N_lee . W >= 0)
       const leeSign = dotNW >= 0.0 ? 1.0 : -1.0;
       const leeR = n0R * leeSign;
       const leeF = n0F * leeSign;
 
-      // Ángulo agudo efectivo entre el flujo de viento y el plano de la vela (sinAoA = |N . W|)
-      const sinAoA = Math.min(1.0, Math.abs(dotNW));
-      const effAoA = Math.asin(sinAoA);
+      // Ángulo de ataque real en [0..PI] entre la cuerda C y el flujo de viento W
+      const fullAoA = Math.atan2(Math.abs(dotNW), Math.max(-1.0, Math.min(1.0, dotCW)));
 
-      // Si el ángulo entre el viento y la tela es < 5° (0.088 rad), la vela flamea sin portar (Luffing)
-      if (effAoA < 0.088) {
+      // Si el ángulo es < 5.5° (0.095 rad), la vela flamea sin portar (Luffing)
+      if (fullAoA < 0.095) {
         return {
-          forceR: wDirR * (qDynamic * 0.04),
-          forceF: wDirF * (qDynamic * 0.04),
+          forceR: wDirR * (qDynamic * 0.03),
+          forceF: wDirF * (qDynamic * 0.03),
           leeR, leeF,
           luffing: true,
           stalled: false,
-          effAoA
+          effAoA: fullAoA
         };
       }
 
-      // Vector unitario de Sustentación (Lift) perpendicular al viento que apunta siempre hacia el lado de sotavento
+      // Vector unitario de Sustentación (Lift) perpendicular al viento apuntando hacia sotavento
       const pDotLee = (-wDirF) * leeR + wDirR * leeF;
       const pSign   = pDotLee >= 0.0 ? 1.0 : -1.0;
       const liftR   = -wDirF * pSign;
       const liftF   =  wDirR * pSign;
 
-      // 1. Componente de Sustentación Alar (solo cuando el aire entra desde el mástil hacia la baluma: dotCW > 0)
-      let cl = 0.0;
-      let skinCd = 0.06;
-      let stalled = false;
-      if (dotCW > 0.0) {
-        if (effAoA <= 0.56) {
-          // 5°..32°: Flujo laminar adherido (máxima sustentación de ceñida y través a ~22°-26°)
-          const u = (effAoA - 0.088) / 0.472;
-          cl = Math.sin(u * Math.PI * 0.82) * 1.62;
-          skinCd = 0.07 + 0.18 * u * u;
-        } else {
-          // > 32°: Desprendimiento progresivo de capa límite (Stall si la vela está demasiado cazada al centro)
-          const over = Math.min(1.0, (effAoA - 0.56) / 0.55);
-          cl = 1.45 * (1.0 - over);
-          skinCd = 0.14;
-          stalled = (over > 0.35);
-        }
+      // Interpolación limpia entre Régimen Alar Laminar (wingBlend=1) y Régimen de Placa en Pérdida/Popa (wingBlend=0)
+      // - Máxima eficiencia alar entre 12° y 28° (0.21..0.49 rad)
+      // - Si AoA supera 33° (0.58 rad), el flujo se desprende progresivamente (Stall por sobrecazar la escota)
+      let wingBlend = 0.0;
+      let clWing    = 0.0;
+      let cdWing    = 0.08;
+      let stalled   = false;
+
+      if (fullAoA <= 0.58) {
+        wingBlend = 1.0;
+        const u = (fullAoA - 0.095) / 0.485; // 0..1 entre 5.5° y 33°
+        clWing = Math.sin(u * Math.PI * 0.85) * 1.55;
+        cdWing = 0.06 + 0.22 * u * u;
+      } else if (fullAoA < 1.15) {
+        // Zona de transición Stall (33°..66°): cae la sustentación alar y domina la presión perpendicular a la tela
+        const s = (fullAoA - 0.58) / 0.57;
+        wingBlend = 1.0 - s;
+        clWing = 1.35 * (1.0 - s);
+        cdWing = 0.28 + 0.35 * s;
+        stalled = (s > 0.25);
       } else {
-        stalled = true;
+        // Flujo francamente desprendido o de popa (> 66°)
+        wingBlend = 0.0;
+        stalled   = true;
       }
 
-      // 2. Componente de Presión Normal sobre la tela (actúa perpendicularmente a la vela en dirección leeR, leeF):
-      //    - Si la vela está pegada al centro del casco (5°) con viento de través o popa, leeF = sin(5°) = 0.087 (casi 0 empuje a proa y mucha escora lateral).
-      //    - Al abrir la escota con el Throttle hacia 45°..86°, leeF = sin(86°) = 0.997 (toda la presión empuja hacia la proa).
-      const cn = 1.68 * sinAoA * sinAoA;
+      // Fuerza en régimen alar (Lift + Drag) vs Fuerza en régimen de presión normal (perpendicular a la tela N_lee)
+      const wingFR = clWing * liftR + cdWing * wDirR;
+      const wingFF = clWing * liftF + cdWing * wDirF;
 
-      const forceR = qDynamic * (cl * liftR + cn * leeR + skinCd * wDirR);
-      const forceF = qDynamic * (cl * liftF + cn * leeF + skinCd * wDirF);
+      const sinA   = Math.sin(fullAoA);
+      const cnPlate = 1.45 * sinA * sinA;
+      // En pérdida (stall con vela muy cerrada al centro), la turbulencia reduce el empuje longitudinal y aumenta la escora
+      const plateFR = cnPlate * leeR + 0.08 * wDirR;
+      const plateFF = cnPlate * leeF * (Math.abs(sailAng) < 0.45 ? 0.45 : 0.95) + 0.05 * wDirF;
 
-      return { forceR, forceF, leeR, leeF, luffing: false, stalled, effAoA };
+      const totR = wingBlend * wingFR + (1.0 - wingBlend) * plateFR;
+      const totF = wingBlend * wingFF + (1.0 - wingBlend) * plateFF;
+
+      return {
+        forceR: qDynamic * totR,
+        forceF: qDynamic * totF,
+        leeR, leeF,
+        luffing: false,
+        stalled,
+        effAoA: fullAoA
+      };
     }
 
     const rcSailboatSim = {
       px: -8.0, py: 0.0, pz: -10.0,
       vx: 0.0,  vy: 0.0, vz: 0.0,
       yaw: 1.10,
+      yawRate: 0.0,
       heelAngle: 0.0,
       heelRate: 0.0,
       pitchAngle: 0.0,
@@ -5233,6 +5252,7 @@
         this.py = 0.0;
         this.pz = -10.0;
         this.yaw = 1.10; // Rumbo inicial de través hacia la Boya 1 recibiendo la brisa del norte por babor
+        this.yawRate = 0.0;
         this.heelAngle = 0.14;
         this.heelRate  = 0.0;
         this.pitchAngle = 0.0;
@@ -5244,7 +5264,7 @@
         this.mainLeeF  = Math.sin(this.boomAngle);
         this.jibLeeR   = Math.cos(this.jibAngle);
         this.jibLeeF   = Math.sin(this.jibAngle);
-        this.spd = 2.1;
+        this.spd = 2.0;
         this.vx = Math.sin(this.yaw) * this.spd;
         this.vz = Math.cos(this.yaw) * this.spd;
         this.vy = 0.0;
@@ -5290,14 +5310,11 @@
         const t = aeroEnv.time;
         const wCfg    = fcProfile.wind;
         const dirMode = fcProfile.windDirMode || 0;
-        // Rumbo base del viento: 0 = AUTO BAHIA (-1.28 rad: brisa del Norte-Noroeste hacia el Sur-Sureste) o rumbo cardinal fijo
         const baseDir  = dirMode === 0 ? -1.28 : WIND_DIR_RADS[dirMode];
-        // Roles de dirección (shiftDeg) + micro-turbulencia direccional (turbPct)
         const shiftRad = (wCfg.shiftDeg * DEG2RAD) * (0.70 * Math.sin(t * 0.09) + 0.30 * Math.cos(t * 0.23))
                        + (wCfg.turbPct * 0.14) * Math.sin(t * 1.6 + this.px * 0.04);
         const marineWindDir = baseDir + shiftRad;
 
-        // Velocidad base en m/s (baseKts * 0.51444) + Ráfagas (gustPct) + Turbulencia rápida (turbPct) + Botón A (Ráfaga manual)
         const baseMs   = wCfg.baseKts * 0.51444;
         const gustEnv  = 1.0 + wCfg.gustPct * (0.42 * Math.sin(t * 0.32) + 0.28 * Math.cos(t * 0.78 - this.pz * 0.02))
                              + wCfg.turbPct * (0.16 * Math.sin(t * 2.4 + this.px * 0.05));
@@ -5312,16 +5329,19 @@
         const fwdX = Math.sin(this.yaw), fwdZ = Math.cos(this.yaw);
         const rgtX = Math.cos(this.yaw), rgtZ = -Math.sin(this.yaw);
 
-        // 3. Viento Aparente = Velocidad del Aire respecto al Casco (hacia dónde FLUYE el aire sobre las velas)
-        const appWX = trueWindX - this.vx;
-        const appWZ = trueWindZ - this.vz;
+        // 3. Viento Aparente Escalado a Monocasco de Desplazamiento (V_barco_eff <= 0.34 * V_viento):
+        //    Evita que la velocidad visual del barco en la bahía gire artificialmente el viento aparente hacia la proa
+        //    y bloquee la apertura de las velas cuando abres el stick de Throttle al 100%.
+        const aeroScaleVel = 0.32;
+        const appWX = trueWindX - this.vx * aeroScaleVel;
+        const appWZ = trueWindZ - this.vz * aeroScaleVel;
         this.appWX = appWX;
         this.appWZ = appWZ;
-        this.appWindSpd = Math.max(0.25, Math.hypot(appWX, appWZ));
+        this.appWindSpd = Math.max(0.15, Math.hypot(appWX, appWZ));
 
-        // Componentes del flujo de viento aparente en el sistema del barco:
-        // flowFwd > 0 = el viento empuja desde popa hacia proa; flowFwd < 0 = el viento entra de proa hacia popa
-        // flowRgt > 0 = el viento fluye hacia estribor (+r); flowRgt < 0 = el viento fluye hacia babor (-r)
+        // Componentes del flujo de viento en el sistema del barco:
+        // flowFwd > 0 = viento de popa hacia proa; flowFwd < 0 = viento de proa hacia popa
+        // flowRgt > 0 = viento fluye hacia estribor (+r); flowRgt < 0 = viento fluye hacia babor (-r)
         const flowFwd = appWX * fwdX + appWZ * fwdZ;
         const flowRgt = appWX * rgtX + appWZ * rgtZ;
 
@@ -5338,53 +5358,50 @@
         this.rudderAngle += (targetRudder - this.rudderAngle) * Math.min(1.0, dt * 16.0);
 
         if (hwInput.leftActive || (isRadioThrottleActive() && !hwInput.leftActive)) {
-          // En pantalla táctil o gimbal RC real sin resorte: posición directa 1:1 del stick izquierdo Y (-1 abajo = 0%, +1 arriba = 100%)
           const targetSheet = Math.max(0.0, Math.min(1.0, (hwInput.ly + 1.0) * 0.5));
           this.sheetOpen01 += (targetSheet - this.sheetOpen01) * Math.min(1.0, dt * 18.0);
         } else if (rcInputConfig.thrMode === 3) {
           this.sheetOpen01 = Math.max(0.0, Math.min(1.0, (hwInput.ly + 1.0) * 0.5));
         } else if (Math.abs(hwInput.ly) > 0.08) {
-          // Con teclado (W/S) o gamepad con resorte: subir el stick (+ly) suelta escota hacia 90°, bajar (-ly) caza las velas al centro
           this.sheetOpen01 = Math.max(0.0, Math.min(1.0, this.sheetOpen01 + hwInput.ly * 0.85 * dt));
         }
 
-        // Ángulo máximo que el cabo de escota permite abrir a cada vela respecto a la línea central del casco:
-        // sheetOpen01 = 0% -> 5° (pegadas a la mitad del casco)
-        // sheetOpen01 = 100% -> 86° (casi a 90° respecto al casco)
+        // Ángulo máximo permitido por el cabo de escota:
+        // sheetOpen01 = 0% -> 5° (pegadas al centro del casco)
+        // sheetOpen01 = 100% -> 86° (abiertas casi a 90° respecto al casco)
         const maxMainSheetRad = (5.0 + this.sheetOpen01 * 81.0) * DEG2RAD;
         const maxJibSheetRad  = Math.min(88.0 * DEG2RAD, maxMainSheetRad * 1.04 + 1.5 * DEG2RAD);
 
-        // Ángulo libre de veleta hacia el cual el viento empuja las velas (pivotadas en el mástil/estay):
-        // En popa cerrada (flowFwd > 0 y |flowRgt| pequeño), mantenemos la amura actual hasta que el viento cruce claramente la popa (trasluchada real)
+        // Ángulo libre de veleta hacia el cual el viento empuja las velas (con histéresis suave en popa cerrada)
         let effFlowRgt = flowRgt;
         if (flowFwd > 0.0 && Math.abs(flowRgt) < 0.35) {
           effFlowRgt = (this.boomAngle >= 0.0 ? 1.0 : -1.0) * 0.35;
         }
-        const freeSailAng = Math.atan2(effFlowRgt, -flowFwd);
+        const freeSailAng = marineWindSpd > 0.15 ? Math.atan2(effFlowRgt, -flowFwd) : this.boomAngle;
         const targetMainBoom = Math.max(-maxMainSheetRad, Math.min(maxMainSheetRad, freeSailAng));
         const targetJibBoom  = Math.max(-maxJibSheetRad,  Math.min(maxJibSheetRad,  freeSailAng));
 
-        this.boomAngle += (targetMainBoom - this.boomAngle) * Math.min(1.0, dt * 11.0);
-        this.jibAngle  += (targetJibBoom  - this.jibAngle)  * Math.min(1.0, dt * 12.5);
+        this.boomAngle += (targetMainBoom - this.boomAngle) * Math.min(1.0, dt * 10.0);
+        this.jibAngle  += (targetJibBoom  - this.jibAngle)  * Math.min(1.0, dt * 11.5);
 
         // 5. FÍSICA VECTORIAL INDEPENDIENTE DE LA VELA MAYOR (62% área) Y DEL FOQUE (38% área)
         const wDirF = flowFwd / this.appWindSpd;
         const wDirR = flowRgt / this.appWindSpd;
-        const qWind = 0.24 * this.appWindSpd * this.appWindSpd * preset.hullSpdScale;
+        const qWind = (marineWindSpd > 0.15 ? 0.14 * this.appWindSpd * this.appWindSpd : 0.0) * preset.hullSpdScale;
 
         const mainAero = computeSingleSailForce(this.boomAngle, wDirR, wDirF, qWind * 0.62);
         const jibAero  = computeSingleSailForce(this.jibAngle,  wDirR, wDirF, qWind * 0.38);
 
-        this.mainLuffing = mainAero.luffing;
-        this.jibLuffing  = jibAero.luffing;
+        this.mainLuffing = mainAero.luffing || marineWindSpd <= 0.15;
+        this.jibLuffing  = jibAero.luffing  || marineWindSpd <= 0.15;
         this.mainLeeR    = mainAero.leeR;
         this.mainLeeF    = mainAero.leeF;
         this.jibLeeR     = jibAero.leeR;
         this.jibLeeF     = jibAero.leeF;
-        this.inIrons     = (absWindFromBow < 0.40); // < 23° de la proa
+        this.inIrons     = (marineWindSpd > 0.15 && absWindFromBow < 0.38); // < 22° de la proa
 
-        // Efecto Slot Venturi entre el Foque y la Vela Mayor cuando ambas portan flujo adherido (+14% de empuje)
-        const slotBonus = (!mainAero.luffing && !jibAero.luffing) ? 1.14 : 1.0;
+        // Efecto Slot Venturi entre el Foque y la Vela Mayor cuando ambas portan flujo adherido (+12% de empuje)
+        const slotBonus = (!this.mainLuffing && !this.jibLuffing && !mainAero.stalled) ? 1.12 : 1.0;
 
         this.mainForceF  = mainAero.forceF * slotBonus;
         this.mainForceR  = mainAero.forceR * slotBonus;
@@ -5394,17 +5411,22 @@
         this.jibForceR   = jibAero.forceR * slotBonus;
         this.jibAeroMag  = Math.hypot(this.jibForceF, this.jibForceR);
 
-        // Suma de propulsión hacia proa (+f) y fuerza lateral de escora (+r) de las 2 velas
-        const heelEff    = Math.cos(this.heelAngle * 0.85);
-        const sailDriveF = (this.mainForceF + this.jibForceF) * heelEff;
-        const sailSideR  = (this.mainForceR + this.jibForceR) * heelEff;
+        // Al escorar (heelAngle), el área vélica efectiva disminuye con cos^2(heelAngle)
+        const cosHeel    = Math.cos(this.heelAngle);
+        const heelEff    = cosHeel * cosHeel;
+        // En el cono de proa al viento (In Irons < 22°), el viento frena suavemente sin bloquear la inercia de virada
+        const ironsFactor = this.inIrons ? -0.15 : 1.0;
+        const sailDriveF  = (this.mainForceF + this.jibForceF) * heelEff * (this.inIrons ? 0.2 : 1.0) + (this.inIrons ? ironsFactor : 0.0);
+        const sailSideR   = (this.mainForceR + this.jibForceR) * heelEff;
 
         // Estado táctico de las velas para el OSD
-        if (this.inIrons) {
+        if (marineWindSpd <= 0.15) {
+          this.pointOfSail = 'CALM (0 KT SIN VIENTO)';
+        } else if (this.inIrons) {
           this.pointOfSail = 'IN IRONS (PROA AL VIENTO)';
-        } else if (mainAero.luffing) {
+        } else if (this.mainLuffing) {
           this.pointOfSail = 'LUFFING (CAZA ESCOTA!)';
-        } else if (mainAero.stalled && this.sheetOpen01 < 0.55 && absWindFromBow > 0.95) {
+        } else if (mainAero.stalled && this.sheetOpen01 < 0.65 && absWindFromBow < 2.35) {
           this.pointOfSail = 'OVER-TRIM (SUELTA ESCOTA!)';
         } else if (absWindFromBow < 1.15) {
           this.pointOfSail = 'CLOSE HAUL (CENIDA)';
@@ -5414,39 +5436,42 @@
           this.pointOfSail = 'RUNNING (POPA)';
         }
 
-        // 6. VECTORES HIDRODINÁMICOS DE LA QUILLA + BULBO Y DEL TIMÓN EN EL AGUA
+        // 6. VECTORES HIDRODINÁMICOS DE LA QUILLA DE ALTO ALARGAMIENTO Y DEL TIMÓN EN EL AGUA
         const uFwd = this.vx * fwdX + this.vz * fwdZ;
         const vLat = this.vx * rgtX + this.vz * rgtZ;
         const waterSpd = Math.hypot(uFwd, vLat);
 
-        // a) Vector de la Quilla (perfil hidrofóil profundo que convierte el abatimiento lateral vLat en sustentación anti-deriva)
-        const leewayAng = Math.atan2(-vLat, Math.max(0.25, Math.abs(uFwd)));
-        const keelCL    = Math.max(-1.35, Math.min(1.35, leewayAng * 4.8)) * preset.keelArea;
-        const qWater    = 0.58 * waterSpd * waterSpd;
-        this.keelForceR = qWater * keelCL - vLat * 5.4;
-        const keelDrag  = (0.22 + 0.052 * waterSpd + 0.16 * keelCL * keelCL) * uFwd;
+        // a) Quilla de Regata (High-Aspect Fin Keel):
+        //    Sostiene el 94% del empuje lateral de las velas con un ángulo de abatimiento (leeway) realista de solo 2°..4°,
+        //    eliminando por completo el "efecto hovercraft / derrape sobre hielo".
+        const keelResistRatio = Math.min(0.94, (0.35 + 0.65 * Math.min(1.0, waterSpd / 0.8)) * preset.keelArea);
+        this.keelForceR = -sailSideR * keelResistRatio - vLat * (14.0 + waterSpd * 8.0) * preset.keelArea;
+        const leewayAng = Math.atan2(-vLat, Math.max(0.30, Math.abs(uFwd)));
 
-        // b) Vector del Timón en Popa (situado en f = -1.25m; controlado por el stick derecho horizontal hwInput.rx):
-        //    Mover stick derecho a la DERECHA (hwInput.rx > 0 -> rudderAngle > 0) empuja la popa a babor (rudForceR < 0)
-        //    y gira la proa hacia ESTRIBOR / DERECHA (rudderYawRate = -rudForceR * 1.32 > 0 -> yaw aumenta).
-        const flowAtStern = Math.max(0.45, Math.abs(uFwd) + 0.22);
-        const rudAoA      = (uFwd >= -0.05 ? 1.0 : -1.0) * this.rudderAngle + leewayAng * 0.25;
-        this.rudForceR    = -Math.sin(rudAoA) * (1.50 * flowAtStern * preset.rudderAuth);
-        const rudDrag     = 0.30 * Math.sin(this.rudderAngle) * Math.sin(this.rudderAngle) * uFwd;
+        // Resistencia hidrodinámica del casco: fricción viscosa + resistencia por ola de Froude (crece con uFwd^3 cerca de la velocidad de casco)
+        const hullWaveDrag = 0.028 * uFwd * uFwd * Math.abs(uFwd);
+        const keelDrag     = (0.26 + 0.08 * waterSpd) * uFwd + hullWaveDrag + Math.abs(sailSideR) * 0.025;
 
-        // Aceleración longitudinal y lateral neta del casco
+        // b) Vector del Timón en Popa (f = -1.25m; controlado exclusivamente por el stick derecho horizontal hwInput.rx):
+        //    Sin término espurio de leewayAng para que al soltar el stick derecho el barco mantenga su rumbo recto sin girar solo.
+        const flowAtStern = Math.max(0.45, Math.abs(uFwd) + 0.20);
+        const rudAoA      = (uFwd >= -0.05 ? 1.0 : -1.0) * this.rudderAngle;
+        this.rudForceR    = -Math.sin(rudAoA) * (1.45 * flowAtStern * preset.rudderAuth);
+        const rudDrag     = 0.26 * Math.sin(this.rudderAngle) * Math.sin(this.rudderAngle) * Math.max(0.0, uFwd);
+
+        // Aceleración longitudinal y lateral neta del casco (con inercia real para cruzar el viento en las viradas)
         const fwdAcc = sailDriveF - keelDrag - rudDrag;
-        const latAcc = sailSideR + this.keelForceR + this.rudForceR * 0.22;
+        const latAcc = sailSideR + this.keelForceR + this.rudForceR * 0.12;
 
-        const newUFwd = Math.max(-0.8, Math.min(8.5, uFwd + fwdAcc * dt));
-        const newVLat = Math.max(-1.5, Math.min(1.5, vLat + latAcc * dt));
+        const newUFwd = Math.max(-0.5, Math.min(5.2, uFwd + fwdAcc * dt));
+        const newVLat = Math.max(-0.28, Math.min(0.28, vLat + latAcc * dt));
 
-        // Par de giro (Yaw):
-        // - El timón en popa (f = -1.25m) genera un momento de guiñada opuesto al empuje lateral en popa (-this.rudForceR > 0 al girar a la derecha)
-        // - El par vélico entre el Foque en proa (+f) y la Vela Mayor en popa (-f) + la escora generan tendencia suave a orzar (Weather Helm)
-        const sailYawMoment = (this.jibForceR * 0.30 - this.mainForceR * 0.26) * 0.12 - this.heelAngle * 0.12;
-        const rudderYawRate = -this.rudForceR * 1.32;
-        this.yaw += (rudderYawRate + sailYawMoment) * dt;
+        // 7. Dinámica Angular de Guiñada (Yaw con Momento de Inercia y Tendencia Suave a Orzar / Weather Helm):
+        //    - Cuando el barco escora fuerte (> 18°), el centro de empuje vélico se desplaza a sotavento generando un ligero Weather Helm realista.
+        const weatherHelm   = -Math.sin(this.heelAngle) * Math.max(0.0, Math.abs(this.heelAngle) - 0.25) * 0.35;
+        const targetYawRate = -this.rudForceR * 1.18 + weatherHelm;
+        this.yawRate += (targetYawRate - this.yawRate) * Math.min(1.0, dt * 8.5);
+        this.yaw     += this.yawRate * dt;
 
         this.vx = fwdX * newUFwd + rgtX * newVLat;
         this.vz = fwdZ * newUFwd + rgtZ * newVLat;
@@ -5467,7 +5492,7 @@
           showToast('ORILLA / BAJIO! VIRANDO...');
         }
 
-        // 7. Dinámica de Escora hacia Sotavento (sailSideR > 0 inclina el mástil hacia estribor: heelAngle > 0) + Olas del agua
+        // 8. Equilibrio Físico de Escora (Par Escorante Vélico vs. Par Adrizante del Bulbo de Plomo: sin(heel) = F_side / K_bulb)
         const waveH    = getSailWaveHeight(this.px, this.pz, aeroEnv.time);
         const waveHFwd = getSailWaveHeight(this.px + fwdX * 1.35, this.pz + fwdZ * 1.35, aeroEnv.time);
         const waveHRgt = getSailWaveHeight(this.px + rgtX * 0.65, this.pz + rgtZ * 0.65, aeroEnv.time);
@@ -5475,9 +5500,12 @@
         this.pitchAngle = Math.atan2(waveHFwd - waveH, 1.35) * 0.95;
 
         const waveRoll   = Math.atan2(waveH - waveHRgt, 0.65) * 0.35;
-        const turbHeel   = (fcProfile.wind ? fcProfile.wind.turbPct : 0.2) * 0.06 * Math.sin(aeroEnv.time * 3.8 + this.px * 0.08);
-        const targetHeel = Math.max(-0.68, Math.min(0.68, (sailSideR * 0.16) / preset.keelRighting + waveRoll + turbHeel));
-        const heelAcc    = (targetHeel - this.heelAngle) * 16.0 - this.heelRate * 4.2;
+        const turbHeel   = (fcProfile.wind ? fcProfile.wind.turbPct : 0.2) * 0.05 * Math.sin(aeroEnv.time * 3.8 + this.px * 0.08);
+        // Con brisa suave (6 KT) escora ~9°, con brisa regata (12 KT) ~20°, y en ráfaga/sobrecaza llega progresivamente a ~36° sin saturarse de golpe
+        const rawHeelRatio = (sailSideR * 0.085) / (preset.keelRighting * 1.35);
+        const eqHeel     = Math.atan(rawHeelRatio) * 0.78;
+        const targetHeel = Math.max(-0.68, Math.min(0.68, eqHeel + waveRoll + turbHeel));
+        const heelAcc    = (targetHeel - this.heelAngle) * 14.0 - this.heelRate * 4.5;
         this.heelRate   += heelAcc * dt;
         this.heelAngle  += this.heelRate * dt;
 
