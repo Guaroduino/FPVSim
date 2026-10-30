@@ -461,7 +461,7 @@
         <span>PWR</span>
         <span id="sdLed" class="led sd-act" title="Flash / SD Activity"></span>
         <span>SPI</span>
-        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + COMANCHE 3D (v55)</span>
+        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + COMANCHE 3D (v56)</span>
       </div>
       <div class="top-hw-pills">
         <a href="hardware.html" class="pill-btn" style="text-decoration:none;display:inline-flex;align-items:center;" title="Ver Guía y Diagrama de Conexiones ESP32-S3 N16R8">🔌 PINOUT</a>
@@ -3616,8 +3616,9 @@
         if (activeRomId === 'fpv_wing' || activeRomId === 'fpv_drone') {
           selectChoroboboCircuit(currentCircuitIdx + 1, craft, true);
         } else {
-          fcProfile.windScale = Math.min(2.0, Math.round((fcProfile.windScale + 0.2) * 10) / 10);
-          showToast(`VIENTO: ${Math.round(fcProfile.windScale * 100)}%`);
+          fcProfile.losZoom = Math.min(3.50, Math.round(((fcProfile.losZoom || 1.25) + 0.25) * 100) / 100);
+          showToast(`ZOOM CAMARA LOS: ${fcProfile.losZoom.toFixed(2)}X`);
+          playTone(740, 0.03);
         }
         return true;
       }
@@ -3625,9 +3626,19 @@
         if (activeRomId === 'fpv_wing' || activeRomId === 'fpv_drone') {
           selectChoroboboCircuit(currentCircuitIdx - 1, craft, true);
         } else {
-          fcProfile.windScale = Math.max(0.2, Math.round((fcProfile.windScale - 0.2) * 10) / 10);
-          showToast(`VIENTO: ${Math.round(fcProfile.windScale * 100)}%`);
+          fcProfile.losZoom = Math.max(0.50, Math.round(((fcProfile.losZoom || 1.25) - 0.25) * 100) / 100);
+          showToast(`ZOOM CAMARA LOS: ${fcProfile.losZoom.toFixed(2)}X`);
+          playTone(580, 0.03);
         }
+        return true;
+      }
+      // Toque directo en el indicador superior derecho [-ZOOM / +ZOOM] en Velero RC y Carro RC
+      if (capTouch.justTapped && (activeRomId === 'rc_sailboat' || activeRomId === 'rc_car') && capTouch.y240 >= 22 && capTouch.y240 <= 46 && capTouch.x320 >= 232) {
+        const zStep = capTouch.x320 >= 276 ? 0.25 : -0.25;
+        fcProfile.losZoom = Math.max(0.50, Math.min(3.50, Math.round(((fcProfile.losZoom || 1.25) + zStep) * 100) / 100));
+        showToast(`ZOOM CAMARA LOS: ${fcProfile.losZoom.toFixed(2)}X`);
+        playTone(zStep > 0 ? 740 : 580, 0.03);
+        capTouch.justTapped = false;
         return true;
       }
       if (hwInput.justPressed('LEFT')) {
@@ -3759,6 +3770,7 @@
       windPresetIdx: 3,   // Por defecto: 3 = BRISA REGATA (12 KT)
       windCustom: false,
       wind: { ...WIND_PRESETS[3] },
+      losZoom: 1.25,      // Zoom ajustable por el usuario en cámaras LOS (0.50x panorámico .. 3.50x teleobjetivo)
       treeDensity: 1.0,   // 1.0 = 100%, 0.5 = 50%, 0.0 = OFF
       showSplinePath: 1,  // 1 = ON (luces guía en el piso), 0 = OFF
       dronePresetIdx: 0,
@@ -5392,6 +5404,11 @@
         const targetRudder = applySuperExpo(hwInput.rx, 1.0, 0.30) * (38.0 * DEG2RAD);
         this.rudderAngle += (targetRudder - this.rudderAngle) * Math.min(1.0, dt * 16.0);
 
+        // Eje vertical del Stick Derecho (hwInput.ry) ajusta suavemente el Zoom de la cámara LOS en tiempo real
+        if (Math.abs(hwInput.ry) > 0.24 && Math.abs(hwInput.ry) > Math.abs(hwInput.rx) * 1.15) {
+          fcProfile.losZoom = Math.max(0.50, Math.min(3.50, (fcProfile.losZoom || 1.25) + hwInput.ry * 0.95 * dt));
+        }
+
         if (hwInput.leftActive || (isRadioThrottleActive() && !hwInput.leftActive)) {
           const targetSheet = Math.max(0.0, Math.min(1.0, (hwInput.ly + 1.0) * 0.5));
           this.sheetOpen01 += (targetSheet - this.sheetOpen01) * Math.min(1.0, dt * 18.0);
@@ -5627,13 +5644,16 @@
         let cFx = 0, cFy = 0, cFz = 1;
         let zoomFactor = 1.0;
 
+        const userZoom = Math.max(0.50, Math.min(3.50, fcProfile.losZoom || 1.25));
+
         if (this.camMode === 2 || this.chaseCam) {
-          // Vista Follow 3D elevada detrás del velero
-          const fc = computeFollowCamPose(this, 6.2, 2.6, 15.0);
-          camX = fc.camX; camY = Math.max(1.8, fc.camY); camZ = fc.camZ;
+          // Vista Follow 3D elevada detrás del velero (también responde al Zoom ajustable)
+          const fc = computeFollowCamPose(this, 6.8 / userZoom, Math.max(1.3, 2.8 / Math.sqrt(userZoom)), 15.0);
+          camX = fc.camX; camY = Math.max(1.4, fc.camY); camZ = fc.camZ;
           cRx = fc.cRx; cRy = fc.cRy; cRz = fc.cRz;
           cUx = fc.cUx; cUy = fc.cUy; cUz = fc.cUz;
           cFx = fc.cFx; cFy = fc.cFy; cFz = fc.cFz;
+          zoomFactor = userZoom;
         } else {
           // Vector horizontal LOS desde el Mirador del Muelle hacia el Velero
           const rawDx = this.px - dockX;
@@ -5643,19 +5663,20 @@
           const dirHz = rawDz / horizDist;
 
           if (this.camMode === 0) {
-            // MIRADOR ALTO AUTO-ZOOM: mantiene el acimut LOS del muelle y una altura elevada (13.5m..19.5m)
-            // para ver con total claridad las olas, la orientación del casco, las 2 velas y las 6 boyas
-            const effHoriz = horizDist > 14.0 ? (14.0 + (horizDist - 14.0) * 0.28) : horizDist;
+            // MIRADOR ALTO AUTO-ZOOM + ZOOM DE USUARIO: mantiene el acimut LOS del muelle y acerca/aleja sobre el rayo LOS
+            const baseEff = horizDist > 14.0 ? (14.0 + (horizDist - 14.0) * 0.28) : horizDist;
+            const effHoriz = Math.max(4.2, Math.min(85.0, baseEff / userZoom));
             zoomFactor = horizDist / Math.max(1.0, effHoriz);
             camX = this.px - dirHx * effHoriz;
             camZ = this.pz - dirHz * effHoriz;
-            camY = Math.max(13.5, 19.5 - Math.max(0.0, horizDist - 14.0) * 0.11);
+            camY = Math.max(4.5, Math.min(24.0, 4.2 + effHoriz * 0.72));
           } else {
-            // MIRADOR PANORAMICO (camMode === 1): vista general alta de toda la bahía a 21.0m
-            camX = dockX;
-            camY = 21.0;
-            camZ = dockZ;
-            zoomFactor = 1.0;
+            // MIRADOR ZOOM MANUAL (camMode === 1): zoom directo sobre la distancia real desde el muelle
+            const effHoriz = Math.max(4.5, Math.min(90.0, horizDist / userZoom));
+            zoomFactor = userZoom;
+            camX = this.px - dirHx * effHoriz;
+            camZ = this.pz - dirHz * effHoriz;
+            camY = Math.max(5.0, Math.min(25.0, 21.0 / Math.sqrt(userZoom)));
           }
 
           const dx = this.px - camX;
@@ -5728,8 +5749,10 @@
         const distB = Math.round(Math.hypot(b.x - this.px, b.z - this.pz));
         drawOsdSmall320(`BUOY ${this.activeBuoy + 1}/6`, 264, 8, C565.GREEN);
         drawOsdSmall320(`DST ${distB}M`,                264, 18, WHITE);
-        const camLbl = (this.camMode === 2 || this.chaseCam) ? 'CAM FOLLOW' : (this.camMode === 0 ? `MIRAD ${zoomFactor.toFixed(1)}X` : 'MIRAD ALTO');
-        drawOsdSmall320(camLbl, 254, 28, C565.CYAN);
+        const zUsr = (fcProfile.losZoom || 1.25).toFixed(2);
+        const camLbl = (this.camMode === 2 || this.chaseCam) ? `FLW Z:${zUsr}X` : (this.camMode === 0 ? `LOS ${zoomFactor.toFixed(1)}X` : `MAN ${zUsr}X`);
+        drawOsdSmall320(camLbl,        254, 28, C565.CYAN);
+        drawOsdSmall320(`[-ZOOM ${zUsr}+]`, 244, 38, C565.GOLD);
 
         // Columna izquierda inferior: Velocidad (KTS), Tope de Escota (SHEET °), Ángulo Real de Botavara (BOOM °) y Escora (HEEL °)
         const kts = (this.spd * 1.944).toFixed(1);
@@ -6187,6 +6210,11 @@
         const targetSteer = applySuperExpo(rawSteer, 1.0, 0.35) * (preset.steerRate * DEG2RAD) * spdDamp;
         this.steerAngle += (targetSteer - this.steerAngle) * Math.min(1.0, dt * 18.0);
 
+        // Eje vertical del Stick Derecho (hwInput.ry) ajusta suavemente el Zoom de la cámara LOS en tiempo real
+        if (Math.abs(hwInput.ry) > 0.24 && Math.abs(hwInput.ry) > Math.abs(hwInput.rx) * 1.15) {
+          fcProfile.losZoom = Math.max(0.50, Math.min(3.50, (fcProfile.losZoom || 1.25) + hwInput.ry * 0.95 * dt));
+        }
+
         let escInput = hwInput.ly;
         if (hwInput.btn.A) escInput = 1.0;
         this.thrCmd = escInput;
@@ -6330,13 +6358,16 @@
         let cFx = 0, cFy = 0, cFz = 1;
         let zoomFactor = 1.0;
 
+        const userZoom = Math.max(0.50, Math.min(3.50, fcProfile.losZoom || 1.25));
+
         if (this.camMode === 2 || this.chaseCam) {
-          // Vista Chase Cam 3D elevada detrás del Carro RC para ver con claridad las curvas siguientes
-          const fc = computeFollowCamPose(this, 5.0, 2.45, 17.5);
-          camX = fc.camX; camY = Math.max(1.8, fc.camY); camZ = fc.camZ;
+          // Vista Chase Cam 3D elevada detrás del Carro RC (también responde al Zoom ajustable)
+          const fc = computeFollowCamPose(this, 5.5 / userZoom, Math.max(1.3, 2.55 / Math.sqrt(userZoom)), 17.5);
+          camX = fc.camX; camY = Math.max(1.4, fc.camY); camZ = fc.camZ;
           cRx = fc.cRx; cRy = fc.cRy; cRz = fc.cRz;
           cUx = fc.cUx; cUy = fc.cUy; cUz = fc.cUz;
           cFx = fc.cFx; cFy = fc.cFy; cFz = fc.cFz;
+          zoomFactor = userZoom;
         } else {
           // Vector horizontal LOS desde la Torre/Podio hacia el Carro RC
           const rawDx = this.px - standX;
@@ -6346,19 +6377,20 @@
           const dirHz = rawDz / horizDist;
 
           if (this.camMode === 0) {
-            // PODIO ALTO AUTO-ZOOM: mantiene el acimut LOS exacto del podio y una altura elevada (14.5m..21.5m)
-            // para que SIEMPRE se vea la pista en picado (32°..45°) y se entiendan todas las curvas y pianos
-            const effHoriz = horizDist > 13.5 ? (13.5 + (horizDist - 13.5) * 0.28) : horizDist;
+            // PODIO ALTO AUTO-ZOOM + ZOOM DE USUARIO: mantiene el acimut LOS del podio y acerca/aleja sobre el rayo LOS
+            const baseEff = horizDist > 13.5 ? (13.5 + (horizDist - 13.5) * 0.28) : horizDist;
+            const effHoriz = Math.max(3.8, Math.min(78.0, baseEff / userZoom));
             zoomFactor = horizDist / Math.max(1.0, effHoriz);
             camX = this.px - dirHx * effHoriz;
             camZ = this.pz - dirHz * effHoriz;
-            camY = Math.max(14.5, 21.5 - Math.max(0.0, horizDist - 13.5) * 0.14);
+            camY = Math.max(4.5, Math.min(25.0, 4.4 + effHoriz * 0.78));
           } else {
-            // PODIO PANORAMICO (camMode === 1): vista general alta desde la torre a 22.5m
-            camX = standX;
-            camY = 22.5;
-            camZ = standZ;
-            zoomFactor = 1.0;
+            // PODIO ZOOM MANUAL (camMode === 1): zoom directo sobre la distancia real desde el podio
+            const effHoriz = Math.max(4.0, Math.min(82.0, horizDist / userZoom));
+            zoomFactor = userZoom;
+            camX = this.px - dirHx * effHoriz;
+            camZ = this.pz - dirHz * effHoriz;
+            camY = Math.max(5.0, Math.min(25.0, 22.5 / Math.sqrt(userZoom)));
           }
 
           const dx = this.px - camX;
@@ -6419,11 +6451,12 @@
         drawOsdSmall320(`TIME ${this.lapTime.toFixed(1)}S`,               8, 18, WHITE);
         drawOsdSmall320(`BEST ${this.bestLapTime > 0 ? this.bestLapTime.toFixed(2) + 'S' : '--.--'}`, 8, 28, C565.GREEN);
 
-        // Esquina superior derecha: Cámara LOS Podio Alto + Zoom
-        const camLbl = (this.camMode === 2 || this.chaseCam) ? 'CHASE 3D' : (this.camMode === 0 ? `PODIO ${zoomFactor.toFixed(1)}X` : 'PODIO ALTO');
-        drawOsdSmall320(camLbl,        256, 8,  C565.CYAN);
-        drawOsdSmall320(`LIPO 8.32V`,  256, 18, WHITE);
-        drawOsdSmall320(`B:CAM Y:MOD`, 255, 28, C565.GOLD);
+        // Esquina superior derecha: Cámara LOS Podio Alto + Control de Zoom
+        const zUsr = (fcProfile.losZoom || 1.25).toFixed(2);
+        const camLbl = (this.camMode === 2 || this.chaseCam) ? `CHS Z:${zUsr}X` : (this.camMode === 0 ? `LOS ${zoomFactor.toFixed(1)}X` : `MAN ${zUsr}X`);
+        drawOsdSmall320(camLbl,            256, 8,  C565.CYAN);
+        drawOsdSmall320(`B:CAM Y:MOD`,     255, 18, WHITE);
+        drawOsdSmall320(`[-ZOOM ${zUsr}+]`, 244, 28, C565.GOLD);
 
         // Mini-Radar del Circuito en vivo en la esquina inferior derecha (muestra el trazado completo + tu carro)
         const mCx = 282, mCy = 178, mScale = 0.72;
@@ -6562,13 +6595,13 @@
         fpvWingSim.reset();
         showToast('HAND LAUNCH! Z-84');
       } else if (romId === 'rc_sailboat') {
-        setFaceLabels('CLASE', 'RST', 'CAM', 'GUST', 'L:ESCOTA VELA R:TIMON | B:CAM LOS | SELECT:SIMS');
+        setFaceLabels('CLASE', 'RST', 'CAM', 'GUST', 'L:ESCOTA R:TIMON | UP/DN O R-Y:ZOOM LOS | B:CAM');
         rcSailboatSim.reset();
-        showToast('VELERO RC LOS // BAHIA');
+        showToast('VELERO RC LOS // UP/DN:ZOOM');
       } else if (romId === 'rc_car') {
-        setFaceLabels('SPEC', 'RST', 'CAM', 'GAS', 'L:GAS/FRENO R:DIRECCION | B:CAM LOS | SELECT:SIMS');
+        setFaceLabels('SPEC', 'RST', 'CAM', 'GAS', 'L:GAS R:DIR | UP/DN O R-Y:ZOOM LOS | B:CAM');
         rcCarSim.reset();
-        showToast('CARRO RC 1/10 // PISTA LOS');
+        showToast('CARRO RC 1/10 // UP/DN:ZOOM');
       } else if (romId === 'hwtest') {
         setFaceLabels('Y', 'X', 'B', 'A', 'TOCA LA PANTALLA IPS O PULSA SELECT / ★ MENU');
       }
@@ -6799,6 +6832,7 @@
     function resetWorldDefaults() {
       applyWindPreset(3); // BRISA REGATA (12 KT)
       fcProfile.windDirMode = 0;
+      fcProfile.losZoom = 1.25;
       fcProfile.treeDensity = 1.0;
       fcProfile.showSplinePath = 1;
       fpvDroneSim.propwash = 1.0;
@@ -6859,11 +6893,16 @@
           rgTuningCursor = 0;
           showToast('MENU COMPLETO DE VIENTO Y OLAS');
         } else if (row === 6) {
-          const densities = [0.0, 0.5, 1.0];
-          let curIdx = fcProfile.treeDensity <= 0.1 ? 0 : (fcProfile.treeDensity < 0.8 ? 1 : 2);
-          curIdx = ((curIdx + dir) % 3 + 3) % 3;
-          fcProfile.treeDensity = densities[curIdx];
-          showToast(`ARBOLES: ${Math.round(fcProfile.treeDensity * 100)}%`);
+          if (activeRomId === 'rc_sailboat' || activeRomId === 'rc_car') {
+            fcProfile.losZoom = Math.max(0.50, Math.min(3.50, Math.round(((fcProfile.losZoom || 1.25) + dir * 0.25) * 100) / 100));
+            showToast(`ZOOM CAMARA LOS: ${fcProfile.losZoom.toFixed(2)}X`);
+          } else {
+            const densities = [0.0, 0.5, 1.0];
+            let curIdx = fcProfile.treeDensity <= 0.1 ? 0 : (fcProfile.treeDensity < 0.8 ? 1 : 2);
+            curIdx = ((curIdx + dir) % 3 + 3) % 3;
+            fcProfile.treeDensity = densities[curIdx];
+            showToast(`ARBOLES: ${Math.round(fcProfile.treeDensity * 100)}%`);
+          }
         } else if (row === 7) {
           fcProfile.showSplinePath = fcProfile.showSplinePath ? 0 : 1;
           showToast(fcProfile.showSplinePath ? 'CAMINO GUIA: ON' : 'CAMINO GUIA: OFF');
@@ -7334,7 +7373,7 @@
         row3View,
         `CLIM:${wnd.name} (${wnd.baseKts}KT)`,
         `WIND:A=ABRIR MENU VIENTO`,
-        `TREE:${treeLbl}`,
+        (activeRomId === 'rc_sailboat' || activeRomId === 'rc_car') ? `ZOOM:${(fcProfile.losZoom || 1.25).toFixed(2)}X (UP/DN O R-Y)` : `TREE:${treeLbl}`,
         `PATH:${fcProfile.showSplinePath ? 'LUCES GUIA ON' : 'OFF (LIMPIO)'}`,
         `SIMS:A=ABRIR SELECTOR`
       ] : (rgTuningTab === 1 ? [
