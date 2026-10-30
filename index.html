@@ -472,9 +472,10 @@
         <span>PWR</span>
         <span id="sdLed" class="led sd-act" title="Flash / SD Activity"></span>
         <span>SPI</span>
-        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + 3 CIRCUITOS (v20)</span>
+        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + 3 CIRCUITOS (v21)</span>
       </div>
       <div class="top-hw-pills">
+        <button id="btnRates" class="pill-btn active" title="Configurar Rates, PID y Físicas">⚙️ RATES</button>
         <button id="btnPalette" class="pill-btn">🎨 IPS 60MHz</button>
         <button id="btnAudio" class="pill-btn">🔇 SND</button>
         <button id="btnGrid" class="pill-btn">SCAN</button>
@@ -1655,9 +1656,11 @@
               const subIdx = ((xQ16 >> shiftSub) & 15) | (((zQ16 >> shiftSub) & 15) << 4);
               const mVal = MICRO_TEX_LUT[subIdx];
               if (mVal === 2) {
-                col = (col & 0xF7DE) - ((col & 0x0821) ? 0x0821 : 0);
+                // Oscurecer ~6% por canal sin préstamo/underflow hacia el canal Rojo (0xF800)
+                col = col - ((col >> 4) & 0x0861);
               } else if (mVal === 3) {
-                col = (col & 0xF7DE) + ((col & 0xF7DE) !== 0xF7DE ? 0x0821 : 0);
+                // Aclarar ~6% por canal sin desbordamiento/overflow entre canales RGB565
+                col = col + (((col ^ 0xFFFF) >> 4) & 0x0861);
               }
             } else if (k > 106) {
               col = blend565Half(col, fogCol);
