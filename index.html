@@ -472,7 +472,7 @@
         <span>PWR</span>
         <span id="sdLed" class="led sd-act" title="Flash / SD Activity"></span>
         <span>SPI</span>
-        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + WING LAUNCH (v28)</span>
+        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + THR HOLD (v29)</span>
       </div>
       <div class="top-hw-pills">
         <button id="btnRcPad" class="pill-btn" title="Configurar Emisora TX16S USB/BT y Gamepad Bluetooth">🎮 RC/PAD</button>
@@ -1069,7 +1069,7 @@
       if (keyMap[e.code]) hwInput.btn[keyMap[e.code]] = false;
     });
 
-    function drawThumbstickWell(ctxG, canvasEl, x, y, active, clicked, label) {
+    function drawThumbstickWell(ctxG, canvasEl, x, y, active, clicked, label, holdLevel = -1) {
       const w = canvasEl.width, h = canvasEl.height;
       const cx = w * 0.5, cy = h * 0.5, maxR = w * 0.36;
       const capR = w * 0.21;
@@ -1084,6 +1084,21 @@
       ctxG.moveTo(cx - maxR, cy); ctxG.lineTo(cx + maxR, cy);
       ctxG.moveTo(cx, cy - maxR); ctxG.lineTo(cx, cy + maxR);
       ctxG.stroke();
+
+      // Si el modo de acelerador fijo/incremental (Throttle Hold) está activo en Ala Fija, dibujar la barra del nivel fijado
+      if (holdLevel >= 0) {
+        const hy = cy - (holdLevel * 2.0 - 1.0) * maxR;
+        ctxG.strokeStyle = '#00e676';
+        ctxG.lineWidth = 3;
+        ctxG.beginPath();
+        ctxG.moveTo(cx - maxR * 0.72, hy);
+        ctxG.lineTo(cx + maxR * 0.72, hy);
+        ctxG.stroke();
+        ctxG.fillStyle = '#00e676';
+        ctxG.font = 'bold 11px monospace';
+        ctxG.textAlign = 'center';
+        ctxG.fillText(`HOLD ${Math.round(holdLevel * 100)}%`, cx, h - 10);
+      }
 
       const kx = cx + x * maxR;
       const ky = cy - y * maxR;
@@ -1122,14 +1137,15 @@
       'ANDROID BT ALT'
     ];
     const RC_THR_NAMES = [
-      'AUTO (RC/PAD)',
+      'AUTO (WING=FIJO)',
       'RADIO (-100/+100)',
-      'SPRING (CENTRO)'
+      'FIJO (INCREMENT)',
+      'SPRING (DIRECTO)'
     ];
 
     const rcInputConfig = {
       mapMode: 0,      // 0=AUTO, 1=TX16S AETR, 2=GAMEPAD MODE2, 3=RC TAER, 4=ANDROID BT ALT
-      thrMode: 0,      // 0=AUTO, 1=RADIO FULL (-1..+1 -> 0..100%), 2=PAD SPRING (0 -> hover)
+      thrMode: 0,      // 0=AUTO (Wing=FIJO en stick con resorte, Radio=0..100%), 1=RADIO, 2=FIJO INC, 3=SPRING DIRECTO
       deadzone: 0.03,  // 3% deadzone por defecto
       invThr: 1,       // +1 normal, -1 invertido
       invYaw: 1,
@@ -1233,9 +1249,18 @@
     function isRadioThrottleActive() {
       if (!rcInputConfig.connected) return false;
       if (rcInputConfig.thrMode === 1) return true;
-      if (rcInputConfig.thrMode === 2) return false;
-      // En AUTO: si el mapeo activo es AETR (1) o TAER (3) o se detectó emisora EdgeTX, usar recorrido completo -1..+1 -> 0..100%
+      if (rcInputConfig.thrMode === 2 || rcInputConfig.thrMode === 3) return false;
+      // En AUTO (0): si el mapeo activo es AETR (1) o TAER (3) o se detectó emisora EdgeTX, usar recorrido completo -1..+1 -> 0..100%
       return rcInputConfig.isEdgeTxRadio || rcInputConfig.activeMapResolved === 1 || rcInputConfig.activeMapResolved === 3;
+    }
+
+    // Indica si el Ala Fija debe usar acelerador fijo/incremental al usar joysticks con autocentrado (Touch, Gamepad BT, Teclado)
+    function isWingStickyThrottleActive() {
+      if (isRadioThrottleActive() && !hwInput.leftActive) return false; // Emisora real sin resorte usa posición directa
+      if (rcInputConfig.thrMode === 2) return true;  // Forzado a FIJO (INCREMENT)
+      if (rcInputConfig.thrMode === 3) return false; // Forzado a SPRING (DIRECTO)
+      // En AUTO (0): usa el ajuste del perfil de Ala Fija (activado por defecto: thrHold = 1)
+      return !!(typeof fcProfile !== 'undefined' && fcProfile.wing && fcProfile.wing.thrHold);
     }
 
     // Convierte hwInput.ly en comando de acelerador (0.0 a 1.0) respetando si es Gimbal sin resorte (TX16S) o Stick con resorte (Gamepad/Touch)
@@ -1439,8 +1464,11 @@
         }
       }
 
-      drawThumbstickWell(ctxLeft, stickLeftCanvas, hwInput.lx, hwInput.ly, hwInput.leftActive || rcInputConfig.connected, hwInput.btn.L3, rcInputConfig.connected ? 'THR / YAW' : 'LEFT STICK');
-      drawThumbstickWell(ctxRight, stickRightCanvas, hwInput.rx, hwInput.ry, hwInput.rightActive || rcInputConfig.connected, hwInput.btn.R3, rcInputConfig.connected ? 'PIT / ROL' : 'RIGHT STICK');
+      const showHoldBar = (typeof activeRomId !== 'undefined' && activeRomId === 'fpv_wing' && typeof fpvWingSim !== 'undefined' && isWingStickyThrottleActive())
+        ? fpvWingSim.thrLatch
+        : -1;
+      drawThumbstickWell(ctxLeft, stickLeftCanvas, hwInput.lx, hwInput.ly, hwInput.leftActive || rcInputConfig.connected, hwInput.btn.L3, rcInputConfig.connected ? 'THR / YAW' : 'LEFT STICK', showHoldBar);
+      drawThumbstickWell(ctxRight, stickRightCanvas, hwInput.rx, hwInput.ry, hwInput.rightActive || rcInputConfig.connected, hwInput.btn.R3, rcInputConfig.connected ? 'PIT / ROL' : 'RIGHT STICK', -1);
 
       const adcLX = Math.round((hwInput.lx + 1) * 2047.5);
       const adcLY = Math.round((hwInput.ly + 1) * 2047.5);
@@ -2606,10 +2634,10 @@
     ];
 
     const WING_PRESETS = [
-      { name: 'SPORT Z84', pitchRate: 210, rollRate: 290, yawRate: 115, expo: 0.38, wingLoad: 1.00, maxThrustAcc: 18.0, cgOffset:  0.00, tipStall: 1.0 },
-      { name: 'ACRO 3D',   pitchRate: 310, rollRate: 420, yawRate: 165, expo: 0.45, wingLoad: 0.82, maxThrustAcc: 24.5, cgOffset: -0.03, tipStall: 1.3 },
-      { name: 'CRUISER',   pitchRate: 145, rollRate: 200, yawRate:  85, expo: 0.50, wingLoad: 0.90, maxThrustAcc: 15.0, cgOffset:  0.03, tipStall: 0.5 },
-      { name: 'HEAVY LR',  pitchRate: 175, rollRate: 240, yawRate:  95, expo: 0.42, wingLoad: 1.32, maxThrustAcc: 20.5, cgOffset:  0.01, tipStall: 1.4 }
+      { name: 'SPORT Z84', pitchRate: 210, rollRate: 290, yawRate: 115, expo: 0.38, wingLoad: 1.00, maxThrustAcc: 18.0, cgOffset:  0.00, tipStall: 1.0, thrHold: 1 },
+      { name: 'ACRO 3D',   pitchRate: 310, rollRate: 420, yawRate: 165, expo: 0.45, wingLoad: 0.82, maxThrustAcc: 24.5, cgOffset: -0.03, tipStall: 1.3, thrHold: 1 },
+      { name: 'CRUISER',   pitchRate: 145, rollRate: 200, yawRate:  85, expo: 0.50, wingLoad: 0.90, maxThrustAcc: 15.0, cgOffset:  0.03, tipStall: 0.5, thrHold: 1 },
+      { name: 'HEAVY LR',  pitchRate: 175, rollRate: 240, yawRate:  95, expo: 0.42, wingLoad: 1.32, maxThrustAcc: 20.5, cgOffset:  0.01, tipStall: 1.4, thrHold: 1 }
     ];
 
     const fcProfile = {
@@ -2638,6 +2666,7 @@
     function applyWingPreset(idx) {
       fcProfile.wingPresetIdx = ((idx % WING_PRESETS.length) + WING_PRESETS.length) % WING_PRESETS.length;
       const p = WING_PRESETS[fcProfile.wingPresetIdx];
+      const keepThrHold = fcProfile.wing.thrHold !== undefined ? fcProfile.wing.thrHold : p.thrHold;
       fcProfile.wing.name         = p.name;
       fcProfile.wing.pitchRate    = p.pitchRate;
       fcProfile.wing.rollRate     = p.rollRate;
@@ -2647,6 +2676,7 @@
       fcProfile.wing.maxThrustAcc = p.maxThrustAcc;
       fcProfile.wing.cgOffset     = p.cgOffset;
       fcProfile.wing.tipStall     = p.tipStall;
+      fcProfile.wing.thrHold      = keepThrHold;
     }
 
     // Curva Actual Rates de Betaflight: combina sensibilidad central lineal + SuperExpo hacia Max Rate (en rad/s)
@@ -3073,8 +3103,9 @@
       launchTimer: 0, // Temporizador de asistencia de lanzamiento a mano (INAV NAV_LAUNCH)
       chaseCam: false,
       activeGate: 0,
-      thrCmd: 0.45,
-      motorRpm: 0.45,
+      thrLatch: 0.55,
+      thrCmd: 0.55,
+      motorRpm: 0.52,
       elevL: 0,
       elevR: 0,
       lastAlpha: 0,
@@ -3115,6 +3146,7 @@
         this.yawRate   = 0.0;
 
         this.launchTimer = 1.05; // 1.05s de fase INAV LAUNCH (ascenso limpio tras soltar el ala)
+        this.thrLatch = 0.55;
         this.thrCmd   = 0.58;
         this.motorRpm = 0.52;
         this.elevL = 0; this.elevR = 0; this.lastAlpha = 0.05;
@@ -3132,17 +3164,29 @@
         const groundH = getTerrainHeightMeters(this.px, this.pz);
         updateAeroEnvironment(this.px, this.py, this.pz, groundH, dt);
 
-        // Si el piloto mueve el stick de Pitch/Roll durante el lanzamiento, termina antes la fase LAUNCH
+        // Si el piloto mueve el stick de Pitch/Roll o de Gas durante el lanzamiento, termina antes la fase LAUNCH
         if (this.launchTimer > 0) {
           this.launchTimer = Math.max(0, this.launchTimer - dt);
-          if (Math.hypot(hwInput.rx, hwInput.ry) > 0.22) {
+          if (Math.hypot(hwInput.rx, hwInput.ry) > 0.22 || Math.abs(hwInput.ly) > 0.22) {
             this.launchTimer = 0;
           }
         }
 
-        // 1. Comando de motor + spool-up de hélice trasera (soporta Gimbal real TX16S 0..100% o Stick con resorte)
-        const baseThr = 0.42;
-        let thr = evalRcThrottle(baseThr);
+        // 1. Comando de motor + spool-up de hélice trasera:
+        //    - Con emisora real sin resorte (TX16S): posición directa 0..100%
+        //    - Con joystick autocentrado + modo FIJO (por defecto en Ala): el stick izquierdo sube/baja y fija el gas (0..100%)
+        //    - Con joystick autocentrado + modo RESORTE: posición directa alrededor de 42% crucero
+        let thr;
+        if (isWingStickyThrottleActive()) {
+          if (Math.abs(hwInput.ly) > 0.10) {
+            const dStick = (hwInput.ly > 0 ? (hwInput.ly - 0.10) : (hwInput.ly + 0.10)) / 0.90;
+            this.thrLatch = Math.max(0.0, Math.min(1.0, this.thrLatch + dStick * 0.72 * dt));
+          }
+          thr = this.thrLatch;
+        } else {
+          thr = evalRcThrottle(0.42);
+          this.thrLatch = thr;
+        }
         if (this.launchTimer > 0) {
           thr = Math.max(thr, 0.58); // Empuje de ascenso automático durante el segundo de lanzamiento a mano
         }
@@ -3761,7 +3805,9 @@
         } else if (row === 6) {
           w.cgOffset = Math.max(-0.06, Math.min(0.06, Math.round((w.cgOffset + dir * 0.01) * 100) / 100));
         } else if (row === 7) {
-          w.tipStall = Math.max(0.0, Math.min(2.0, Math.round((w.tipStall + dir * 0.2) * 10) / 10));
+          w.thrHold = w.thrHold ? 0 : 1;
+          if (rcInputConfig.thrMode === 2 || rcInputConfig.thrMode === 3) rcInputConfig.thrMode = 0;
+          showToast(w.thrHold ? 'THR ALA: FIJO (STICK IZQ)' : 'THR ALA: DIRECTO (RESORTE)');
         } else if (row === 8) {
           fcProfile.windScale = Math.max(0.0, Math.min(2.0, Math.round((fcProfile.windScale + dir * 0.2) * 10) / 10));
         }
@@ -3894,7 +3940,7 @@
       const d = fcProfile.drone;
       const w = fcProfile.wing;
       const mapShort = ['AUTO', 'TX16S AETR', 'PAD MODE2', 'RC TAER', 'ANDROID BT'][rcInputConfig.mapMode];
-      const thrShort = ['AUTO', 'RADIO 0-100', 'PAD SPRING'][rcInputConfig.thrMode];
+      const thrShort = ['AUTO(W:FIJO)', 'RADIO 0-100', 'FIJO (INC)', 'SPRING DIR'][rcInputConfig.thrMode];
       const labels = rgTuningTab === 0 ? [
         `PSET:${d.name}`,
         `P/R :${d.rcRate} D/S`,
@@ -3913,7 +3959,7 @@
         `LOAD:${Math.round(w.wingLoad * 100)}%`,
         `PWR :${Math.round(w.maxThrustAcc)}M/S2`,
         `CG  :${w.cgOffset >= 0 ? '+' : ''}${Math.round(w.cgOffset * 100)}%`,
-        `STAL:${Math.round(w.tipStall * 100)}%`,
+        `THRL:${w.thrHold ? 'FIJO (INC)' : 'RESORTE'}`,
         `WIND:${Math.round(fcProfile.windScale * 100)}%`
       ] : [
         `MAP :${mapShort}`,
@@ -3954,7 +4000,11 @@
         drawInavText320(rcInputConfig.padShortName.slice(0, 12), gx0 + 4, gy0 + 4, rcInputConfig.connected ? C565.GREEN : C565.ORANGE);
 
         // 4 Barras de Canal en microsegundos (1000..2000 us): T (Throttle), R (Roll), P (Pitch), Y (Yaw)
-        const thrNorm01 = evalRcThrottle(0.5);
+        if (isWingStickyThrottleActive() && Math.abs(hwInput.ly) > 0.10) {
+          const dStick = (hwInput.ly > 0 ? (hwInput.ly - 0.10) : (hwInput.ly + 0.10)) / 0.90;
+          fpvWingSim.thrLatch = Math.max(0.0, Math.min(1.0, fpvWingSim.thrLatch + dStick * 0.72 * dt));
+        }
+        const thrNorm01 = isWingStickyThrottleActive() ? fpvWingSim.thrLatch : evalRcThrottle(0.5);
         const chNames = ['T', 'R', 'P', 'Y'];
         const chVals  = [thrNorm01 * 2.0 - 1.0, hwInput.rx, hwInput.ry, hwInput.lx];
         const chCols  = [C565.ORANGE, C565.CYAN, C565.GREEN, C565.GOLD];
