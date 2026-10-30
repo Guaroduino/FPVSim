@@ -472,7 +472,7 @@
         <span>PWR</span>
         <span id="sdLed" class="led sd-act" title="Flash / SD Activity"></span>
         <span>SPI</span>
-        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + COMANCHE 3D (v35)</span>
+        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + COMANCHE 3D (v36)</span>
       </div>
       <div class="top-hw-pills">
         <button id="btnFollowCam" class="pill-btn" title="Alternar Vista Externa 3D Follow Cam (SELECT)">🎥 FOLLOW</button>
@@ -1645,7 +1645,7 @@
       }
       const safeIdx = isFreeFlightNoGates() ? 0 : currentCircuitIdx;
       CIRCUIT_GATES = CHOROBOBO_CIRCUITS[safeIdx].gates;
-      if (typeof rebuildWorldObjectsForScale === 'function') {
+      if (typeof worldObjectsInitialized !== 'undefined' && worldObjectsInitialized) {
         rebuildWorldObjectsForScale();
       }
     }
@@ -2427,6 +2427,7 @@
     const NUM_WORLD_TREES = 180;
     const WORLD_TREES     = [];
     const WORLD_BUILDINGS = [];
+    var worldObjectsInitialized = true;
     // Buffers estáticos en SRAM para ordenar objetos de atrás hacia adelante sin 'new' por frame
     const MAX_VIS_OBJS  = 72;
     const VIS_OBJ_TYPE  = new Uint8Array(MAX_VIS_OBJS); // 0 = árbol, 1 = edificio
