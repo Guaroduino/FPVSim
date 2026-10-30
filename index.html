@@ -461,7 +461,7 @@
         <span>PWR</span>
         <span id="sdLed" class="led sd-act" title="Flash / SD Activity"></span>
         <span>SPI</span>
-        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + COMANCHE 3D (v47)</span>
+        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + COMANCHE 3D (v48)</span>
       </div>
       <div class="top-hw-pills">
         <button id="btnPalette" class="pill-btn" title="Cambiar Modo de Pantalla SPI / IPS / 1-Bit">🎨 IPS 60MHz</button>
@@ -1785,10 +1785,14 @@
       return n1 * 0.45 + n2 * 0.30 + n3 * 0.16 + n4 * 0.09;
     }
 
+    let activeWorldMapMode = 'fpv'; // 'fpv' | 'sailboat' | 'rccar'
+
     // Genera el Domo de Cielo Azul con Nubes Voxel (512x512) y actualiza la escala física del Terreno Voxel 2048x1024
     function generateGentleVoxelMap(themeIdx) {
       const prevWorldW = WORLD_W_M;
       const prevWorldH = WORLD_H_M;
+      const wasFpvMap  = (activeWorldMapMode === 'fpv');
+      activeWorldMapMode = 'fpv';
       currentThemeIdx = ((themeIdx % TERRAIN_THEMES.length) + TERRAIN_THEMES.length) % TERRAIN_THEMES.length;
       const theme = TERRAIN_THEMES[currentThemeIdx];
 
@@ -1799,8 +1803,8 @@
       MAP_SCALE_Z = MAP_H / WORLD_H_M;
       rebuildChoroboboCircuitsForScale();
 
-      // Si cambia la escala del mapa en pleno vuelo, re-escalar posición horizontal de las aeronaves al mismo punto del mapa
-      if (prevWorldW !== WORLD_W_M && typeof fpvDroneSim !== 'undefined' && typeof fpvWingSim !== 'undefined') {
+      // Si cambia la escala del mapa en pleno vuelo FPV, re-escalar posición horizontal de las aeronaves al mismo punto del mapa
+      if (wasFpvMap && prevWorldW !== WORLD_W_M && typeof fpvDroneSim !== 'undefined' && typeof fpvWingSim !== 'undefined') {
         const ratioX = WORLD_W_M / prevWorldW;
         const ratioZ = WORLD_H_M / prevWorldH;
         fpvDroneSim.px *= ratioX;
@@ -3567,44 +3571,111 @@
       playTone(760, 0.04);
     }
 
+    const PLAYABLE_SIM_IDS = ['fpv_wing', 'fpv_drone', 'rc_sailboat', 'rc_car'];
+    const PLAYABLE_SIM_NAMES = {
+      fpv_wing:    'ALA FIJA FPV',
+      fpv_drone:   'FPV DRONE 5"',
+      rc_sailboat: 'VELERO RC LOS',
+      rc_car:      'CARRO RC LOS'
+    };
+
+    function getActiveSimObject() {
+      if (activeRomId === 'fpv_drone')   return fpvDroneSim;
+      if (activeRomId === 'rc_sailboat') return rcSailboatSim;
+      if (activeRomId === 'rc_car')      return rcCarSim;
+      return fpvWingSim;
+    }
+
+    function cyclePlayableSim(dir = 1) {
+      let idx = PLAYABLE_SIM_IDS.indexOf(activeRomId);
+      if (idx < 0) idx = 0;
+      const nextIdx = ((idx + dir) % PLAYABLE_SIM_IDS.length + PLAYABLE_SIM_IDS.length) % PLAYABLE_SIM_IDS.length;
+      const nextId  = PLAYABLE_SIM_IDS[nextIdx];
+      launchRom(nextId);
+      showToast(`SIM: ${PLAYABLE_SIM_NAMES[nextId]}`);
+    }
+
     // Se ejecuta 1 sola vez por frame (60 Hz) antes de los 4 sub-steps físicos (240 Hz)
     function handleInFlightShortcuts(craft) {
       if (hwInput.justPressed('SELECT')) {
-        generateGentleVoxelMap(currentThemeIdx + 1);
-        showToast(TERRAIN_THEMES[currentThemeIdx].name);
-        playTone(700, 0.04);
+        // SELECT abre directamente el Selector Principal de Simuladores (Launcher)
+        rgOverlayOpen = false;
+        rgTuningOpen  = false;
+        osState = 'launcher';
+        setFaceLabels('TEMA', 'CFG', 'BACK', 'RUN', 'UP/DN:ELEGIR SIMULADOR | A:ABRIR | X:CFG');
+        showToast('SELECTOR DE SIMULADORES');
+        playTone(720, 0.04);
+        return true;
       }
       if (hwInput.justPressed('UP')) {
-        selectChoroboboCircuit(currentCircuitIdx + 1, craft, true);
+        if (activeRomId === 'fpv_wing' || activeRomId === 'fpv_drone') {
+          selectChoroboboCircuit(currentCircuitIdx + 1, craft, true);
+        } else {
+          fcProfile.windScale = Math.min(2.0, Math.round((fcProfile.windScale + 0.2) * 10) / 10);
+          showToast(`VIENTO: ${Math.round(fcProfile.windScale * 100)}%`);
+        }
         return true;
       }
       if (hwInput.justPressed('DOWN')) {
-        selectChoroboboCircuit(currentCircuitIdx - 1, craft, true);
+        if (activeRomId === 'fpv_wing' || activeRomId === 'fpv_drone') {
+          selectChoroboboCircuit(currentCircuitIdx - 1, craft, true);
+        } else {
+          fcProfile.windScale = Math.max(0.2, Math.round((fcProfile.windScale - 0.2) * 10) / 10);
+          showToast(`VIENTO: ${Math.round(fcProfile.windScale * 100)}%`);
+        }
         return true;
       }
-      if (hwInput.justPressed('LEFT') || hwInput.justPressed('RIGHT')) {
-        const nextId = activeRomId === 'fpv_drone' ? 'fpv_wing' : 'fpv_drone';
-        launchRom(nextId);
-        showToast(nextId === 'fpv_drone' ? 'MODO: FPV DRONE' : 'MODO: ALA FIJA FPV');
+      if (hwInput.justPressed('LEFT')) {
+        cyclePlayableSim(-1);
+        return true;
+      }
+      if (hwInput.justPressed('RIGHT')) {
+        cyclePlayableSim(1);
         return true;
       }
       if (hwInput.justPressed('Y') || hwInput.justPressed('L3')) {
-        cycleCraftFlightMode(craft);
+        if (activeRomId === 'rc_sailboat') {
+          rcSailboatSim.presetIdx = (rcSailboatSim.presetIdx + 1) % SAIL_PRESETS.length;
+          showToast(`VELERO: ${SAIL_PRESETS[rcSailboatSim.presetIdx].name}`);
+          playTone(760, 0.04);
+        } else if (activeRomId === 'rc_car') {
+          rcCarSim.presetIdx = (rcCarSim.presetIdx + 1) % RC_CAR_PRESETS.length;
+          showToast(`CARRO: ${RC_CAR_PRESETS[rcCarSim.presetIdx].name}`);
+          playTone(760, 0.04);
+        } else {
+          cycleCraftFlightMode(craft);
+        }
       }
       if (hwInput.justPressed('X')) {
         craft.reset();
-        showToast(craft === fpvWingSim ? 'HAND LAUNCH! Z-84' : 'DRONE RESET');
+        if (activeRomId === 'rc_sailboat') showToast('REGATA REINICIADA!');
+        else if (activeRomId === 'rc_car') showToast('CARRO EN SALIDA!');
+        else showToast(craft === fpvWingSim ? 'HAND LAUNCH! Z-84' : 'DRONE RESET');
         return true;
       }
       if (hwInput.justPressed('B') || hwInput.justPressed('R3')) {
-        craft.chaseCam = !craft.chaseCam;
-        fpvDroneSim.chaseCam = craft.chaseCam;
-        fpvWingSim.chaseCam  = craft.chaseCam;
-        showToast(craft.chaseCam ? 'VISTA: FOLLOW 3D' : 'VISTA: FPV CABINA');
+        if (activeRomId === 'rc_sailboat' || activeRomId === 'rc_car') {
+          craft.camMode = (craft.camMode + 1) % 3;
+          craft.chaseCam = (craft.camMode === 2);
+          const camNames = activeRomId === 'rc_sailboat'
+            ? ['VISTA: LOS MUELLE (AUTO-ZOOM)', 'VISTA: LOS MUELLE (WIDE)', 'VISTA: FOLLOW 3D VELERO']
+            : ['VISTA: LOS PODIO (AUTO-ZOOM)',  'VISTA: LOS PODIO (WIDE)',  'VISTA: CHASE 3D CARRO'];
+          showToast(camNames[craft.camMode]);
+        } else {
+          craft.chaseCam = !craft.chaseCam;
+          fpvDroneSim.chaseCam = craft.chaseCam;
+          fpvWingSim.chaseCam  = craft.chaseCam;
+          showToast(craft.chaseCam ? 'VISTA: FOLLOW 3D' : 'VISTA: FPV CABINA');
+        }
       }
       if (capTouch.justTapped && capTouch.ly64 <= 12) {
         if (capTouch.lx128 < 42) {
-          selectChoroboboCircuit(currentCircuitIdx + 1, craft, false);
+          if (activeRomId === 'fpv_wing' || activeRomId === 'fpv_drone') {
+            selectChoroboboCircuit(currentCircuitIdx + 1, craft, false);
+          } else {
+            osState = 'launcher';
+            showToast('SELECTOR DE SIMULADORES');
+          }
         } else if (capTouch.lx128 < 86) {
           // Tocar el centro superior abre directamente el Menú Unificado en la pestaña [WORLD]
           rgOverlayOpen = true;
@@ -3612,9 +3683,7 @@
           rgTuningTab = 0;
           playTone(680, 0.04);
         } else {
-          const nextId = activeRomId === 'fpv_drone' ? 'fpv_wing' : 'fpv_drone';
-          launchRom(nextId);
-          showToast(nextId === 'fpv_drone' ? 'MODO: FPV DRONE' : 'MODO: ALA FIJA FPV');
+          cyclePlayableSim(1);
           return true;
         }
         capTouch.justTapped = false;
@@ -4586,17 +4655,1328 @@
     fpvWingSim.reset();
 
     /***************************************************************************
-     * 7. SISTEMA OPERATIVO RETRO-GO + CONFIGURADOR DE RATES / FÍSICAS EN VRAM
+     * 6B. SIMULADOR 3: VELERO RC LOS (CLASE IOM / DF65 — FÍSICA DE VELA Y AGUA)
+     *     - Vista Piloto LOS desde el Muelle con Auto-Zoom Óptico + Follow 3D
+     *     - Física de Viento Aparente, Escota de Vela (Winch), Escora (Heel) y Quilla
+     *     - Bahía de Regata con 6 Boyas 3D, Olas Sinusoidales LUT y Estela en V
+     ***************************************************************************/
+    const SAIL_BUOYS = [
+      { x:   8.0, z:  -8.0, name: 'B1 START',     col: rgb565(255,  96,  24), topCol: C565.WHITE },
+      { x:  28.0, z:  34.0, name: 'B2 BARLOVENTO',col: rgb565(255, 215,  20), topCol: C565.RED   },
+      { x: -12.0, z:  44.0, name: 'B3 DESMARQUE', col: rgb565(255,  96,  24), topCol: C565.WHITE },
+      { x: -36.0, z:  10.0, name: 'B4 SOTAVENTO', col: rgb565(255, 215,  20), topCol: C565.RED   },
+      { x: -24.0, z: -12.0, name: 'B5 TRAVESIA',  col: rgb565(255,  96,  24), topCol: C565.WHITE },
+      { x:  24.0, z:  -4.0, name: 'B6 LLEGADA',   col: rgb565(255, 215,  20), topCol: C565.GREEN }
+    ];
+
+    // Buffer estático de estela en el agua (16 nodos, 0 allocs en bucle)
+    const MAX_WAKE_PTS = 16;
+    const WAKE_RING_X = new Float32Array(MAX_WAKE_PTS);
+    const WAKE_RING_Z = new Float32Array(MAX_WAKE_PTS);
+    const WAKE_RING_W = new Float32Array(MAX_WAKE_PTS);
+    let wakeHeadIdx = 0;
+
+    function getSailWaveHeight(wx, wz, t) {
+      const i1 = (Math.round(wx * 14.0 + t * 52.0) & 511);
+      const i2 = (Math.round(wz * 18.0 - t * 44.0 + wx * 6.0) & 511);
+      return (sinLut[i1] * 0.08 + sinLut[i2] * 0.06);
+    }
+
+    function generateSailboatBayVoxelMap() {
+      activeWorldMapMode = 'sailboat';
+      choroBakedInPsram  = false;
+      WORLD_W_M   = 420.0;
+      WORLD_H_M   = 300.0;
+      MAP_SCALE_X = MAP_W / WORLD_W_M;
+      MAP_SCALE_Z = MAP_H / WORLD_H_M;
+
+      // 1. Cielo costero despejado con cúmulos blancos de regata
+      for (let mz = 0; mz < SKY_DIM; mz++) {
+        const zOff = mz << SKY_SHIFT;
+        for (let mx = 0; mx < SKY_DIM; mx++) {
+          const cn = fbmCloud(mx, mz);
+          const cloudDensity = Math.max(0, Math.min(1, (cn - 0.06) * 1.9));
+          const cSmooth = cloudDensity * cloudDensity * (3 - 2 * cloudDensity);
+          const sr = 32 * (1 - cSmooth) + 250 * cSmooth;
+          const sg = 96 * (1 - cSmooth) + 252 * cSmooth;
+          const sb = 192 * (1 - cSmooth) + 255 * cSmooth;
+          voxSkyMap[zOff + mx] = rgb565(clampByte(sr), clampByte(sg), clampByte(sb));
+        }
+      }
+
+      // 2. Bahía Náutica en PSRAM: Agua azul con ondas + Costa de arena + Islas verdes + Muelle de madera al sur
+      for (let mz = 0; mz < MAP_H; mz++) {
+        const zOff = mz << MAP_SHIFT_X;
+        const wz   = (mz - SPAWN_MZ) / MAP_SCALE_Z;
+        const waveZ = sinLut[(mz * 3) & 511];
+
+        for (let mx = 0; mx < MAP_W; mx++) {
+          const wx = (mx - SPAWN_MX) / MAP_SCALE_X;
+
+          // Muelle flotante de madera del piloto en el sur (wx: -4.5..+4.5, wz: -38..-23) a nivel 0 para paridad 1:1 con el agua
+          if (Math.abs(wx) <= 4.2 && wz >= -38.0 && wz <= -23.5) {
+            voxHeight[zOff + mx] = 0;
+            const plank = ((mz >> 2) & 1) ? 148 : 132;
+            const border = Math.abs(wx) > 3.6 ? 25 : 0;
+            voxColor[zOff + mx] = rgb565(plank + border, plank - 28 + border, plank - 58);
+            continue;
+          }
+
+          // Distancia normalizada al centro de la bahía para formar penínsulas e islas alrededor
+          const bayTwist = sinLut[(mx >> 2) & 511] * 14.0 + sinLut[(mz >> 2) & 511] * 11.0;
+          const distNorth = wz - (78.0 + bayTwist * 0.6);
+          const distSouth = -35.0 - wz + sinLut[(mx >> 1) & 511] * 4.5;
+          const distSide  = Math.abs(wx) - (108.0 + bayTwist);
+          const shoreMetric = Math.max(distNorth, distSouth, distSide);
+
+          // Pequeña isla faro al noreste (wx ~ 68, wz ~ 54)
+          const dIsland = Math.hypot(wx - 68.0, wz - 54.0);
+          const islandMetric = 16.0 - dIsland;
+          const landVal = Math.max(shoreMetric, islandMetric);
+
+          if (landVal > 0.0) {
+            // Tierra firme / Playa / Colinas costeras
+            const hRaw = Math.min(56, Math.round(2 + landVal * 1.15));
+            voxHeight[zOff + mx] = hRaw;
+            if (landVal < 5.5) {
+              // Arena dorada de playa
+              const grain = ((mx ^ mz) & 3) * 4;
+              voxColor[zOff + mx] = rgb565(216 - grain, 194 - grain, 142 - grain);
+            } else {
+              // Vegetación costera verde con sombreado suave
+              const shade = 0.88 + 0.18 * sinLut[(mx * 3 + mz * 2) & 511];
+              const gBase = ((mx >> 4) ^ (mz >> 4)) & 1;
+              const r = (gBase ? 46 : 56) * shade;
+              const g = (gBase ? 108 : 122) * shade;
+              const b = (gBase ? 44 : 48) * shade;
+              voxColor[zOff + mx] = rgb565(clampByte(r), clampByte(g), clampByte(b));
+            }
+          } else {
+            // Agua navegable (voxHeight = 0) con gradiente turquesa en la orilla y azul marino con crestas en el centro
+            voxHeight[zOff + mx] = 0;
+            const depthDist = -landVal; // > 0 hacia adentro del mar
+            const shallow = Math.max(0.0, 1.0 - depthDist / 16.0);
+            const ripple = sinLut[((mx * 5 + mz * 7) & 511)] * waveZ;
+            const crest  = ripple > 0.72 ? (ripple - 0.72) * 145.0 : 0.0;
+
+            const r = 14 + shallow * 28 + crest;
+            const g = 68 + shallow * 76 + ripple * 12 + crest;
+            const b = 138 + shallow * 52 + ripple * 18 + crest * 0.85;
+            voxColor[zOff + mx] = rgb565(clampByte(r), clampByte(g), clampByte(b));
+          }
+        }
+      }
+    }
+
+    // Dibuja el Modelo 3D Sólido del Velero RC (Casco IOM, Quilla con Bulbo, Timón, Mástil y Velas Mayor + Foque curvadas)
+    function renderSolidSailboat320(sim, projPoint320, projLine) {
+      const px = sim.px, py = sim.py, pz = sim.pz;
+      const rx = sim.rx, ry = sim.ry, rz = sim.rz;
+      const ux = sim.ux, uy = sim.uy, uz = sim.uz;
+      const fx = sim.fx, fy = sim.fy, fz = sim.fz;
+
+      function wp(r, u, f) {
+        return projPoint320(
+          px + rx * r + ux * u + fx * f,
+          py + ry * r + uy * u + fy * f,
+          pz + rz * r + uz * u + fz * f
+        );
+      }
+
+      // Colores náuticos de alta visibilidad en 320x240 RGB565
+      const C_HULL_L  = sim.presetIdx === 1 ? rgb565(28, 132, 235) : rgb565(235, 52, 42);
+      const C_HULL_D  = sim.presetIdx === 1 ? rgb565(18,  86, 168) : rgb565(168, 32, 26);
+      const C_DECK    = rgb565(242, 245, 250);
+      const C_COCKPIT = rgb565(58,  66,  78);
+      const C_KEEL    = rgb565(72,  82,  96);
+      const C_BULB    = rgb565(255, 205, 24);
+      const C_SAIL_M1 = rgb565(250, 252, 255);
+      const C_SAIL_M2 = rgb565(224, 234, 248);
+      const C_SAIL_STRIPE = sim.presetIdx === 2 ? rgb565(255, 110, 24) : rgb565(235, 48, 48);
+      const C_JIB     = rgb565(238, 244, 252);
+
+      let fc = 0;
+
+      // 1. Quilla profunda y bulbo de plomo (visibles al escorar el casco)
+      const kTopF = wp(0.00, -0.04,  0.12);
+      const kTopR = wp(0.00, -0.04, -0.18);
+      const kBotF = wp(0.00, -0.95,  0.04);
+      const kBotR = wp(0.00, -0.95, -0.16);
+      const bulbF = wp(0.00, -1.02,  0.26);
+      const bulbL = wp(-0.11, -0.96, -0.06);
+      const bulbR = wp( 0.11, -0.96, -0.06);
+      const bulbB = wp(0.00, -1.02, -0.32);
+
+      fc = addCraftQuad(fc, kTopF, kTopR, kBotR, kBotF, C_KEEL);
+      fc = addCraftTri(fc, bulbF, bulbL, bulbB, C_BULB);
+      fc = addCraftTri(fc, bulbF, bulbB, bulbR, C_BULB);
+
+      // Pala del timón móvil en popa
+      const rudSin = Math.sin(sim.rudderAngle), rudCos = Math.cos(sim.rudderAngle);
+      const rTop   = wp(0.00, -0.05, -1.25);
+      const rBot   = wp(rudSin * 0.28, -0.58, -1.25 - rudCos * 0.28);
+      const rMid   = wp(0.00, -0.52, -1.18);
+      fc = addCraftTri(fc, rTop, rMid, rBot, C_BULB);
+
+      // 2. Casco Monocasco de Regata (Proa afilada, francobordo, espejo de popa y cubierta)
+      const bowT  = wp( 0.00,  0.22,  1.55);
+      const bowB  = wp( 0.00, -0.08,  1.42);
+      const midLT = wp(-0.42,  0.18,  0.10);
+      const midRT = wp( 0.42,  0.18,  0.10);
+      const midLB = wp(-0.32, -0.12,  0.10);
+      const midRB = wp( 0.32, -0.12,  0.10);
+      const stnLT = wp(-0.30,  0.16, -1.35);
+      const stnRT = wp( 0.30,  0.16, -1.35);
+      const stnLB = wp(-0.20, -0.08, -1.30);
+      const stnRB = wp( 0.20, -0.08, -1.30);
+      const cockF = wp( 0.00,  0.21,  0.35);
+      const cockR = wp( 0.00,  0.19, -0.95);
+
+      // Costados babor y estribor + espejo de popa + cubierta blanca
+      fc = addCraftQuad(fc, bowT, midLT, midLB, bowB, C_HULL_D);
+      fc = addCraftQuad(fc, midLT, stnLT, stnLB, midLB, C_HULL_D);
+      fc = addCraftQuad(fc, bowT, bowB, midRB, midRT, C_HULL_L);
+      fc = addCraftQuad(fc, midRT, midRB, stnRB, stnRT, C_HULL_L);
+      fc = addCraftQuad(fc, stnLT, stnRT, stnRB, stnLB, C_HULL_D);
+
+      fc = addCraftTri(fc, bowT, midLT, cockF, C_DECK);
+      fc = addCraftTri(fc, bowT, cockF, midRT, C_DECK);
+      fc = addCraftQuad(fc, midLT, stnLT, cockR, cockF, C_DECK);
+      fc = addCraftQuad(fc, cockF, cockR, stnRT, midRT, C_DECK);
+      fc = addCraftTri(fc, stnLT, stnRT, cockR, C_COCKPIT);
+
+      // 3. Mástil y Velas 3D con Curvatura Dinámica (Camber + Ángulo de Botavara + Flameo)
+      const bAng = sim.boomAngle;
+      const sSin = Math.sin(bAng), sCos = Math.cos(bAng);
+      // Bolsillo de curvatura aerodinámica de la vela hacia sotavento
+      const luffFlutter = sim.inIrons ? Math.sin(aeroEnv.time * 28.0) * 0.14 : 0.0;
+      const camberSign  = bAng >= 0 ? 1.0 : -1.0;
+      const camberDepth = (sim.inIrons ? 0.04 : 0.24) * camberSign + luffFlutter;
+      const perpR =  sCos * camberDepth;
+      const perpF =  sSin * camberDepth;
+
+      // Mástil situado en f = +0.32, altura = 3.45m
+      const mastBase = wp(0.00, 0.22, 0.32);
+      const mastMid1 = wp(0.00, 1.35, 0.30);
+      const mastMid2 = wp(0.00, 2.45, 0.28);
+      const mastTop  = wp(0.00, 3.48, 0.25);
+
+      // Botavara de la Vela Mayor (largo 1.55m hacia popa rotada por bAng)
+      const boomEnd  = wp(sSin * 1.55, 0.38, 0.32 - sCos * 1.55);
+      const leechMid1 = wp(sSin * 1.22 + perpR, 1.38, 0.30 - sCos * 1.22 + perpF);
+      const leechMid2 = wp(sSin * 0.72 + perpR * 0.7, 2.48, 0.28 - sCos * 0.72 + perpF * 0.7);
+
+      // 3 Paneles de la Vela Mayor (con franja central de regata)
+      fc = addCraftQuad(fc, mastBase, mastMid1, leechMid1, boomEnd, C_SAIL_M1);
+      fc = addCraftQuad(fc, mastMid1, mastMid2, leechMid2, leechMid1, C_SAIL_STRIPE);
+      fc = addCraftTri(fc, mastMid2, mastTop, leechMid2, C_SAIL_M2);
+
+      // Foque de Proa (Jib: desde el estay de proa en bowT hasta el 78% del mástil)
+      const jibAng = bAng * 0.88;
+      const jSin = Math.sin(jibAng), jCos = Math.cos(jibAng);
+      const jibTop   = wp(0.00, 2.68, 0.29);
+      const jibClew  = wp(jSin * 0.96 + perpR * 0.5, 0.42, 1.48 - jCos * 0.96);
+      const jibMid   = wp(jSin * 0.55 + perpR * 0.6, 1.45, 0.95 - jCos * 0.55);
+      fc = addCraftTri(fc, bowT, jibMid, jibClew, C_JIB);
+      fc = addCraftTri(fc, bowT, jibTop, jibMid, C_SAIL_M2);
+
+      renderSortedCraftFaces(fc);
+
+      // Mástil negro/carbono, botavara y estay de proa en línea nítida
+      projLine(
+        px + ux * 0.20 + fx * 0.32, py + uy * 0.20 + fy * 0.32, pz + uz * 0.20 + fz * 0.32,
+        px + ux * 3.52 + fx * 0.25, py + uy * 3.52 + fy * 0.25, pz + uz * 3.52 + fz * 0.25,
+        0, 1
+      );
+      // Catavientos naranja en el tope del mástil indicando dirección del viento real
+      const wLen = Math.hypot(aeroEnv.windX, aeroEnv.windZ) || 1.0;
+      const wxN  = aeroEnv.windX / wLen, wzN = aeroEnv.windZ / wLen;
+      const topX = px + ux * 3.52 + fx * 0.25;
+      const topY = py + uy * 3.52 + fy * 0.25;
+      const topZ = pz + uz * 3.52 + fz * 0.25;
+      projLine(topX, topY, topZ, topX + wxN * 0.55, topY, topZ + wzN * 0.55, 0, 9);
+    }
+
+    function renderSailBuoysAndWake320(sim, projPoint320, projLine) {
+      const t = aeroEnv.time;
+
+      // 1. Dibujar líneas de espuma de la estela en V detrás del casco + anillos de agua
+      for (let i = 0; i < MAX_WAKE_PTS - 1; i++) {
+        const idx0 = (wakeHeadIdx - 1 - i + MAX_WAKE_PTS) % MAX_WAKE_PTS;
+        const idx1 = (wakeHeadIdx - 2 - i + MAX_WAKE_PTS) % MAX_WAKE_PTS;
+        const x0 = WAKE_RING_X[idx0], z0 = WAKE_RING_Z[idx0], w0 = WAKE_RING_W[idx0];
+        const x1 = WAKE_RING_X[idx1], z1 = WAKE_RING_Z[idx1], w1 = WAKE_RING_W[idx1];
+        if (w0 <= 0.01 || w1 <= 0.01) continue;
+        if (Math.hypot(x1 - x0, z1 - z0) > 6.0) continue;
+
+        const spread0 = 0.22 + i * 0.09;
+        const spread1 = 0.22 + (i + 1) * 0.09;
+        const colIdx  = i < 6 ? 1 : 5; // Blanco brillante cerca de la popa -> Cian espuma lejos
+        projLine(
+          x0 - sim.rx * spread0, 0.05, z0 - sim.rz * spread0,
+          x1 - sim.rx * spread1, 0.04, z1 - sim.rz * spread1,
+          i > 8 ? 1 : 0, colIdx
+        );
+        projLine(
+          x0 + sim.rx * spread0, 0.05, z0 + sim.rz * spread0,
+          x1 + sim.rx * spread1, 0.04, z1 + sim.rz * spread1,
+          i > 8 ? 1 : 0, colIdx
+        );
+      }
+
+      // 2. Línea táctica punteada hacia la boya activa
+      const actB = SAIL_BUOYS[sim.activeBuoy];
+      const dxB = actB.x - sim.px, dzB = actB.z - sim.pz;
+      const distB = Math.hypot(dxB, dzB);
+      if (distB > 2.0) {
+        const steps = Math.min(10, Math.max(2, Math.floor(distB / 5.0)));
+        for (let s = 1; s <= steps; s++) {
+          const u = s / steps;
+          const pt = projPoint320(sim.px + dxB * u, 0.12, sim.pz + dzB * u);
+          if (pt && pt.sx > 4 && pt.sx < DISP_W - 4 && pt.sy > 4 && pt.sy < DISP_H - 4) {
+            drawInavCircleDot320(pt.sx, pt.sy, s === steps ? 2 : 1, s === steps ? C565.GREEN : C565.CYAN);
+          }
+        }
+      }
+
+      // 3. Renderizar las 6 Boyas de Regata 3D flotando sobre las olas
+      for (let i = 0; i < SAIL_BUOYS.length; i++) {
+        const b = SAIL_BUOYS[i];
+        const wy = getSailWaveHeight(b.x, b.z, t);
+        const isAct = (i === sim.activeBuoy);
+        const r = 0.85;
+
+        const pBotL = projPoint320(b.x - r, wy,        b.z);
+        const pBotR = projPoint320(b.x + r, wy,        b.z);
+        const pMidL = projPoint320(b.x - r * 0.85, wy + 1.15, b.z);
+        const pMidR = projPoint320(b.x + r * 0.85, wy + 1.15, b.z);
+        const pTop  = projPoint320(b.x,     wy + 1.95, b.z);
+        if (!pBotL || !pBotR || !pMidL || !pMidR || !pTop) continue;
+
+        fillQuad320(pBotL, pBotR, pMidR, pMidL, b.col);
+        fillTri320(pMidL.sx, pMidL.sy, pMidR.sx, pMidR.sy, pTop.sx, pTop.sy, isAct ? C565.GREEN : b.topCol);
+
+        // Mástil y chevron luminoso en la boya activa
+        if (isAct) {
+          projLine(b.x, wy + 1.95, b.z, b.x, wy + 3.6, b.z, 0, 3);
+          const pFlag = projPoint320(b.x, wy + 3.8, b.z);
+          if (pFlag) {
+            drawInavCircleDot320(pFlag.sx, pFlag.sy, 2, C565.GOLD);
+            drawOsdSmall320(`B${i + 1}`, Math.round(pFlag.sx) - 4, Math.round(pFlag.sy) - 10, C565.GOLD);
+          }
+        }
+      }
+    }
+
+    const SAIL_PRESETS = [
+      { name: 'IOM REGATTA', autoTrim: 1, hullSpdScale: 1.00, keelRighting: 1.00 },
+      { name: 'DF65 AGILE',  autoTrim: 1, hullSpdScale: 1.12, keelRighting: 0.86 },
+      { name: 'PRO MANUAL',  autoTrim: 0, hullSpdScale: 1.08, keelRighting: 0.92 }
+    ];
+
+    const rcSailboatSim = {
+      px: -6.0, py: 0.0, pz: -10.0,
+      vx: 0.0,  vy: 0.0, vz: 0.0,
+      yaw: 0.55,
+      heelAngle: 0.0,
+      heelRate: 0.0,
+      pitchAngle: 0.0,
+      rudderAngle: 0.0,
+      sheetOpen01: 0.42,
+      boomAngle: 0.35,
+      spd: 0.0,
+      vmg: 0.0,
+      appWindSpd: 5.0,
+      appWindAng: 1.2,
+      inIrons: false,
+      pointOfSail: 'REACHING',
+      presetIdx: 0,
+      camMode: 0, // 0 = LOS DOCK AUTO-ZOOM, 1 = LOS DOCK WIDE, 2 = FOLLOW 3D
+      chaseCam: false,
+      activeBuoy: 0,
+      activeGate: 0,
+      lapCount: 0,
+      flightTime: 0.0,
+      totalDistKm: 0.0,
+      wakeTimer: 0.0,
+      rx: 1, ry: 0, rz: 0,
+      ux: 0, uy: 1, uz: 0,
+      fx: 0, fy: 0, fz: 1,
+
+      reset() {
+        if (activeWorldMapMode !== 'sailboat') {
+          generateSailboatBayVoxelMap();
+        }
+        this.px = -6.0;
+        this.py = 0.0;
+        this.pz = -10.0;
+        this.yaw = 0.65; // Rumbo inicial de través para arrancar con buen empuje de vela
+        this.heelAngle = 0.14;
+        this.heelRate  = 0.0;
+        this.pitchAngle = 0.0;
+        this.rudderAngle = 0.0;
+        this.sheetOpen01 = 0.42;
+        this.boomAngle = -0.45;
+        this.spd = 2.4;
+        this.vx = Math.sin(this.yaw) * this.spd;
+        this.vz = Math.cos(this.yaw) * this.spd;
+        this.vy = 0.0;
+        this.activeBuoy = 0;
+        this.activeGate = 0;
+        this.flightTime = 0.0;
+        this.wakeTimer  = 0.0;
+        for (let i = 0; i < MAX_WAKE_PTS; i++) {
+          WAKE_RING_X[i] = this.px;
+          WAKE_RING_Z[i] = this.pz;
+          WAKE_RING_W[i] = 0.0;
+        }
+        this.updateBasis();
+      },
+
+      updateBasis() {
+        const cY = Math.cos(this.yaw), sY = Math.sin(this.yaw);
+        const cH = Math.cos(this.heelAngle), sH = Math.sin(this.heelAngle);
+        const cP = Math.cos(this.pitchAngle), sP = Math.sin(this.pitchAngle);
+
+        // Vector Forward (proa) con cabeceo de ola
+        this.fx = sY * cP;
+        this.fy = sP;
+        this.fz = cY * cP;
+
+        // Vector Right (estribor) y Up (mástil) inclinados por el ángulo de escora (heelAngle)
+        const r0x =  cY, r0z = -sY;
+        this.rx = r0x * cH;
+        this.ry = -sH;
+        this.rz = r0z * cH;
+
+        this.ux = r0x * sH - sY * sP * cH;
+        this.uy = cH * cP;
+        this.uz = r0z * sH - cY * sP * cH;
+      },
+
+      step(dt) {
+        this.flightTime += dt;
+        const preset = SAIL_PRESETS[this.presetIdx];
+
+        // 1. Actualizar viento sobre la bahía (mínimo 4.8 m/s base para que el velero siempre navegue con brío)
+        const effWindScale = Math.max(0.55, fcProfile.windScale);
+        updateAeroEnvironment(this.px, 2.0, this.pz, 0.0, dt);
+        const boostFactor = hwInput.btn.A ? 1.45 : 1.0;
+        const trueWindX = aeroEnv.windX * (effWindScale / Math.max(0.1, fcProfile.windScale)) * boostFactor;
+        const trueWindZ = aeroEnv.windZ * (effWindScale / Math.max(0.1, fcProfile.windScale)) * boostFactor;
+
+        // 2. Vectores horizontales del casco
+        const fwdX = Math.sin(this.yaw), fwdZ = Math.cos(this.yaw);
+        const rgtX = Math.cos(this.yaw), rgtZ = -Math.sin(this.yaw);
+
+        // 3. Viento Aparente = Viento Real - Velocidad del Barco
+        const appWX = trueWindX - this.vx;
+        const appWZ = trueWindZ - this.vz;
+        this.appWindSpd = Math.hypot(appWX, appWZ);
+
+        // Ángulo de dónde VIENE el viento aparente respecto a la proa (0 = proa pura, +/-PI = popa)
+        const windFromFwd = -(appWX * fwdX + appWZ * fwdZ);
+        const windFromRgt = -(appWX * rgtX + appWZ * rgtZ);
+        this.appWindAng   = Math.atan2(windFromRgt, windFromFwd);
+        const absWindAng  = Math.abs(this.appWindAng);
+
+        // 4. Control del Winche de Escota (Stick Izquierdo Y) y Timón (Stick Derecho X + Stick Izquierdo X)
+        const steerStick = Math.abs(hwInput.rx) >= Math.abs(hwInput.lx) ? hwInput.rx : hwInput.lx;
+        const targetRudder = applySuperExpo(steerStick, 1.0, 0.30) * (36.0 * DEG2RAD);
+        this.rudderAngle += (targetRudder - this.rudderAngle) * Math.min(1.0, dt * 14.0);
+
+        if (preset.autoTrim) {
+          // Modo AUTO+WINCH: calcula apertura ideal según el ángulo de viento y permite trimar +/- con Stick Izquierdo Y
+          const idealOpen = Math.max(0.08, Math.min(0.95, (absWindAng - 0.45) / 2.25));
+          const manualBias = -hwInput.ly * 0.38;
+          const targetOpen = Math.max(0.06, Math.min(1.0, idealOpen + manualBias));
+          this.sheetOpen01 += (targetOpen - this.sheetOpen01) * Math.min(1.0, dt * 6.0);
+        } else {
+          // Modo PRO MANUAL: el stick izquierdo Y abre/cierra el winche de escota
+          if (Math.abs(hwInput.ly) > 0.08) {
+            this.sheetOpen01 = Math.max(0.06, Math.min(1.0, this.sheetOpen01 - hwInput.ly * 0.65 * dt));
+          }
+        }
+
+        // Ángulo máximo permitido por el cabo de escota (de 10° cazada a 82° largada)
+        const maxSheetRad = (10.0 + this.sheetOpen01 * 72.0) * DEG2RAD;
+        const targetBoomSide = this.appWindAng >= 0 ? -1.0 : 1.0; // El viento empuja la botavara a sotavento
+        const rawBoomMag = Math.min(maxSheetRad, Math.max(0.05, absWindAng - 0.18));
+        const targetBoom = targetBoomSide * rawBoomMag;
+        this.boomAngle += (targetBoom - this.boomAngle) * Math.min(1.0, dt * 9.5);
+
+        // 5. Fuerzas Aerodinámicas de las Velas (Mayor + Foque)
+        this.inIrons = (absWindAng < 0.44); // < 25° contra el viento = Zona Muerta (In Irons)
+        if (this.inIrons) {
+          this.pointOfSail = 'IN IRONS!';
+        } else if (absWindAng < 1.15) {
+          this.pointOfSail = 'CLOSE HAUL'; // Ceñida
+        } else if (absWindAng < 2.15) {
+          this.pointOfSail = 'BEAM REACH'; // Través
+        } else {
+          this.pointOfSail = 'RUNNING';    // Popa / Largo
+        }
+
+        // Ángulo de ataque efectivo del viento aparente sobre la vela
+        const sailAoA = Math.max(0.0, absWindAng - Math.abs(this.boomAngle));
+        const qWind   = 0.19 * this.appWindSpd * this.appWindSpd * preset.hullSpdScale;
+
+        // Coeficiente de sustentación CL (pico a ~22°-28° AoA) y arrastre CD (empuje en popa)
+        let sailCL = 0.0;
+        if (!this.inIrons) {
+          sailCL = sailAoA < 0.55
+            ? Math.sin(sailAoA * 2.75) * 1.45
+            : Math.max(0.25, 1.35 - (sailAoA - 0.55) * 0.72);
+        }
+        const sailCD = 0.16 + 1.15 * Math.sin(sailAoA) * Math.sin(sailAoA);
+
+        // Proyección de Sustentación y Arrastre sobre los ejes Proa (Drive) y Costado (Heel)
+        const sinW = Math.sin(absWindAng), cosW = Math.cos(absWindAng);
+        const driveForce = qWind * (sailCL * sinW - sailCD * cosW);
+        const heelForce  = qWind * (sailCL * cosW + sailCD * sinW) * (-targetBoomSide);
+
+        // 6. Hidrodinámica del Casco y Quilla en el Agua
+        const uFwd = this.vx * fwdX + this.vz * fwdZ;
+        const vLat = this.vx * rgtX + this.vz * rgtZ;
+
+        // Resistencia del agua + freno inducido por el timón + freno de ola de casco
+        const rudderDrag = 0.35 * Math.sin(this.rudderAngle) * Math.sin(this.rudderAngle);
+        const waterDrag  = (0.28 + 0.065 * Math.abs(uFwd) + rudderDrag) * uFwd;
+        const fwdAcc     = driveForce - waterDrag;
+
+        // La quilla profunda frena fuertemente la deriva lateral (leeway)
+        const latAcc = heelForce * 0.08 - vLat * 6.5;
+
+        const newUFwd = Math.max(-0.8, Math.min(8.2, uFwd + fwdAcc * dt));
+        const newVLat = vLat + latAcc * dt;
+
+        // Giro del casco por acción del timón (proporcional al flujo de agua y con leve tendencia a orzar al escorar)
+        const flowSpd = Math.max(0.55, Math.abs(newUFwd));
+        const weatherHelm = -this.heelAngle * 0.16;
+        const turnRate = (-this.rudderAngle * 1.55 * (0.35 + 0.65 * Math.min(1.0, flowSpd / 2.5))) + weatherHelm;
+        this.yaw += turnRate * dt;
+
+        this.vx = fwdX * newUFwd + rgtX * newVLat;
+        this.vz = fwdZ * newUFwd + rgtZ * newVLat;
+        this.spd = Math.hypot(this.vx, this.vz);
+        this.totalDistKm += (this.spd * dt) / 1000.0;
+
+        this.px += this.vx * dt;
+        this.pz += this.vz * dt;
+
+        // Mantener el velero dentro del agua navegable de la bahía (rebote suave si toca la orilla o el muelle)
+        const groundH = getTerrainHeightMeters(this.px, this.pz);
+        if (groundH > 0.15) {
+          this.px -= this.vx * dt * 2.2;
+          this.pz -= this.vz * dt * 2.2;
+          this.vx *= -0.35;
+          this.vz *= -0.35;
+          this.yaw += 0.6;
+          showToast('ORILLA / BAJIO! VIRANDO...');
+        }
+
+        // 7. Dinámica de Escora (Heel) con par restaurador del bulbo de la quilla + Olas del mar
+        const waveH    = getSailWaveHeight(this.px, this.pz, aeroEnv.time);
+        const waveHFwd = getSailWaveHeight(this.px + fwdX * 1.2, this.pz + fwdZ * 1.2, aeroEnv.time);
+        this.py = waveH;
+        this.pitchAngle = Math.atan2(waveHFwd - waveH, 1.2) * 0.85;
+
+        const targetHeel = Math.max(-0.68, Math.min(0.68, heelForce * 0.16 / preset.keelRighting));
+        const heelAcc    = (targetHeel - this.heelAngle) * 18.0 - this.heelRate * 4.2;
+        this.heelRate   += heelAcc * dt;
+        this.heelAngle  += this.heelRate * dt;
+
+        this.updateBasis();
+
+        // 8. Registrar puntos de estela en V cada 0.07s
+        this.wakeTimer += dt;
+        if (this.wakeTimer >= 0.07) {
+          this.wakeTimer = 0.0;
+          WAKE_RING_X[wakeHeadIdx] = this.px - fwdX * 1.25;
+          WAKE_RING_Z[wakeHeadIdx] = this.pz - fwdZ * 1.25;
+          WAKE_RING_W[wakeHeadIdx] = this.spd > 0.25 ? this.spd : 0.0;
+          wakeHeadIdx = (wakeHeadIdx + 1) % MAX_WAKE_PTS;
+        }
+
+        // 9. Paso por las 6 Boyas de Regata
+        const b = SAIL_BUOYS[this.activeBuoy];
+        const distBuoy = Math.hypot(this.px - b.x, this.pz - b.z);
+        if (distBuoy < 6.2) {
+          this.activeBuoy = (this.activeBuoy + 1) % SAIL_BUOYS.length;
+          this.activeGate = this.activeBuoy;
+          if (this.activeBuoy === 0) {
+            this.lapCount++;
+            showToast(`REGATA VUELTA ${this.lapCount} COMPLETADA!`);
+            playTone(980, 0.12);
+          } else {
+            showToast(`BOYA ${this.activeBuoy}/6 OK -> ${SAIL_BUOYS[this.activeBuoy].name}`);
+            playTone(860, 0.07);
+          }
+        }
+      },
+
+      render() {
+        // Posición fija del Piloto en el Muelle (Dock Stand)
+        const dockX = 0.0, dockY = 3.5, dockZ = -29.5;
+        let camX = dockX, camY = dockY, camZ = dockZ;
+        let cRx = 1, cRy = 0, cRz = 0;
+        let cUx = 0, cUy = 1, cUz = 0;
+        let cFx = 0, cFy = 0, cFz = 1;
+        let zoomFactor = 1.0;
+
+        if (this.camMode === 2 || this.chaseCam) {
+          // Vista Follow 3D detrás del velero
+          const fc = computeFollowCamPose(this, 6.2, 2.2, 10.0);
+          camX = fc.camX; camY = Math.max(1.4, fc.camY); camZ = fc.camZ;
+          cRx = fc.cRx; cRy = fc.cRy; cRz = fc.cRz;
+          cUx = fc.cUx; cUy = fc.cUy; cUz = fc.cUz;
+          cFx = fc.cFx; cFy = fc.cFy; cFz = fc.cFz;
+        } else {
+          // Vista Piloto LOS desde el Muelle mirando al Velero (Horizonte 100% nivelado roll = 0)
+          const dx = this.px - dockX;
+          const dy = (this.py + 1.15) - dockY;
+          const dz = this.pz - dockZ;
+          const trueDist = Math.hypot(dx, dy, dz) || 1.0;
+          cFx = dx / trueDist;
+          cFy = dy / trueDist;
+          cFz = dz / trueDist;
+
+          // Base ortonormal mano derecha sin roll (U = F x R -> cUy = +hLen > 0, horizonte marino al derecho)
+          const hLen = Math.hypot(cFx, cFz) || 1.0;
+          cRx =  cFz / hLen;
+          cRy =  0.0;
+          cRz = -cFx / hLen;
+
+          cUx = cFy * cRz - cFz * cRy;
+          cUy = cFz * cRx - cFx * cRz;
+          cUz = cFx * cRy - cFy * cRx;
+
+          // Auto-Zoom Óptico LOS: mantiene exactamente el ángulo de visión desde el muelle pero acerca el teleobjetivo
+          if (this.camMode === 0 && trueDist > 12.5) {
+            const effDist = 12.5 + (trueDist - 12.5) * 0.24;
+            zoomFactor = trueDist / effDist;
+            camX = this.px - cFx * effDist;
+            camY = Math.max(1.6, (this.py + 1.15) - cFy * effDist);
+            camZ = this.pz - cFz * effDist;
+          }
+        }
+
+        // 1. Renderizar Agua, Bahía y Cielo Voxel
+        renderVoxelTerrainAndSky(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz);
+
+        // 2. Proyector 3D + Boyas de Regata + Estela de Espuma + Velero 3D Sólido
+        const { projPoint320, projLine } = createProjector320(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz);
+        renderSailBuoysAndWake320(this, projPoint320, projLine);
+        renderSolidSailboat320(this, projPoint320, projLine);
+
+        // 3. OSD Náutico RC (Rosa de Viento Real/Aparente, Escota, Escora, Nudos y Boya)
+        this.renderSailOsd320(cRx, cRz, cFx, cFz, zoomFactor);
+      },
+
+      renderSailOsd320(cRx, cRz, cFx, cFz, zoomFactor) {
+        const WHITE = 0xFFFF;
+        const preset = SAIL_PRESETS[this.presetIdx];
+
+        // Encabezado superior: Modo de Velero + Estado de Rumbo (Point of Sail)
+        const titleStr = `RC SAIL // ${preset.name}`;
+        drawOsdSmall320(titleStr, 160 - ((titleStr.length * 5) >> 1), 6, WHITE);
+        const posCol = this.inIrons ? C565.RED : (this.pointOfSail === 'CLOSE HAUL' ? C565.GOLD : C565.GREEN);
+        drawOsdSmall320(this.pointOfSail, 160 - ((this.pointOfSail.length * 5) >> 1), 16, posCol);
+
+        // Rosa Náutica de Viento en la esquina superior izquierda (muestra el Viento respecto a tu vista LOS)
+        const wcx = 24, wcy = 24, wr = 14;
+        drawInavCircleDot320(wcx, wcy, 2, C565.CYAN);
+        for (let a = 0; a < 8; a++) {
+          const ang = a * (Math.PI * 0.25);
+          setPx320(wcx + Math.round(Math.sin(ang) * wr), wcy - Math.round(Math.cos(ang) * wr), WHITE);
+        }
+        // Flecha de hacia dónde SOPLA el viento en la pantalla actual
+        const windRelX = aeroEnv.windX * cRx + aeroEnv.windZ * cRz;
+        const windRelZ = aeroEnv.windX * cFx + aeroEnv.windZ * cFz;
+        const wMag = Math.hypot(windRelX, windRelZ) || 1.0;
+        const wxN = windRelX / wMag, wzN = windRelZ / wMag;
+        drawOutlinedLine320(
+          wcx - Math.round(wxN * 11), wcy + Math.round(wzN * 11),
+          wcx + Math.round(wxN * 11), wcy - Math.round(wzN * 11),
+          C565.GOLD
+        );
+        drawInavCircleDot320(wcx + Math.round(wxN * 11), wcy - Math.round(wzN * 11), 2, C565.ORANGE);
+
+        const trueWindKts = (Math.hypot(aeroEnv.windX, aeroEnv.windZ) * 1.944).toFixed(1);
+        const appWindKts  = (this.appWindSpd * 1.944).toFixed(1);
+        drawOsdSmall320(`TW ${trueWindKts}KT`, 44, 10, C565.GOLD);
+        drawOsdSmall320(`AW ${appWindKts}KT`,  44, 20, C565.CYAN);
+        drawOsdSmall320(`WA ${Math.round(Math.abs(this.appWindAng) * RAD2DEG)}D`, 44, 30, WHITE);
+
+        // Esquina superior derecha: Boya activa, distancia y cámara LOS
+        const b = SAIL_BUOYS[this.activeBuoy];
+        const distB = Math.round(Math.hypot(b.x - this.px, b.z - this.pz));
+        drawOsdSmall320(`BUOY ${this.activeBuoy + 1}/6`, 264, 8, C565.GREEN);
+        drawOsdSmall320(`DST ${distB}M`,                264, 18, WHITE);
+        const camLbl = (this.camMode === 2 || this.chaseCam) ? 'CAM FOLLOW' : (this.camMode === 0 ? `LOS ${zoomFactor.toFixed(1)}X` : 'LOS WIDE');
+        drawOsdSmall320(camLbl, 258, 28, C565.CYAN);
+
+        // Columna izquierda inferior: Velocidad (KTS y KMH), Escota (SAIL %) y Escora (HEEL °)
+        const kts = (this.spd * 1.944).toFixed(1);
+        const kmh = (this.spd * 3.6).toFixed(1);
+        const sheetPct = Math.round(this.sheetOpen01 * 100);
+        const heelDeg  = Math.round(Math.abs(this.heelAngle) * RAD2DEG);
+
+        drawOsdSmall320(`SPD ${kts}KT`,        8, 174, C565.GREEN);
+        drawOsdSmall320(`GS  ${kmh}K`,         8, 185, WHITE);
+        drawOsdSmall320(`SAIL ${sheetPct}%`,   8, 196, C565.CYAN);
+        drawOsdSmall320(`HEEL ${heelDeg}DEG`,  8, 207, heelDeg > 28 ? C565.ORANGE : WHITE);
+        drawOsdSmall320(preset.autoTrim ? 'WINCH:AUTO+L' : 'WINCH:MANUAL', 8, 218, C565.GOLD);
+
+        // Columna derecha inferior: Vueltas de regata y cronómetro
+        const mins = String(Math.floor(this.flightTime / 60)).padStart(2, '0');
+        const secs = String(Math.floor(this.flightTime % 60)).padStart(2, '0');
+        drawOsdSmall320(`LAP ${this.lapCount}`,  270, 196, C565.GOLD);
+        drawOsdSmall320(`TIM ${mins}:${secs}`,   255, 207, WHITE);
+        drawOsdSmall320(`B:CAM Y:MODE`,          248, 218, C565.CYAN);
+
+        // Alerta si está aproado contra el viento (In Irons)
+        if (this.inIrons) {
+          drawOsdSmall320('!APROADO AL VIENTO - GIRA EL TIMON!', 72, 62, C565.RED);
+        }
+      }
+    };
+
+    /***************************************************************************
+     * 6C. SIMULADOR 4: CARRO RC 1/10 LOS (PISTA ASFALTO + SALTOS + DRIFT)
+     *     - Vista Piloto LOS desde el Podio (Driver's Stand) con Auto-Zoom + Chase 3D
+     *     - Física de 4 Ruedas con Slip Angle (Drift), Suspensión 3D y 2 Saltos
+     *     - Cronometraje por Vuelta (Lap Timer) con 12 Checkpoints y Pórtico de Meta
+     ***************************************************************************/
+    const RC_TRACK_WPS = [
+      { x: -32.0, z: -16.0 }, // 0: Inicio Recta Principal (frente al podio)
+      { x:   0.0, z: -16.0 }, // 1: Línea de Salida / Meta (START / FINISH)
+      { x:  34.0, z: -16.0 }, // 2: Frenada Curva 1
+      { x:  50.0, z:   2.0 }, // 3: Curva 1 Parabólica Derecha
+      { x:  46.0, z:  28.0 }, // 4: Subida Este
+      { x:  22.0, z:  40.0 }, // 5: Recta Norte (Salto Meseta #1)
+      { x:  -2.0, z:  38.0 }, // 6: Entrada Infield
+      { x:   0.0, z:  12.0 }, // 7: Horquilla Central (Hairpin)
+      { x: -20.0, z:  14.0 }, // 8: Salida Infield
+      { x: -26.0, z:  38.0 }, // 9: Curva Noroeste
+      { x: -48.0, z:  26.0 }, // 10: Bajada Oeste (Salto Meseta #2)
+      { x: -48.0, z:  -4.0 }  // 11: Última Curva hacia Recta Principal
+    ];
+
+    const RC_CAR_PRESETS = [
+      { name: 'BUGGY 4WD',    topSpd: 18.0, accel: 22.0, grip: 1.05, driftSlip: 0.86, steerRate: 34.0, bodyCol: rgb565(32, 148, 250), wingCol: C565.GOLD  },
+      { name: 'TOURING PRO',  topSpd: 20.5, accel: 25.0, grip: 1.42, driftSlip: 0.94, steerRate: 31.0, bodyCol: rgb565(240, 48,  42), wingCol: C565.WHITE },
+      { name: 'DRIFT SPEC',   topSpd: 16.5, accel: 21.0, grip: 0.62, driftSlip: 0.72, steerRate: 40.0, bodyCol: rgb565(185, 52, 245), wingCol: C565.GREEN }
+    ];
+
+    // Buffer estático de partículas de humo de llanta / polvo de tierra (16 partículas, 0 allocs)
+    const MAX_CAR_PARTICLES = 16;
+    const CAR_PART_X   = new Float32Array(MAX_CAR_PARTICLES);
+    const CAR_PART_Y   = new Float32Array(MAX_CAR_PARTICLES);
+    const CAR_PART_Z   = new Float32Array(MAX_CAR_PARTICLES);
+    const CAR_PART_AGE = new Float32Array(MAX_CAR_PARTICLES);
+    const CAR_PART_COL = new Uint16Array(MAX_CAR_PARTICLES);
+    let carPartHead = 0;
+
+    // Evalúa distancia mínima de (wx, wz) al trazado del circuito RC y altura de las 2 rampas de salto
+    function getRcTrackInfoAt(wx, wz) {
+      let minDist = 999.0;
+      let bestSeg = 0;
+      let bestAlong = 0.0;
+      const n = RC_TRACK_WPS.length;
+
+      for (let i = 0; i < n; i++) {
+        const a = RC_TRACK_WPS[i];
+        const b = RC_TRACK_WPS[(i + 1) % n];
+        const vx = b.x - a.x, vz = b.z - a.z;
+        const len2 = vx * vx + vz * vz || 1.0;
+        let t = ((wx - a.x) * vx + (wz - a.z) * vz) / len2;
+        if (t < 0.0) t = 0.0;
+        else if (t > 1.0) t = 1.0;
+        const px = a.x + vx * t, pz = a.z + vz * t;
+        const d  = Math.hypot(wx - px, wz - pz);
+        if (d < minDist) {
+          minDist = d;
+          bestSeg = i;
+          bestAlong = i + t * Math.sqrt(len2) * 0.25;
+        }
+      }
+
+      // 2 Mesetas de Salto (Tabletop Jumps) sobre el circuito:
+      // Salto #1 en el tramo Norte (cerca de x=34, z=34) y Salto #2 en la bajada Oeste (cerca de x=-48, z=11)
+      let jumpH = 0.0;
+      if (minDist < 4.8) {
+        const dJ1 = Math.hypot(wx - 34.0, wz - 34.0);
+        const dJ2 = Math.hypot(wx + 48.0, wz - 11.0);
+        if (dJ1 < 5.5) {
+          jumpH = Math.cos((dJ1 / 5.5) * Math.PI * 0.5) * 1.15;
+        } else if (dJ2 < 5.5) {
+          jumpH = Math.cos((dJ2 / 5.5) * Math.PI * 0.5) * 1.15;
+        }
+      }
+
+      return { dist: minDist, segIdx: bestSeg, along: bestAlong, jumpH };
+    }
+
+    function generateRcCarTrackVoxelMap() {
+      activeWorldMapMode = 'rccar';
+      choroBakedInPsram  = false;
+      WORLD_W_M   = 260.0;
+      WORLD_H_M   = 180.0;
+      MAP_SCALE_X = MAP_W / WORLD_W_M;
+      MAP_SCALE_Z = MAP_H / WORLD_H_M;
+
+      // 1. Cielo de circuito de carreras
+      for (let mz = 0; mz < SKY_DIM; mz++) {
+        const zOff = mz << SKY_SHIFT;
+        for (let mx = 0; mx < SKY_DIM; mx++) {
+          const cn = fbmCloud(mx, mz);
+          const cloudDensity = Math.max(0, Math.min(1, (cn - 0.08) * 1.8));
+          const cSmooth = cloudDensity * cloudDensity * (3 - 2 * cloudDensity);
+          const sr = 38 * (1 - cSmooth) + 248 * cSmooth;
+          const sg = 88 * (1 - cSmooth) + 250 * cSmooth;
+          const sb = 178 * (1 - cSmooth) + 254 * cSmooth;
+          voxSkyMap[zOff + mx] = rgb565(clampByte(sr), clampByte(sg), clampByte(sb));
+        }
+      }
+
+      // 2. Hornear el Circuito de Asfalto + Pianos Rojo/Blanco + 2 Rampas + Césped en PSRAM
+      const TRACK_HALF_W = 4.2;
+      const CURB_OUTER_W = 5.3;
+
+      for (let mz = 0; mz < MAP_H; mz++) {
+        const zOff = mz << MAP_SHIFT_X;
+        const wz   = (mz - SPAWN_MZ) / MAP_SCALE_Z;
+
+        for (let mx = 0; mx < MAP_W; mx++) {
+          const wx = (mx - SPAWN_MX) / MAP_SCALE_X;
+
+          // Optimización rápida fuera del rectángulo del circuito (-62..+62, -28..+52)
+          if (wx < -62.0 || wx > 62.0 || wz < -28.0 || wz > 52.0) {
+            const borderDist = Math.max(Math.abs(wx) - 62.0, Math.abs(wz - 12.0) - 42.0);
+            const hHill = borderDist > 12.0 ? Math.min(48, Math.round(2 + (borderDist - 12.0) * 0.65)) : 2;
+            voxHeight[zOff + mx] = hHill;
+            const mowerStripe = ((mx >> 4) + ((mz >> 4) & 1)) & 1;
+            const r = mowerStripe ? 46 : 56;
+            const g = mowerStripe ? 102 : 116;
+            const b = mowerStripe ? 42 : 48;
+            voxColor[zOff + mx] = rgb565(r, g, b);
+            continue;
+          }
+
+          const info = getRcTrackInfoAt(wx, wz);
+          const d = info.dist;
+
+          if (d <= TRACK_HALF_W) {
+            // Asfalto del circuito + líneas de salida/meta y 2 rampas de salto
+            const hVox = Math.min(64, Math.round(2 + (info.jumpH / HEIGHT_SCALE)));
+            voxHeight[zOff + mx] = hVox;
+
+            const grain = ((mx * 17 ^ mz * 31) & 3) * 2;
+            let r = 64 + grain, g = 68 + grain, b = 76 + grain;
+
+            // Línea de Salida/Meta ajedrezada blanca/negra en wx ~ 0, wz ~ -16
+            if (Math.abs(wx) < 1.2 && Math.abs(wz + 16.0) <= TRACK_HALF_W) {
+              const check = ((mx >> 2) ^ (mz >> 2)) & 1;
+              r = check ? 245 : 28;
+              g = check ? 245 : 28;
+              b = check ? 245 : 32;
+            } else if (info.jumpH > 0.15) {
+              // Franjas amarillas/naranjas de advertencia en las 2 rampas de salto
+              const stripe = ((mx + mz) >> 2) & 1;
+              if (stripe && d > TRACK_HALF_W - 1.1) {
+                r = 240; g = 185; b = 32;
+              } else {
+                r += 14; g += 12; b += 8;
+              }
+            } else if (Math.abs(d - TRACK_HALF_W) < 0.32) {
+              // Línea blanca continua de límite de pista
+              r = 228; g = 232; b = 236;
+            }
+            voxColor[zOff + mx] = rgb565(clampByte(r), clampByte(g), clampByte(b));
+          } else if (d <= CURB_OUTER_W) {
+            // Pianos (Curbs) alternados Rojo y Blanco en los bordes de la pista
+            voxHeight[zOff + mx] = 3;
+            const curbBand = (Math.floor(info.along * 3.2) & 1);
+            if (curbBand) {
+              voxColor[zOff + mx] = rgb565(232, 44, 38); // Rojo Racing
+            } else {
+              voxColor[zOff + mx] = rgb565(242, 244, 248); // Blanco
+            }
+          } else {
+            // Infield de césped cortado en franjas y borde de tierra compactada junto al piano
+            voxHeight[zOff + mx] = 2;
+            if (d <= CURB_OUTER_W + 1.4) {
+              voxColor[zOff + mx] = rgb565(136, 110, 76); // Tierra exterior (Run-off)
+            } else {
+              const mowerStripe = ((mx >> 4) + ((mz >> 4) & 1)) & 1;
+              voxColor[zOff + mx] = mowerStripe ? rgb565(46, 106, 44) : rgb565(58, 120, 50);
+            }
+          }
+        }
+      }
+    }
+
+    // Dibuja el Modelo 3D Sólido del Carro RC 1/10 (Carrocería, Cabina, Alerón Trasero y 4 Ruedas con Dirección Viva)
+    function renderSolidRcCar320(sim, projPoint320, projLine) {
+      const px = sim.px, py = sim.py, pz = sim.pz;
+      const rx = sim.rx, ry = sim.ry, rz = sim.rz;
+      const ux = sim.ux, uy = sim.uy, uz = sim.uz;
+      const fx = sim.fx, fy = sim.fy, fz = sim.fz;
+
+      // Escala visual 1.65x para que a distancia LOS se distingan claramente las 4 ruedas, el alerón y la suspensión
+      const S = 1.65;
+      function wp(r, u, f) {
+        return projPoint320(
+          px + (rx * r + ux * u + fx * f) * S,
+          py + (ry * r + uy * u + fy * f) * S,
+          pz + (rz * r + uz * u + fz * f) * S
+        );
+      }
+
+      const preset   = RC_CAR_PRESETS[sim.presetIdx];
+      const C_BODY   = preset.bodyCol;
+      const C_HOOD   = C565.WHITE;
+      const C_GLASS  = rgb565(28, 38, 54);
+      const C_CHASS  = rgb565(42, 46, 54);
+      const C_WING   = preset.wingCol;
+      const C_TIRE   = rgb565(24, 28, 32);
+      const C_RIM    = sim.presetIdx === 2 ? C565.GREEN : C565.GOLD;
+
+      let fc = 0;
+
+      // 1. Chasis y Carrocería principal
+      const noseL = wp(-0.42, 0.14,  1.05), noseR = wp( 0.42, 0.14,  1.05);
+      const hoodL = wp(-0.52, 0.28,  0.42), hoodR = wp( 0.52, 0.28,  0.42);
+      const roofF = wp( 0.00, 0.52,  0.10);
+      const roofL = wp(-0.38, 0.50, -0.32), roofR = wp( 0.38, 0.50, -0.32);
+      const rearL = wp(-0.52, 0.30, -0.92), rearR = wp( 0.52, 0.30, -0.92);
+      const botFL = wp(-0.50, 0.08,  0.95), botFR = wp( 0.50, 0.08,  0.95);
+      const botRL = wp(-0.50, 0.08, -0.92), botRR = wp( 0.50, 0.08, -0.92);
+
+      // Costados, capó bicolor, parabrisas y techo
+      fc = addCraftQuad(fc, botFL, botRL, rearL, hoodL, C_BODY);
+      fc = addCraftQuad(fc, botFR, hoodR, rearR, botRR, C_BODY);
+      fc = addCraftQuad(fc, noseL, noseR, hoodR, hoodL, C_HOOD);
+      fc = addCraftQuad(fc, noseL, hoodL, botFL, botFR, C_CHASS);
+      fc = addCraftTri(fc, hoodL, hoodR, roofF, C_GLASS);
+      fc = addCraftTri(fc, hoodL, roofF, roofL, C_GLASS);
+      fc = addCraftTri(fc, hoodR, roofR, roofF, C_GLASS);
+      fc = addCraftQuad(fc, roofL, roofR, rearR, rearL, C_BODY);
+      fc = addCraftQuad(fc, rearL, rearR, botRR, botRL, C_CHASS);
+
+      // 2. Alerón Trasero (Rear Wing) elevado
+      const wL1 = wp(-0.58, 0.58, -0.82), wR1 = wp( 0.58, 0.58, -0.82);
+      const wL2 = wp(-0.58, 0.66, -1.08), wR2 = wp( 0.58, 0.66, -1.08);
+      fc = addCraftQuad(fc, wL1, wR1, wR2, wL2, C_WING);
+
+      // 3. Las 4 Ruedas 3D (con las 2 delanteras girando según steerAngle)
+      const wheelDefs = [
+        { r: -0.62, f:  0.68, isFront: true  },
+        { r:  0.62, f:  0.68, isFront: true  },
+        { r: -0.64, f: -0.68, isFront: false },
+        { r:  0.64, f: -0.68, isFront: false }
+      ];
+      const stCos = Math.cos(sim.steerAngle), stSin = Math.sin(sim.steerAngle);
+      const wRad = 0.24, wHalfW = 0.12;
+
+      for (let w = 0; w < 4; w++) {
+        const wd = wheelDefs[w];
+        const cF = wd.isFront ? stCos : 1.0;
+        const sF = wd.isFront ? stSin : 0.0;
+        const sideSign = wd.r >= 0 ? 1.0 : -1.0;
+        const outR = wd.r + sideSign * wHalfW * cF;
+        const outF = wd.f - sideSign * wHalfW * sF;
+
+        const pTop = wp(outR, wRad * 1.95, outF);
+        const pBot = wp(outR, 0.02,        outF);
+        const pFrt = wp(outR + sF * wRad, wRad, outF + cF * wRad);
+        const pBck = wp(outR - sF * wRad, wRad, outF - cF * wRad);
+
+        fc = addCraftQuad(fc, pTop, pFrt, pBot, pBck, C_TIRE);
+        const pHub = wp(outR + sideSign * 0.02, wRad, outF);
+        if (pHub) drawInavCircleDot320(pHub.sx, pHub.sy, 2, C_RIM);
+      }
+
+      renderSortedCraftFaces(fc);
+    }
+
+    function renderRcTrackPropsAndParticles320(sim, projPoint320, projLine) {
+      // 1. Pórtico de Salida / Meta (START / FINISH) en (0, -16)
+      const gX = 0.0, gZ = -16.0, gH = 4.6, gW = 4.8;
+      projLine(gX, 0.25, gZ - gW, gX, gH, gZ - gW, 0, 1);
+      projLine(gX, 0.25, gZ + gW, gX, gH, gZ + gW, 0, 1);
+      const b0 = projPoint320(gX, gH - 0.8, gZ - gW);
+      const b1 = projPoint320(gX, gH - 0.8, gZ + gW);
+      const b2 = projPoint320(gX, gH,       gZ + gW);
+      const b3 = projPoint320(gX, gH,       gZ - gW);
+      if (b0 && b1 && b2 && b3) {
+        fillQuad320(b0, b1, b2, b3, C565.RED);
+        const midX = Math.round((b0.sx + b1.sx) * 0.5) - 12;
+        const midY = Math.round((b0.sy + b2.sy) * 0.5) - 3;
+        drawOsdSmall320('START', midX, midY, C565.WHITE);
+      }
+
+      // 2. Conos / Balizas en los 12 vértices del circuito (resaltando el siguiente checkpoint)
+      for (let i = 0; i < RC_TRACK_WPS.length; i++) {
+        const wp = RC_TRACK_WPS[i];
+        const isNext = (i === sim.activeGate);
+        const y0 = getTerrainHeightMeters(wp.x, wp.z) + 0.15;
+        const pt = projPoint320(wp.x, y0 + (isNext ? 0.9 : 0.35), wp.z);
+        if (pt && pt.sx > 4 && pt.sx < DISP_W - 4 && pt.sy > 4 && pt.sy < DISP_H - 4) {
+          drawInavCircleDot320(pt.sx, pt.sy, isNext ? 2 : 1, isNext ? C565.GREEN : C565.ORANGE);
+        }
+      }
+
+      // 3. Partículas de humo de neumáticos (drift) o polvo de tierra
+      for (let i = 0; i < MAX_CAR_PARTICLES; i++) {
+        const age = CAR_PART_AGE[i];
+        if (age <= 0.0 || age > 0.65) continue;
+        const pt = projPoint320(CAR_PART_X[i], CAR_PART_Y[i] + age * 0.6, CAR_PART_Z[i]);
+        if (pt && pt.sx > 4 && pt.sx < DISP_W - 4 && pt.sy > 4 && pt.sy < DISP_H - 4) {
+          drawInavCircleDot320(pt.sx, pt.sy, age < 0.25 ? 2 : 1, CAR_PART_COL[i]);
+        }
+      }
+    }
+
+    const rcCarSim = {
+      px: -12.0, py: 0.25, pz: -16.0,
+      vx: 0.0,   vy: 0.0,  vz: 0.0,
+      yaw: Math.PI * 0.5, // Mirando hacia +X en la recta principal frente al podio
+      spd: 0.0,
+      uFwd: 0.0,
+      vLat: 0.0,
+      steerAngle: 0.0,
+      thrCmd: 0.0,
+      suspPitch: 0.0,
+      suspRoll: 0.0,
+      slipDeg: 0,
+      airborne: false,
+      onTrack: true,
+      presetIdx: 0,
+      camMode: 0, // 0 = LOS PODIO AUTO-ZOOM, 1 = LOS PODIO WIDE, 2 = CHASE CAM 3D
+      chaseCam: false,
+      activeGate: 1,
+      lapCount: 0,
+      lapTime: 0.0,
+      lastLapTime: 0.0,
+      bestLapTime: 0.0,
+      flightTime: 0.0,
+      totalDistKm: 0.0,
+      partTimer: 0.0,
+      rx: 1, ry: 0, rz: 0,
+      ux: 0, uy: 1, uz: 0,
+      fx: 0, fy: 0, fz: 1,
+
+      reset() {
+        if (activeWorldMapMode !== 'rccar') {
+          generateRcCarTrackVoxelMap();
+        }
+        this.px = -10.0;
+        this.pz = -16.0;
+        this.py = getTerrainHeightMeters(this.px, this.pz) + 0.05;
+        this.yaw = Math.PI * 0.5;
+        this.vx = 0.0; this.vy = 0.0; this.vz = 0.0;
+        this.uFwd = 0.0; this.vLat = 0.0; this.spd = 0.0;
+        this.steerAngle = 0.0;
+        this.thrCmd = 0.0;
+        this.suspPitch = 0.0;
+        this.suspRoll  = 0.0;
+        this.airborne  = false;
+        this.activeGate = 1;
+        this.lapTime    = 0.0;
+        for (let i = 0; i < MAX_CAR_PARTICLES; i++) CAR_PART_AGE[i] = 0.0;
+        this.updateBasis();
+      },
+
+      updateBasis() {
+        const cY = Math.cos(this.yaw), sY = Math.sin(this.yaw);
+        const cP = Math.cos(this.suspPitch), sP = Math.sin(this.suspPitch);
+        const cR = Math.cos(this.suspRoll),  sR = Math.sin(this.suspRoll);
+
+        this.fx = sY * cP;
+        this.fy = sP;
+        this.fz = cY * cP;
+
+        const r0x = cY, r0z = -sY;
+        this.rx = r0x * cR;
+        this.ry = sR;
+        this.rz = r0z * cR;
+
+        this.ux = -r0x * sR - sY * sP * cR;
+        this.uy = cR * cP;
+        this.uz = -r0z * sR - cY * sP * cR;
+      },
+
+      step(dt) {
+        this.flightTime += dt;
+        this.lapTime    += dt;
+        const preset = RC_CAR_PRESETS[this.presetIdx];
+
+        // 1. Envejecer partículas de humo/polvo
+        for (let i = 0; i < MAX_CAR_PARTICLES; i++) {
+          if (CAR_PART_AGE[i] > 0.0) CAR_PART_AGE[i] += dt;
+        }
+
+        // 2. Dirección (Stick Derecho X o Stick Izquierdo X) y Gatillo ESC (Stick Izquierdo Y o Botón A)
+        const rawSteer = Math.abs(hwInput.rx) >= Math.abs(hwInput.lx) ? hwInput.rx : hwInput.lx;
+        const spdDamp  = 1.0 - 0.32 * Math.min(1.0, Math.abs(this.uFwd) / preset.topSpd);
+        const targetSteer = applySuperExpo(rawSteer, 1.0, 0.35) * (preset.steerRate * DEG2RAD) * spdDamp;
+        this.steerAngle += (targetSteer - this.steerAngle) * Math.min(1.0, dt * 18.0);
+
+        let escInput = hwInput.ly;
+        if (hwInput.btn.A) escInput = 1.0;
+        this.thrCmd = escInput;
+
+        // 3. Evaluar superficie bajo las 4 ruedas (Asfalto vs Piano vs Césped/Tierra + Rampa de Salto)
+        const trackInfo = getRcTrackInfoAt(this.px, this.pz);
+        this.onTrack = (trackInfo.dist <= 5.3);
+        const surfaceGrip = this.onTrack ? 1.0 : 0.65;
+        const surfaceDrag = this.onTrack ? 0.55 : 2.15;
+
+        const fwdX = Math.sin(this.yaw), fwdZ = Math.cos(this.yaw);
+        const rgtX = Math.cos(this.yaw), rgtZ = -Math.sin(this.yaw);
+
+        this.uFwd = this.vx * fwdX + this.vz * fwdZ;
+        this.vLat = this.vx * rgtX + this.vz * rgtZ;
+
+        // 4. Tracción longitudinal ESC Brushless 2S (Acelerador, Freno Proporcional y Reversa)
+        let longAcc = -this.uFwd * surfaceDrag;
+        if (!this.airborne) {
+          if (escInput > 0.05) {
+            const ratio = Math.max(0.0, 1.0 - this.uFwd / (preset.topSpd * (this.onTrack ? 1.0 : 0.72)));
+            longAcc += escInput * preset.accel * (0.28 + 0.72 * ratio);
+          } else if (escInput < -0.05) {
+            if (this.uFwd > 0.6) {
+              // Frenando hacia adelante
+              longAcc += escInput * preset.accel * 1.45;
+            } else {
+              // Reversa controlada (máx -6.5 m/s)
+              const revRatio = Math.max(0.0, 1.0 - Math.abs(this.uFwd) / 6.5);
+              longAcc += escInput * preset.accel * 0.55 * revRatio;
+            }
+          }
+        }
+
+        this.uFwd += longAcc * dt;
+
+        // 5. Dinámica de Giro y Derrape (Slip Angle + Oversteer)
+        if (!this.airborne && Math.abs(this.uFwd) > 0.15) {
+          const dirSign  = this.uFwd >= 0 ? 1.0 : -1.0;
+          const turnRate = this.steerAngle * dirSign * Math.min(1.0, Math.abs(this.uFwd) / 2.2) * 3.85;
+          this.yaw += turnRate * dt;
+
+          // Fuerza centrífuga que induce deslizamiento lateral (drift)
+          const centrifAcc = turnRate * this.uFwd * (1.05 - preset.driftSlip * 0.45);
+          const tireGripAcc = -this.vLat * (6.8 * preset.grip * surfaceGrip);
+          this.vLat += (centrifAcc + tireGripAcc) * dt;
+        } else {
+          this.vLat *= (1.0 - Math.min(1.0, dt * 3.0));
+        }
+
+        this.vx = fwdX * this.uFwd + rgtX * this.vLat;
+        this.vz = fwdZ * this.uFwd + rgtZ * this.vLat;
+        this.spd = Math.hypot(this.vx, this.vz);
+        this.totalDistKm += (this.spd * dt) / 1000.0;
+        this.slipDeg = this.spd > 1.5 ? Math.round(Math.atan2(Math.abs(this.vLat), Math.abs(this.uFwd)) * RAD2DEG) : 0;
+
+        const prevX = this.px, prevZ = this.pz;
+        this.px += this.vx * dt;
+        this.pz += this.vz * dt;
+
+        // Límite perimetral del estadio RC
+        if (Math.abs(this.px) > 64.0) { this.px = Math.sign(this.px) * 64.0; this.vx *= -0.4; }
+        if (this.pz < -26.0)          { this.pz = -26.0; this.vz *= -0.4; }
+        if (this.pz >  52.0)          { this.pz =  52.0; this.vz *= -0.4; }
+
+        // 6. Altitud, Rampas de Salto y Suspensión 3D (Pitch / Roll)
+        const floorH = getTerrainHeightMeters(this.px, this.pz) + 0.04;
+        const prevFloorH = getTerrainHeightMeters(prevX, prevZ) + 0.04;
+        const rampSlopeVy = (floorH - prevFloorH) / Math.max(0.001, dt);
+
+        if (!this.airborne) {
+          if (rampSlopeVy < -0.8 && this.spd > 8.5 && floorH > 0.45) {
+            // Despegue en la cresta de la meseta de salto
+            this.airborne = true;
+          } else {
+            this.py = floorH;
+            this.vy = Math.max(0.0, rampSlopeVy);
+          }
+        } else {
+          this.vy -= 18.5 * dt; // Gravedad a escala 1/10 RC
+          this.py += this.vy * dt;
+          if (this.py <= floorH) {
+            this.py = floorH;
+            this.vy = 0.0;
+            this.airborne = false;
+            this.suspPitch = -0.14; // Compresión de suspensión al aterrizar
+            playTone(280, 0.03);
+          }
+        }
+
+        const targetPitch = this.airborne
+          ? Math.max(-0.28, Math.min(0.28, this.vy * 0.04))
+          : Math.max(-0.14, Math.min(0.14, (floorH - prevFloorH) * 2.2 + longAcc * 0.0045));
+        const targetRoll = Math.max(-0.22, Math.min(0.22, -this.steerAngle * (this.uFwd / preset.topSpd) * 0.38));
+
+        this.suspPitch += (targetPitch - this.suspPitch) * Math.min(1.0, dt * 14.0);
+        this.suspRoll  += (targetRoll  - this.suspRoll)  * Math.min(1.0, dt * 14.0);
+        this.updateBasis();
+
+        // 7. Emitir partículas de humo de neumáticos (en drift) o polvo (fuera de pista)
+        this.partTimer += dt;
+        if (!this.airborne && this.partTimer >= 0.045 && (this.slipDeg >= 14 || (!this.onTrack && this.spd > 3.5))) {
+          this.partTimer = 0.0;
+          CAR_PART_X[carPartHead]   = this.px - fwdX * 1.1 + (Math.random() - 0.5) * 0.6;
+          CAR_PART_Y[carPartHead]   = this.py + 0.12;
+          CAR_PART_Z[carPartHead]   = this.pz - fwdZ * 1.1 + (Math.random() - 0.5) * 0.6;
+          CAR_PART_AGE[carPartHead] = 0.01;
+          CAR_PART_COL[carPartHead] = this.onTrack ? rgb565(225, 232, 240) : rgb565(168, 134, 88);
+          carPartHead = (carPartHead + 1) % MAX_CAR_PARTICLES;
+        }
+
+        // 8. Checkpoints del circuito y Cronómetro de Vuelta (Lap Timer)
+        const wp = RC_TRACK_WPS[this.activeGate];
+        if (Math.hypot(this.px - wp.x, this.pz - wp.z) < 7.8) {
+          this.activeGate = (this.activeGate + 1) % RC_TRACK_WPS.length;
+          if (this.activeGate === 1) {
+            // Cruzó el Pórtico de Meta (WP 1)
+            this.lapCount++;
+            this.lastLapTime = this.lapTime;
+            if (this.bestLapTime === 0.0 || this.lapTime < this.bestLapTime) {
+              this.bestLapTime = this.lapTime;
+              showToast(`BEST LAP! ${this.lapTime.toFixed(2)}S`);
+              playTone(1040, 0.10);
+            } else {
+              showToast(`LAP ${this.lapCount}: ${this.lapTime.toFixed(2)}S`);
+              playTone(880, 0.07);
+            }
+            this.lapTime = 0.0;
+          } else {
+            playTone(680, 0.02);
+          }
+        }
+      },
+
+      render() {
+        // Posición fija del Piloto en el Podio Elevado (Driver's Stand) al sur de la Recta Principal
+        const standX = 0.0, standY = 5.6, standZ = -31.0;
+        let camX = standX, camY = standY, camZ = standZ;
+        let cRx = 1, cRy = 0, cRz = 0;
+        let cUx = 0, cUy = 1, cUz = 0;
+        let cFx = 0, cFy = 0, cFz = 1;
+        let zoomFactor = 1.0;
+
+        if (this.camMode === 2 || this.chaseCam) {
+          // Vista Chase Cam 3D detrás del Carro RC
+          const fc = computeFollowCamPose(this, 4.6, 1.45, 11.0);
+          camX = fc.camX; camY = Math.max(0.9, fc.camY); camZ = fc.camZ;
+          cRx = fc.cRx; cRy = fc.cRy; cRz = fc.cRz;
+          cUx = fc.cUx; cUy = fc.cUy; cUz = fc.cUz;
+          cFx = fc.cFx; cFy = fc.cFy; cFz = fc.cFz;
+        } else {
+          // Vista Piloto LOS desde el Podio siguiendo al Carro RC (Horizonte nivelado roll = 0)
+          const dx = this.px - standX;
+          const dy = (this.py + 0.35) - standY;
+          const dz = this.pz - standZ;
+          const trueDist = Math.hypot(dx, dy, dz) || 1.0;
+          cFx = dx / trueDist;
+          cFy = dy / trueDist;
+          cFz = dz / trueDist;
+
+          // Base ortonormal mano derecha sin roll (U = F x R -> cUy = +hLen > 0, horizonte de pista al derecho)
+          const hLen = Math.hypot(cFx, cFz) || 1.0;
+          cRx =  cFz / hLen;
+          cRy =  0.0;
+          cRz = -cFx / hLen;
+
+          cUx = cFy * cRz - cFz * cRy;
+          cUy = cFz * cRx - cFx * cRz;
+          cUz = cFx * cRy - cFy * cRx;
+
+          // Auto-Zoom Óptico desde el Podio para que el carro siempre tenga tamaño ideal en 320x240
+          if (this.camMode === 0 && trueDist > 10.5) {
+            const effDist = 10.5 + (trueDist - 10.5) * 0.22;
+            zoomFactor = trueDist / effDist;
+            camX = this.px - cFx * effDist;
+            camY = Math.max(1.8, (this.py + 0.35) - cFy * effDist);
+            camZ = this.pz - cFz * effDist;
+          }
+        }
+
+        // 1. Renderizar Circuito de Asfalto, Pianos, Rampas y Cielo Voxel
+        renderVoxelTerrainAndSky(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz);
+
+        // 2. Proyector 3D + Pórtico de Meta + Conos + Humo + Carro RC 3D Sólido
+        const { projPoint320, projLine } = createProjector320(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz);
+        renderRcTrackPropsAndParticles320(this, projPoint320, projLine);
+        renderSolidRcCar320(this, projPoint320, projLine);
+
+        // 3. OSD de Telemetría y Lap Timer RC Car
+        this.renderRcCarOsd320(zoomFactor);
+      },
+
+      renderRcCarOsd320(zoomFactor) {
+        const WHITE = 0xFFFF;
+        const preset = RC_CAR_PRESETS[this.presetIdx];
+
+        // Encabezado superior: Modo de Carro + Estado de Superficie / Drift
+        const titleStr = `RC 1/10 // ${preset.name}`;
+        drawOsdSmall320(titleStr, 160 - ((titleStr.length * 5) >> 1), 6, WHITE);
+
+        let statusStr = 'ON TRACK // GRIP';
+        let statusCol = C565.GREEN;
+        if (this.airborne) {
+          statusStr = '!AIRBORNE JUMP!';
+          statusCol = C565.GOLD;
+        } else if (!this.onTrack) {
+          statusStr = 'OFF-TRACK DIRT!';
+          statusCol = C565.ORANGE;
+        } else if (this.slipDeg >= 16) {
+          statusStr = `DRIFTING ${this.slipDeg} DEG!`;
+          statusCol = C565.CYAN;
+        }
+        drawOsdSmall320(statusStr, 160 - ((statusStr.length * 5) >> 1), 16, statusCol);
+
+        // Esquina superior izquierda: Cronómetro de vuelta en vivo, Última Vuelta y Récord (Best Lap)
+        drawOsdSmall320(`LAP  ${this.lapCount} (${this.activeGate}/12)`, 8, 8,  C565.GOLD);
+        drawOsdSmall320(`TIME ${this.lapTime.toFixed(1)}S`,               8, 18, WHITE);
+        drawOsdSmall320(`BEST ${this.bestLapTime > 0 ? this.bestLapTime.toFixed(2) + 'S' : '--.--'}`, 8, 28, C565.GREEN);
+
+        // Esquina superior derecha: Cámara LOS Podio + Zoom
+        const camLbl = (this.camMode === 2 || this.chaseCam) ? 'CHASE 3D' : (this.camMode === 0 ? `STAND ${zoomFactor.toFixed(1)}X` : 'STAND WIDE');
+        drawOsdSmall320(camLbl,        260, 8,  C565.CYAN);
+        drawOsdSmall320(`LIPO 8.32V`,  260, 18, WHITE);
+        drawOsdSmall320(`B:CAM Y:MOD`, 255, 28, C565.GOLD);
+
+        // Esquina inferior izquierda: Velocidad en KM/H, Acelerador/Freno ESC y Ángulo de Dirección
+        const kmh = Math.round(this.spd * 3.6);
+        const escPct = Math.round(this.thrCmd * 100);
+        const steerDeg = Math.round(this.steerAngle * RAD2DEG);
+        drawOsdSmall320(`SPD ${String(kmh).padStart(2, ' ')} KMH`, 8, 194, C565.GREEN);
+        drawOsdSmall320(`ESC ${escPct >= 0 ? '+' : ''}${escPct}%`, 8, 205, escPct < 0 ? C565.ORANGE : WHITE);
+        drawOsdSmall320(`STR ${steerDeg >= 0 ? '+' : ''}${steerDeg}D`, 8, 216, C565.CYAN);
+
+        // Esquina inferior derecha: Última vuelta y distancia recorrida
+        drawOsdSmall320(`LAST ${this.lastLapTime > 0 ? this.lastLapTime.toFixed(2) + 'S' : '--.--'}`, 252, 205, WHITE);
+        drawOsdSmall320(`ODO  ${this.totalDistKm.toFixed(2)}K`, 252, 216, C565.GOLD);
+      }
+    };
+
+    /***************************************************************************
+     * 7. SISTEMA OPERATIVO RETRO-GO: SELECTOR MULTI-SIMULADOR + MENÚ UNIFICADO
      ***************************************************************************/
     const ROM_LIST = [
-      { id: 'fpv_wing',  sys: 'S3-FPV', name: 'FPV FIXED-WING',   size: '128KB', fav: true  },
-      { id: 'fpv_drone', sys: 'S3-FPV', name: 'FPV DRONE SIM',    size: '128KB', fav: true  },
-      { id: 'fc_tuning', sys: 'BF-CFG', name: 'RATES & PID SETUP',size: '64KB',  fav: true  },
-      { id: 'hwtest',    sys: 'TOOLS',  name: 'SPI & TOUCH DIAG', size: '32KB',  fav: false }
+      { id: 'fpv_wing',    sys: 'FPV-3D', name: '1. FPV FIXED-WING',  desc: 'ALA Z-84 / AVION COLA', ctrl: 'L:THR/RUD R:ELV/AIL', fav: true  },
+      { id: 'fpv_drone',   sys: 'FPV-3D', name: '2. FPV DRONE 5"',    desc: 'QUAD-X BETAFLIGHT PID', ctrl: 'L:THR/YAW R:PIT/ROL', fav: true  },
+      { id: 'rc_sailboat', sys: 'RC-LOS', name: '3. RC SAILBOAT LOS', desc: 'VELERO IOM / BAHIA 3D', ctrl: 'L:VELA/WINCH R:TIMON',fav: true  },
+      { id: 'rc_car',      sys: 'RC-LOS', name: '4. RC CAR TRACK LOS',desc: 'BUGGY/DRIFT 1/10 PISTA',ctrl: 'L:GAS/BRK R:DIRECC.', fav: true  },
+      { id: 'fc_tuning',   sys: 'CONFIG', name: '5. WORLD & RC SETUP',desc: 'VIENTO, MAPAS Y RADIO', ctrl: 'CONFIGURADOR GLOBAL', fav: false },
+      { id: 'hwtest',      sys: 'TOOLS',  name: '6. SPI & TOUCH DIAG',desc: 'TEST DMA + ADC + PAD',  ctrl: 'DIAGNOSTICO S3 N16R8',fav: false }
     ];
 
     let osState = 'boot';
-    let bootTimer = 0.7;
+    let bootTimer = 0.65;
     let activeRomId = 'fpv_wing';
     let rgTabIdx = 0;
     let rgCursor = 0;
@@ -4648,20 +6028,9 @@
 
     let rgOverlayOpen = false;
     let rgTuningOpen  = false;
-    let rgTuningTab   = 0; // 0 = FPV DRONE 5", 1 = FPV WING Z-84
+    let rgTuningTab   = 0; // 0 = [WORLD], 1 = [WING], 2 = [DRONE], 3 = [RC/PAD]
     let rgTuningCursor = 0;
     let rgOverlayCursor = 0;
-    const RG_OVERLAY_ITEMS = [
-      'CONTINUE FLIGHT',
-      'RATES & PHYSICS CFG',
-      'C1: CIRCUITO ROJO (15G)',
-      'C2: CIRCUITO MORADO (15G)',
-      'C3: CIRCUITO NARANJA (15G)',
-      'OFF: MAPA SIN GATES (LIBRE)',
-      'SWITCH: DRONE <-> WING',
-      'TERRAIN THEME (1-4)',
-      'QUIT TO RETRO-GO'
-    ];
     let toastMsg = '';
     let toastTimer = 0;
 
@@ -4674,12 +6043,12 @@
     function launchRom(romId) {
       blinkSdLed();
       if (romId === 'fc_tuning') {
-        if (activeRomId !== 'fpv_drone' && activeRomId !== 'fpv_wing') activeRomId = 'fpv_wing';
+        if (!PLAYABLE_SIM_IDS.includes(activeRomId)) activeRomId = 'fpv_wing';
         osState = 'ingame';
         rgOverlayOpen = true;
         rgTuningOpen = true;
         rgTuningTab = 0;
-        setFaceLabels('TAB', 'DEF', 'FLY', 'STEP+', 'Y/SELECT:PESTAÑA | UP/DN:ITEM | L/R:AJUSTAR | B:VOLAR');
+        setFaceLabels('TAB', 'DEF', 'FLY', 'STEP+', 'Y:PESTAÑA | UP/DN:ITEM | L/R:AJUSTAR | B:VOLVER');
         playTone(820, 0.08);
         return;
       }
@@ -4689,51 +6058,94 @@
       rgTuningOpen = false;
       playTone(820, 0.08);
 
+      const idxInLauncher = ROM_LIST.findIndex(r => r.id === romId);
+      if (idxInLauncher >= 0) rgCursor = idxInLauncher;
+
       if (romId === 'fpv_drone') {
-        setFaceLabels('MODO', 'RST', 'CAM', 'BOOST', 'L:THR/YAW R:PIT/ROL | MENU:RATES');
+        if (activeWorldMapMode !== 'fpv') generateGentleVoxelMap(currentThemeIdx);
+        setFaceLabels('MODO', 'RST', 'CAM', 'BOOST', 'L:THR/YAW R:PIT/ROL | SELECT:SIMS | MENU:CFG');
         fpvDroneSim.reset();
       } else if (romId === 'fpv_wing') {
-        setFaceLabels('MODO', 'LNCH', 'CAM', 'BOOST', 'L:THR/YAW R:ELV/AIL | X:HAND LAUNCH');
+        if (activeWorldMapMode !== 'fpv') generateGentleVoxelMap(currentThemeIdx);
+        setFaceLabels('MODO', 'LNCH', 'CAM', 'BOOST', 'L:THR/RUD R:ELV/AIL | SELECT:SIMS | MENU:CFG');
         fpvWingSim.reset();
         showToast('HAND LAUNCH! Z-84');
+      } else if (romId === 'rc_sailboat') {
+        setFaceLabels('CLASE', 'RST', 'CAM', 'GUST', 'L:ESCOTA VELA R:TIMON | B:CAM LOS | SELECT:SIMS');
+        rcSailboatSim.reset();
+        showToast('VELERO RC LOS // BAHIA');
+      } else if (romId === 'rc_car') {
+        setFaceLabels('SPEC', 'RST', 'CAM', 'GAS', 'L:GAS/FRENO R:DIRECCION | B:CAM LOS | SELECT:SIMS');
+        rcCarSim.reset();
+        showToast('CARRO RC 1/10 // PISTA LOS');
       } else if (romId === 'hwtest') {
-        setFaceLabels('Y', 'X', 'B', 'A', 'TOCA LA PANTALLA IPS O PULSA ★ MENU');
+        setFaceLabels('Y', 'X', 'B', 'A', 'TOCA LA PANTALLA IPS O PULSA SELECT / ★ MENU');
       }
     }
 
     function drawRomBoxArt(romId, t) {
-      const bx = 86, by = 13, bw = 39, bh = 37;
+      const bx = 84, by = 13, bw = 41, bh = 37;
       fbRect(bx, by, bw, bh, true, 8);
-      fbRect(bx, by, bw, bh, false, 2);
+      fbRect(bx, by, bw, bh, false, 5);
 
       if (romId === 'fpv_drone') {
-        fbRect(bx + 11, by + 6, 17, 13, false, 10);
+        fbRect(bx + 12, by + 5, 17, 12, false, 10);
         const dy = Math.round(Math.sin(t * 4) * 2);
-        const cx = bx + 19, cy = by + 20 + dy;
+        const cx = bx + 20, cy = by + 19 + dy;
         fbDrawLine(cx - 8, cy - 3, cx + 8, cy + 3, 0, 5);
         fbDrawLine(cx - 8, cy + 3, cx + 8, cy - 3, 0, 5);
         fbCircle(cx - 8, cy - 3, 2, 3);
         fbCircle(cx + 8, cy - 3, 2, 3);
-        fbDrawText('DRON', bx + 11, by + 29, 2);
+        fbDrawText('QUAD-X', bx + 9, by + 29, 2);
       } else if (romId === 'fpv_wing') {
-        const cx = bx + 19, cy = by + 16;
+        const cx = bx + 20, cy = by + 16;
         const bank = Math.sin(t * 2.5) * 4;
         fbDrawLine(cx, cy - 6, cx - 13, cy + 6 + bank, 0, 1);
         fbDrawLine(cx, cy - 6, cx + 13, cy + 6 - bank, 0, 1);
         fbDrawLine(cx - 13, cy + 6 + bank, cx, cy + 2, 0, 4);
         fbDrawLine(cx + 13, cy + 6 - bank, cx, cy + 2, 0, 4);
-        fbDrawText('WING', bx + 11, by + 29, 3);
+        fbDrawText('Z-84', bx + 12, by + 29, 3);
+      } else if (romId === 'rc_sailboat') {
+        // Arte animado de Velero RC escorando sobre olas azules
+        const cx = bx + 20, cy = by + 23;
+        const heel = Math.sin(t * 2.2) * 3;
+        // Olas de agua
+        fbDrawLine(bx + 4, cy + 3, bx + 36, cy + 3, 1, 5);
+        fbDrawLine(bx + 6, cy + 5, bx + 34, cy + 5, 0, 5);
+        // Casco rojo/blanco
+        fbDrawLine(cx - 9, cy, cx + 10, cy, 0, 4);
+        fbDrawLine(cx - 7, cy + 2, cx + 8, cy + 2, 0, 1);
+        // Mástil y dos velas triangulares (Mayor y Foque)
+        fbDrawLine(cx, cy, cx + heel, cy - 15, 0, 2);
+        fbDrawLine(cx + heel, cy - 15, cx - 9 + heel, cy - 2, 0, 1);
+        fbDrawLine(cx - 9 + heel, cy - 2, cx, cy - 2, 0, 1);
+        fbDrawLine(cx + heel, cy - 13, cx + 8 + heel, cy - 2, 0, 5);
+        fbDrawLine(cx + 8 + heel, cy - 2, cx, cy - 2, 0, 5);
+        fbDrawText('SAIL', bx + 12, by + 29, 5);
+      } else if (romId === 'rc_car') {
+        // Arte animado de Carro RC 1/10 derrapando sobre pista con pianos rojo/blanco
+        const cx = bx + 20 + Math.round(Math.sin(t * 3.5) * 3), cy = by + 19;
+        // Pianos rojo/blanco de la pista
+        fbDrawLine(bx + 3, by + 8, bx + 12, by + 26, 0, 4);
+        fbDrawLine(bx + 37, by + 8, bx + 28, by + 26, 0, 1);
+        // Chasis + alerón + 4 ruedas
+        fbRect(cx - 8, cy - 4, 16, 7, true, 9);
+        fbRect(cx - 4, cy - 7, 8, 4, true, 5);
+        fbRect(cx - 9, cy - 9, 4, 3, true, 2); // Alerón
+        fbRect(cx - 9, cy + 2, 4, 3, true, 1); // Rueda trasera
+        fbRect(cx + 5, cy + 2, 4, 3, true, 1); // Rueda delantera
+        fbDrawText('RCCAR', bx + 10, by + 29, 9);
       } else if (romId === 'fc_tuning') {
-        fbDrawLine(bx + 6, by + 24, bx + 33, by + 24, 0, 6);
-        fbDrawLine(bx + 19, by + 6, bx + 19, by + 26, 0, 6);
-        fbDrawLine(bx + 7, by + 24, bx + 19, by + 18, 0, 3);
-        fbDrawLine(bx + 19, by + 18, bx + 31, by + 7, 0, 2);
-        fbDrawText('RATE', bx + 11, by + 29, 5);
+        fbDrawLine(bx + 6, by + 24, bx + 35, by + 24, 0, 6);
+        fbDrawLine(bx + 20, by + 6, bx + 20, by + 26, 0, 6);
+        fbDrawLine(bx + 7, by + 24, bx + 20, by + 18, 0, 3);
+        fbDrawLine(bx + 20, by + 18, bx + 33, by + 7, 0, 2);
+        fbDrawText('SETUP', bx + 10, by + 29, 5);
       } else {
-        fbRect(bx + 9, by + 6, 20, 18, false, 3);
-        fbDrawLine(bx + 12, by + 15, bx + 26, by + 15, 0, 2);
-        fbDrawLine(bx + 19, by + 9, bx + 19, by + 21, 0, 2);
-        fbDrawText('DIAG', bx + 11, by + 29, 3);
+        fbRect(bx + 10, by + 6, 20, 18, false, 3);
+        fbDrawLine(bx + 13, by + 15, bx + 27, by + 15, 0, 2);
+        fbDrawLine(bx + 20, by + 9, bx + 20, by + 21, 0, 2);
+        fbDrawText('DIAG', bx + 12, by + 29, 3);
       }
     }
 
@@ -4742,40 +6154,37 @@
       fbClear(0);
       fbRect(2, 2, 124, 60, false, 5);
       fbRect(3, 3, 122, 11, true, 8);
-      fbDrawText('RETRO-GO S3 // INAV VOXEL', 10, 6, 2);
+      fbDrawText('RETRO-GO S3 // MULTI-SIM RC', 8, 6, 2);
       fbDrawText('MCU : ESP32-S3 LX7 240MHZ', 8, 18, 1);
       fbDrawText('MEM : 16MB FLASH / 8MB PSRAM', 8, 26, 3);
-      fbDrawText('DEF : Z-84 FIXED-WING LAUNCH', 8, 34, 5);
-      fbDrawText('OSD : INAV MAX7456 + RATES', 8, 42, 2);
+      fbDrawText('SIMS: WING / DRONE / SAIL / CAR', 8, 34, 5);
+      fbDrawText('OSD : MAX7456 2-BIT + LOS ZOOM', 8, 42, 2);
 
-      const pct = Math.min(1.0, (0.7 - bootTimer) / 0.6);
+      const pct = Math.min(1.0, (0.65 - bootTimer) / 0.55);
       fbRect(12, 51, 104, 6, false, 1);
       fbRect(14, 53, Math.round(pct * 100), 2, true, 3);
 
       if (bootTimer <= 0 || hwInput.justPressed('A') || hwInput.justPressed('MENU') || capTouch.justTapped) {
-        // Iniciar por defecto directamente lanzando el Ala Fija Z-84 (FPV FIXED-WING)
-        launchRom('fpv_wing');
+        // Abrir el Selector Principal de Simuladores para elegir entre Wing, Drone, Velero RC y Carro RC
+        osState = 'launcher';
+        setFaceLabels('TEMA', 'CFG', 'BACK', 'RUN', 'UP/DN/TOUCH:ELEGIR SIMULADOR | A:INICIAR | X:SETUP');
       }
     }
 
+    // Selector Principal de Simuladores en resolución nativa 320x240 con Vista Previa Animada
     function updateAndRenderRetroGoLauncher(dt) {
       previewAnimT += dt;
       if (navCooldown > 0) navCooldown -= dt;
 
-      const filteredRoms = rgTabIdx === 1 ? ROM_LIST.filter(r => r.fav) : ROM_LIST;
-      if (rgCursor >= filteredRoms.length) rgCursor = Math.max(0, filteredRoms.length - 1);
+      if (rgCursor >= ROM_LIST.length) rgCursor = 0;
 
+      // Soporte táctil directo sobre la lista de 6 simuladores/modos y panel derecho
       if (capTouch.justTapped) {
-        if (capTouch.ly64 <= 11) {
-          if (capTouch.lx128 < 32) rgTabIdx = 0;
-          else if (capTouch.lx128 < 60) rgTabIdx = 1;
-          else rgTabIdx = 2;
-          playTone(620, 0.03);
-        } else if (rgTabIdx !== 2 && capTouch.ly64 >= 12 && capTouch.ly64 <= 52) {
-          const idx = Math.floor((capTouch.ly64 - 12) / 9);
-          if (idx >= 0 && idx < filteredRoms.length) {
-            if (rgCursor === idx || capTouch.lx128 > 82) {
-              launchRom(filteredRoms[idx].id);
+        if (capTouch.y240 >= 32 && capTouch.y240 <= 198 && capTouch.x320 <= 205) {
+          const idx = Math.floor((capTouch.y240 - 32) / 27);
+          if (idx >= 0 && idx < ROM_LIST.length) {
+            if (rgCursor === idx) {
+              launchRom(ROM_LIST[idx].id);
               capTouch.justTapped = false;
               return;
             } else {
@@ -4783,33 +6192,38 @@
               playTone(480, 0.025);
             }
           }
+        } else if (capTouch.x320 > 205 && capTouch.y240 >= 32 && capTouch.y240 <= 198) {
+          launchRom(ROM_LIST[rgCursor].id);
+          capTouch.justTapped = false;
+          return;
+        } else if (capTouch.y240 > 198) {
+          if (capTouch.x320 < 105) {
+            launchRom(ROM_LIST[rgCursor].id);
+          } else if (capTouch.x320 < 215) {
+            launchRom('fc_tuning');
+          } else {
+            launchRom(activeRomId);
+          }
+          capTouch.justTapped = false;
+          return;
         }
+        capTouch.justTapped = false;
       }
 
       const navY = isRadioThrottleActive() ? hwInput.ry : (Math.abs(hwInput.ly) > Math.abs(hwInput.ry) ? hwInput.ly : hwInput.ry);
-      const navX = Math.abs(hwInput.lx) > Math.abs(hwInput.rx) ? hwInput.lx : hwInput.rx;
-
       if (navCooldown <= 0) {
         if (navY < -0.45 || hwInput.justPressed('DOWN')) {
-          rgCursor = (rgCursor + 1) % (filteredRoms.length || 1);
-          navCooldown = 0.17;
+          rgCursor = (rgCursor + 1) % ROM_LIST.length;
+          navCooldown = 0.16;
           playTone(480, 0.025);
         } else if (navY > 0.45 || hwInput.justPressed('UP')) {
-          rgCursor = (rgCursor - 1 + (filteredRoms.length || 1)) % (filteredRoms.length || 1);
-          navCooldown = 0.17;
+          rgCursor = (rgCursor - 1 + ROM_LIST.length) % ROM_LIST.length;
+          navCooldown = 0.16;
           playTone(480, 0.025);
-        } else if (navX > 0.55 || hwInput.justPressed('RIGHT')) {
-          rgTabIdx = (rgTabIdx + 1) % 3;
-          navCooldown = 0.22;
-          playTone(620, 0.03);
-        } else if (navX < -0.55 || hwInput.justPressed('LEFT')) {
-          rgTabIdx = (rgTabIdx + 2) % 3;
-          navCooldown = 0.22;
-          playTone(620, 0.03);
         }
       }
 
-      if (hwInput.justPressed('SELECT') || hwInput.justPressed('Y')) {
+      if (hwInput.justPressed('Y')) {
         generateGentleVoxelMap(currentThemeIdx + 1);
         showToast(TERRAIN_THEMES[currentThemeIdx].name);
         playTone(700, 0.04);
@@ -4820,69 +6234,63 @@
         return;
       }
 
-      if (hwInput.justPressed('B')) {
-        launchRom('fpv_wing');
+      if (hwInput.justPressed('B') || hwInput.justPressed('SELECT')) {
+        launchRom(activeRomId || 'fpv_wing');
         return;
       }
 
-      if ((hwInput.justPressed('A') || hwInput.justPressed('L3') || hwInput.justPressed('R3')) && rgTabIdx !== 2) {
-        const rom = filteredRoms[rgCursor];
+      if (hwInput.justPressed('A') || hwInput.justPressed('L3') || hwInput.justPressed('R3')) {
+        const rom = ROM_LIST[rgCursor];
         if (rom) {
           launchRom(rom.id);
           return;
         }
       }
 
+      // Renderizado del Selector de Simuladores en 320x240 RGB565
       fbClear(0);
-      fbRect(0, 0, 128, 10, true, 8);
-      const tabs = ['[FPV]', '[FAV]', '[S3-INFO]'];
-      let tx = 2;
-      for (let i = 0; i < tabs.length; i++) {
-        if (i === rgTabIdx) {
-          fbRect(tx - 1, 1, tabs[i].length * 4 + 2, 8, true, 2);
-          fbDrawText(tabs[i], tx, 2, 0);
-        } else {
-          fbDrawText(tabs[i], tx, 2, 1);
+      fbRect(2, 2, 124, 60, false, 5);
+      fbRect(2, 2, 124, 8, true, 8);
+      drawInavText320('ESP32-S3 // SELECTOR DE SIMULADOR RC', 14, 8, C565.GOLD);
+
+      for (let i = 0; i < ROM_LIST.length; i++) {
+        const rom = ROM_LIST[i];
+        const py320 = 34 + i * 27;
+        const isSel = (i === rgCursor);
+        const isRunning = (rom.id === activeRomId);
+        if (isSel) {
+          for (let y = py320 - 2; y < py320 + 22; y++) {
+            vram565.fill(C565.NAVY, y * DISP_W + 8, y * DISP_W + 204);
+          }
+          setPx320(8, py320 - 2, C565.GOLD);
         }
-        tx += tabs[i].length * 4 + 4;
-      }
-      fbDrawText('BF/INAV', 96, 2, 3);
-
-      if (rgTabIdx === 2) {
-        fbDrawText('QUAD: 4-MOTOR PID + AIRMODE', 4, 13, 2);
-        fbDrawText('WING: SEMIALAS + TIP-STALL', 4, 21, 5);
-        fbDrawText('USB/BT: TX16S AETR + GAMEPAD', 4, 29, 3);
-        fbDrawText('CFG : PULSA X O 🎮 RC/PAD', 4, 37, 1);
-        fbDrawText('FPS : 240HZ PHY / 60FPS DMA', 4, 45, 9);
-        fbDrawLine(0, 53, 127, 53, 0, 6);
-        fbDrawText('SELECT: CAMBIAR TEMA VOXEL', 4, 56, 2);
-        return;
+        const badgeCol = rom.sys === 'RC-LOS' ? C565.CYAN : (rom.sys === 'FPV-3D' ? C565.GREEN : C565.ORANGE);
+        drawInavText320((isSel ? '>' : (isRunning ? '*' : ' ')) + rom.name, 10, py320, isSel ? C565.GOLD : C565.WHITE);
+        drawOsdSmall320(`${rom.sys}: ${rom.desc}`, 20, py320 + 13, isSel ? badgeCol : C565.GREY);
       }
 
-      for (let i = 0; i < filteredRoms.length; i++) {
-        const rom = filteredRoms[i];
-        const y = 14 + i * 9;
-        const sel = (i === rgCursor);
-        const label = (rom.fav ? '*' : ' ') + rom.name.slice(0, 18);
-        if (sel) {
-          fbRect(1, y - 1, 82, 8, true, 4);
-          fbDrawText('>' + label, 2, y, 1);
-        } else {
-          fbDrawText(' ' + label, 2, y, rom.fav ? 2 : 1);
-        }
+      // Panel derecho: Box Art animado + Controles del Simulador seleccionado
+      const curRom = ROM_LIST[rgCursor];
+      if (curRom) {
+        drawRomBoxArt(curRom.id, previewAnimT);
+        drawOsdSmall320(curRom.sys,  222, 145, C565.CYAN);
+        drawOsdSmall320(curRom.desc.slice(0, 18), 210, 157, C565.WHITE);
+        drawOsdSmall320(curRom.ctrl.slice(0, 18), 210, 169, C565.GOLD);
+        drawOsdSmall320('SRAM: 286KB / 60FPS',    210, 182, C565.GREEN);
       }
 
-      const currentRom = filteredRoms[rgCursor];
-      if (currentRom) {
-        drawRomBoxArt(currentRom.id, previewAnimT);
-        fbRect(0, 53, 128, 11, true, 8);
-        fbDrawText(`${TERRAIN_THEMES[currentThemeIdx].name} | X:RATES`, 2, 56, 3);
-      }
+      // Barra inferior de acciones táctiles / botones
+      fbRect(4, 54, 42, 7, true, 3);
+      fbDrawText('A:ABRIR SIM', 7, 56, 0);
+      fbRect(48, 54, 38, 7, true, 8);
+      fbDrawText('X:CONFIG', 52, 56, 2);
+      fbRect(88, 54, 36, 7, true, 4);
+      fbDrawText('B:VOLVER', 91, 56, 1);
     }
 
     // =========================================================================
     // MENÚ UNIFICADO CONGRUENTE 320x240 EN 4 PESTAÑAS: [WORLD] | [WING] | [DRONE] | [RC/PAD]
-    // Todo se controla desde dentro de la app (Mapa, Circuito, Viento, Árboles, Vista, Audio, Rates y RC)
+    // Todo se controla desde dentro de la app (Simulador, Mapa, Circuito, Viento, Árboles, Vista, Audio, Rates y RC)
     // =========================================================================
     function resetRcInputDefaults() {
       rcInputConfig.mapMode = 0;
@@ -4902,38 +6310,55 @@
       fcProfile.windDirMode = 0;
       fcProfile.treeDensity = 1.0;
       fcProfile.showSplinePath = 1;
-      fpvDroneSim. propwash = 1.0;
+      fpvDroneSim.propwash = 1.0;
     }
 
     function adjustTuningParameter(tab, row, dir) {
       playTone(dir > 0 ? 690 : 540, 0.025);
-      const activeSim = activeRomId === 'fpv_wing' ? fpvWingSim : fpvDroneSim;
+      const activeSim = getActiveSimObject();
 
       if (tab === 0) {
-        // Pestaña 0 [WORLD]: Aeronave, Mapa, Circuito, Cámara, Viento (Fuerza y Dirección), Árboles, Spline y Sonido
+        // Pestaña 0 [WORLD]: Simulador Activo (Wing / Drone / Sailboat / RC Car), Mapa, Circuito/Modo, Cámara, Viento, Árboles, Spline y Audio
         if (row === 0) {
-          const keepCam = activeSim.chaseCam;
-          const nextId = activeRomId === 'fpv_drone' ? 'fpv_wing' : 'fpv_drone';
-          activeRomId = nextId;
-          if (nextId === 'fpv_drone') {
-            fpvDroneSim.chaseCam = keepCam;
-            fpvDroneSim.reset();
-            showToast('AERONAVE: FPV DRONE 5"');
-          } else {
-            fpvWingSim.chaseCam = keepCam;
-            fpvWingSim.reset();
-            showToast('AERONAVE: ALA FIJA FPV');
-          }
+          let idx = PLAYABLE_SIM_IDS.indexOf(activeRomId);
+          if (idx < 0) idx = 0;
+          const nextIdx = ((idx + dir) % PLAYABLE_SIM_IDS.length + PLAYABLE_SIM_IDS.length) % PLAYABLE_SIM_IDS.length;
+          const nextId  = PLAYABLE_SIM_IDS[nextIdx];
+          launchRom(nextId);
+          rgOverlayOpen = true;
+          rgTuningOpen  = true;
+          rgTuningTab   = 0;
+          showToast(`SIM: ${PLAYABLE_SIM_NAMES[nextId]}`);
         } else if (row === 1) {
-          generateGentleVoxelMap(currentThemeIdx + dir);
-          showToast(`MAPA: ${TERRAIN_THEMES[currentThemeIdx].name}`);
+          if (activeRomId === 'rc_sailboat') {
+            rcSailboatSim.presetIdx = ((rcSailboatSim.presetIdx + dir) % SAIL_PRESETS.length + SAIL_PRESETS.length) % SAIL_PRESETS.length;
+            showToast(`CLASE VELERO: ${SAIL_PRESETS[rcSailboatSim.presetIdx].name}`);
+          } else if (activeRomId === 'rc_car') {
+            rcCarSim.presetIdx = ((rcCarSim.presetIdx + dir) % RC_CAR_PRESETS.length + RC_CAR_PRESETS.length) % RC_CAR_PRESETS.length;
+            showToast(`ESPEC CARRO: ${RC_CAR_PRESETS[rcCarSim.presetIdx].name}`);
+          } else {
+            generateGentleVoxelMap(currentThemeIdx + dir);
+            showToast(`MAPA: ${TERRAIN_THEMES[currentThemeIdx].name}`);
+          }
         } else if (row === 2) {
-          selectChoroboboCircuit(currentCircuitIdx + dir, activeSim, true);
+          if (activeRomId === 'fpv_wing' || activeRomId === 'fpv_drone') {
+            selectChoroboboCircuit(currentCircuitIdx + dir, activeSim, true);
+          } else {
+            activeSim.reset();
+            showToast('REINICIADO EN SALIDA!');
+          }
         } else if (row === 3) {
-          activeSim.chaseCam = !activeSim.chaseCam;
-          fpvDroneSim.chaseCam = activeSim.chaseCam;
-          fpvWingSim.chaseCam  = activeSim.chaseCam;
-          showToast(activeSim.chaseCam ? 'VISTA: FOLLOW 3D MODERNO' : 'VISTA: CABINA FPV');
+          if (activeRomId === 'rc_sailboat' || activeRomId === 'rc_car') {
+            activeSim.camMode = ((activeSim.camMode + dir) % 3 + 3) % 3;
+            activeSim.chaseCam = (activeSim.camMode === 2);
+            const cLbl = activeSim.camMode === 0 ? 'LOS AUTO-ZOOM' : (activeSim.camMode === 1 ? 'LOS WIDE' : 'FOLLOW 3D');
+            showToast(`VISTA: ${cLbl}`);
+          } else {
+            activeSim.chaseCam = !activeSim.chaseCam;
+            fpvDroneSim.chaseCam = activeSim.chaseCam;
+            fpvWingSim.chaseCam  = activeSim.chaseCam;
+            showToast(activeSim.chaseCam ? 'VISTA: FOLLOW 3D MODERNO' : 'VISTA: CABINA FPV');
+          }
         } else if (row === 4) {
           fcProfile.windScale = Math.max(0.0, Math.min(2.0, Math.round((fcProfile.windScale + dir * 0.2) * 10) / 10));
           fcProfile.drone.propwash = fcProfile.windScale;
@@ -4952,8 +6377,12 @@
           fcProfile.showSplinePath = fcProfile.showSplinePath ? 0 : 1;
           showToast(fcProfile.showSplinePath ? 'CAMINO GUIA: ON' : 'CAMINO GUIA: OFF');
         } else if (row === 8) {
-          soundEnabled = !soundEnabled;
-          showToast(soundEnabled ? 'AUDIO: ACTIVADO' : 'AUDIO: SILENCIADO');
+          // Fila 8: Abrir el Selector Principal de Simuladores (Launcher)
+          rgTuningOpen = false;
+          rgOverlayOpen = false;
+          osState = 'launcher';
+          setFaceLabels('TEMA', 'CFG', 'BACK', 'RUN', 'UP/DN/TOUCH:ELEGIR SIMULADOR | A:INICIAR');
+          showToast('SELECTOR DE SIMULADORES');
         }
       } else if (tab === 1) {
         // Pestaña 1 [WING]: Modelo de Ala/Avión, Modo de Vuelo, Rates, Rudder, Expo, Carga Alar, Motor y Modo de Gas
@@ -5036,14 +6465,14 @@
           rgTuningOpen = false;
           rgOverlayOpen = false;
           osState = 'launcher';
-          setFaceLabels('TEMA', 'MENU', 'WING', 'RUN', 'TOUCH/DPAD/STICK:NAV | A:RUN');
-          showToast('RETRO-GO LAUNCHER');
+          setFaceLabels('TEMA', 'CFG', 'BACK', 'RUN', 'UP/DN/TOUCH:ELEGIR SIMULADOR | A:INICIAR');
+          showToast('SELECTOR DE SIMULADORES');
         }
       }
     }
 
     function renderWorldMinimapPanel320(gx0, gy0, gw, gh) {
-      // Panel Derecho en 320x240 para [WORLD]: Radar Táctico Cenital (Mapa + Edificios + Circuito + Aeronave + Vector Viento)
+      // Panel Derecho en 320x240 para [WORLD]: Radar Táctico Cenital adaptado al Simulador Activo
       for (let y = gy0; y <= gy0 + gh; y++) {
         vram565.fill(rgb565(10, 18, 28), y * DISP_W + gx0, y * DISP_W + gx0 + gw);
         setPx320(gx0, y, C565.CYAN);
@@ -5057,10 +6486,9 @@
       const sizeLbl = WORLD_W_M >= 1000 ? `${(WORLD_W_M / 1000).toFixed(1)}X${(WORLD_H_M / 1000).toFixed(1)}KM` : `${Math.round(WORLD_W_M)}X${Math.round(WORLD_H_M)}M`;
       drawInavText320(`MAP ${sizeLbl}`, gx0 + 4, gy0 + 4, C565.CYAN);
 
-      // Área del radar top-down (x: gx0+4 .. gx0+gw-4, y: gy0+18 .. gy0+112)
       const rx0 = gx0 + 4, ry0 = gy0 + 18, rw = gw - 8, rh = 92;
       const rcx = rx0 + (rw >> 1), rcy = ry0 + (rh >> 1);
-      const mapBg = TERRAIN_THEMES[currentThemeIdx].isChorobobo ? rgb565(36, 48, 32) : rgb565(24, 38, 30);
+      const mapBg = activeRomId === 'rc_sailboat' ? rgb565(14, 48, 96) : (TERRAIN_THEMES[currentThemeIdx].isChorobobo ? rgb565(36, 48, 32) : rgb565(24, 38, 30));
       for (let y = ry0; y <= ry0 + rh; y++) {
         vram565.fill(mapBg, y * DISP_W + rx0, y * DISP_W + rx0 + rw);
         setPx320(rx0, y, C565.GREY);
@@ -5070,60 +6498,77 @@
         setPx320(x, ry0, C565.GREY);
         setPx320(x, ry0 + rh, C565.GREY);
       }
-      // Cruz central (0,0) de referencia
       for (let d = -3; d <= 3; d++) {
         setPx320(rcx + d, rcy, C565.GREY);
         setPx320(rcx, rcy + d, C565.GREY);
       }
 
-      // Escala de conversión de metros del mundo a píxeles del radar
-      const spanX = WORLD_W_M * 0.46;
-      const spanZ = WORLD_H_M * 0.46;
+      const activeSim = getActiveSimObject();
+      const spanX = activeRomId === 'rc_sailboat' ? 60.0 : (activeRomId === 'rc_car' ? 68.0 : WORLD_W_M * 0.46);
+      const spanZ = activeRomId === 'rc_sailboat' ? 55.0 : (activeRomId === 'rc_car' ? 52.0 : WORLD_H_M * 0.46);
       const scaleX = (rw * 0.46) / spanX;
       const scaleZ = (rh * 0.46) / spanZ;
 
-      // 1. Dibujar edificios como pequeños bloques en el radar
-      for (let i = 0; i < WORLD_BUILDINGS.length; i++) {
-        const b = WORLD_BUILDINGS[i];
-        const bx = Math.round(rcx + b.x * scaleX);
-        const by = Math.round(rcy - b.z * scaleZ);
-        if (bx > rx0 + 1 && bx < rx0 + rw - 1 && by > ry0 + 1 && by < ry0 + rh - 1) {
-          setPx320(bx, by, C565.ORANGE);
-          setPx320(bx + 1, by, C565.ORANGE);
+      if (activeRomId === 'rc_sailboat') {
+        // Dibujar Muelle + las 6 Boyas de Regata en el radar
+        drawOutlinedLine320(rcx, Math.round(rcy + 30 * scaleZ), rcx, Math.round(rcy + 23 * scaleZ), C565.ORANGE);
+        for (let i = 0; i < SAIL_BUOYS.length; i++) {
+          const b = SAIL_BUOYS[i];
+          const bx = Math.round(rcx + b.x * scaleX);
+          const by = Math.round(rcy - b.z * scaleZ);
+          drawInavCircleDot320(bx, by, i === rcSailboatSim.activeBuoy ? 2 : 1, i === rcSailboatSim.activeBuoy ? C565.GREEN : C565.GOLD);
         }
-      }
-
-      // 2. Dibujar trazado Spline y las 15 puertas del circuito activo
-      const activeSim = activeRomId === 'fpv_wing' ? fpvWingSim : fpvDroneSim;
-      if (!isFreeFlightNoGates()) {
-        const circuit = CHOROBOBO_CIRCUITS[currentCircuitIdx];
-        const sPts = circuit.splinePts;
-        for (let i = 0; i < sPts.length; i++) {
-          const sp = sPts[i];
-          const sx = Math.round(rcx + sp.x * scaleX);
-          const sy = Math.round(rcy - sp.z * scaleZ);
-          if (sx > rx0 && sx < rx0 + rw && sy > ry0 && sy < ry0 + rh) {
-            setPx320(sx, sy, circuit.lineCol565);
+      } else if (activeRomId === 'rc_car') {
+        // Dibujar el Circuito Cerrado de 12 Waypoints en el radar
+        for (let i = 0; i < RC_TRACK_WPS.length; i++) {
+          const a = RC_TRACK_WPS[i];
+          const b = RC_TRACK_WPS[(i + 1) % RC_TRACK_WPS.length];
+          const ax0 = Math.round(rcx + a.x * scaleX), ay0 = Math.round(rcy - a.z * scaleZ);
+          const bx0 = Math.round(rcx + b.x * scaleX), by0 = Math.round(rcy - b.z * scaleZ);
+          drawOutlinedLine320(ax0, ay0, bx0, by0, C565.WHITE);
+          if (i === rcCarSim.activeGate) drawInavCircleDot320(ax0, ay0, 2, C565.GREEN);
+        }
+      } else {
+        // Mapa FPV: Edificios + Spline + 15 Gates
+        for (let i = 0; i < WORLD_BUILDINGS.length; i++) {
+          const b = WORLD_BUILDINGS[i];
+          const bx = Math.round(rcx + b.x * scaleX);
+          const by = Math.round(rcy - b.z * scaleZ);
+          if (bx > rx0 + 1 && bx < rx0 + rw - 1 && by > ry0 + 1 && by < ry0 + rh - 1) {
+            setPx320(bx, by, C565.ORANGE);
+            setPx320(bx + 1, by, C565.ORANGE);
           }
         }
-        const gates = circuit.gates;
-        for (let i = 0; i < gates.length; i++) {
-          const g = gates[i];
-          const gx = Math.round(rcx + g.x * scaleX);
-          const gy = Math.round(rcy - g.z * scaleZ);
-          if (gx > rx0 + 1 && gx < rx0 + rw - 1 && gy > ry0 + 1 && gy < ry0 + rh - 1) {
-            const isAct = (i === activeSim.activeGate);
-            const gCol = isAct ? C565.GREEN : C565.WHITE;
-            setPx320(gx, gy, gCol);
-            if (isAct) {
-              setPx320(gx - 1, gy, gCol); setPx320(gx + 1, gy, gCol);
-              setPx320(gx, gy - 1, gCol); setPx320(gx, gy + 1, gCol);
+        if (!isFreeFlightNoGates()) {
+          const circuit = CHOROBOBO_CIRCUITS[currentCircuitIdx];
+          const sPts = circuit.splinePts;
+          for (let i = 0; i < sPts.length; i++) {
+            const sp = sPts[i];
+            const sx = Math.round(rcx + sp.x * scaleX);
+            const sy = Math.round(rcy - sp.z * scaleZ);
+            if (sx > rx0 && sx < rx0 + rw && sy > ry0 && sy < ry0 + rh) {
+              setPx320(sx, sy, circuit.lineCol565);
+            }
+          }
+          const gates = circuit.gates;
+          for (let i = 0; i < gates.length; i++) {
+            const g = gates[i];
+            const gx = Math.round(rcx + g.x * scaleX);
+            const gy = Math.round(rcy - g.z * scaleZ);
+            if (gx > rx0 + 1 && gx < rx0 + rw - 1 && gy > ry0 + 1 && gy < ry0 + rh - 1) {
+              const isAct = (i === activeSim.activeGate);
+              const gCol = isAct ? C565.GREEN : C565.WHITE;
+              setPx320(gx, gy, gCol);
+              if (isAct) {
+                setPx320(gx - 1, gy, gCol); setPx320(gx + 1, gy, gCol);
+                setPx320(gx, gy - 1, gCol); setPx320(gx, gy + 1, gCol);
+              }
             }
           }
         }
       }
 
-      // 3. Dibujar posición y rumbo actual de la aeronave
+      // Posición y rumbo actual del modelo activo
       const ax = Math.max(rx0 + 3, Math.min(rx0 + rw - 3, Math.round(rcx + activeSim.px * scaleX)));
       const ay = Math.max(ry0 + 3, Math.min(ry0 + rh - 3, Math.round(rcy - activeSim.pz * scaleZ)));
       const hLen = Math.hypot(activeSim.fx, activeSim.fz) || 1.0;
@@ -5131,13 +6576,12 @@
       drawOutlinedLine320(ax, ay, Math.round(ax + hx * 6), Math.round(ay - hz * 6), C565.GOLD);
       drawInavCircleDot320(ax, ay, 2, C565.WHITE);
 
-      // 4. Indicador inferior de Viento en vivo (velocidad en KM/H + flecha de dirección)
       const windMs  = Math.hypot(aeroEnv.windX, aeroEnv.windZ);
       const windKmh = Math.round(windMs * 3.6);
       drawInavText320(`WND:${windKmh}KMH`, gx0 + 4, gy0 + 114, C565.GOLD);
-      drawInavText320(isFreeFlightNoGates() ? 'FREE FLY' : `${CHOROBOBO_CIRCUITS[currentCircuitIdx].shortCode}:15 GATE`, gx0 + 4, gy0 + 131, C565.GREEN);
+      const subStatus = activeRomId === 'rc_sailboat' ? '6 BUOYS BAY' : (activeRomId === 'rc_car' ? '12 WP TRACK' : (isFreeFlightNoGates() ? 'FREE FLY' : `${CHOROBOBO_CIRCUITS[currentCircuitIdx].shortCode}:15 GATE`));
+      drawInavText320(subStatus, gx0 + 4, gy0 + 131, C565.GREEN);
 
-      // Rosa de viento en la esquina inferior derecha del panel
       const wcx = gx0 + gw - 16, wcy = gy0 + 126;
       drawInavCircleDot320(wcx, wcy, 9, rgb565(24, 36, 54));
       if (windMs > 0.2) {
@@ -5174,11 +6618,13 @@
           if (capTouch.lx128 < 34) adjustTuningParameter(rgTuningTab, rgTuningCursor, -1);
           else if (capTouch.lx128 < 68) adjustTuningParameter(rgTuningTab, rgTuningCursor, 1);
           else if (capTouch.lx128 < 98) {
-            if (rgTuningTab === 0) resetWorldDefaults();
-            else if (rgTuningTab === 1) applyWingPreset(fcProfile.wingPresetIdx);
-            else if (rgTuningTab === 2) applyDronePreset(fcProfile.dronePresetIdx);
-            else resetRcInputDefaults();
-            showToast('DEFAULTS RESTORED');
+            // Botón [SIMS] inferior abre directamente el Selector Principal de Simuladores
+            rgTuningOpen = false;
+            rgOverlayOpen = false;
+            osState = 'launcher';
+            showToast('SELECTOR DE SIMULADORES');
+            playTone(700, 0.04);
+            return;
           } else {
             rgTuningOpen = false;
             rgOverlayOpen = false;
@@ -5211,9 +6657,17 @@
         }
       }
 
-      if (hwInput.justPressed('Y') || hwInput.justPressed('SELECT')) {
+      if (hwInput.justPressed('Y')) {
         rgTuningTab = (rgTuningTab + 1) % numTabs;
         playTone(640, 0.03);
+      }
+      if (hwInput.justPressed('SELECT')) {
+        rgTuningOpen = false;
+        rgOverlayOpen = false;
+        osState = 'launcher';
+        showToast('SELECTOR DE SIMULADORES');
+        playTone(700, 0.04);
+        return;
       }
       if (hwInput.justPressed('X')) {
         if (rgTuningTab === 0) resetWorldDefaults();
@@ -5254,21 +6708,37 @@
       // Lista de 9 parámetros configurables en columna izquierda (nativa en 320x240 usando OSD ROM)
       const d = fcProfile.drone;
       const w = fcProfile.wing;
-      const activeSim = activeRomId === 'fpv_wing' ? fpvWingSim : fpvDroneSim;
+      const activeSim = getActiveSimObject();
       const mapShort = ['AUTO', 'TX16S AETR', 'PAD MODE2', 'RC TAER', 'ANDROID BT'][rcInputConfig.mapMode];
       const thrShort = ['AUTO(W:FIJO)', 'RADIO 0-100', 'FIJO (INC)', 'SPRING DIR'][rcInputConfig.thrMode];
       const treeLbl  = fcProfile.treeDensity >= 0.9 ? '100% (ALTA)' : (fcProfile.treeDensity >= 0.4 ? '50% (MEDIA)' : 'OFF (LIMPIO)');
 
+      const row1World = activeRomId === 'rc_sailboat'
+        ? `BOAT:${SAIL_PRESETS[rcSailboatSim.presetIdx].name}`
+        : (activeRomId === 'rc_car'
+          ? `CAR :${RC_CAR_PRESETS[rcCarSim.presetIdx].name}`
+          : `MAPA:${TERRAIN_THEMES[currentThemeIdx].name.slice(0, 17)}`);
+
+      const row2World = activeRomId === 'rc_sailboat'
+        ? `RACE:6 BOYAS (BAHIA)`
+        : (activeRomId === 'rc_car'
+          ? `TRK :12 WP + 2 SALTOS`
+          : `CIRC:${getActiveCircuitLabel().slice(0, 17)}`);
+
+      const row3View = (activeRomId === 'rc_sailboat' || activeRomId === 'rc_car')
+        ? `VIEW:${activeSim.camMode === 0 ? 'LOS AUTO-ZOOM' : (activeSim.camMode === 1 ? 'LOS WIDE' : 'FOLLOW 3D')}`
+        : `VIEW:${activeSim.chaseCam ? 'FOLLOW 3D' : 'FPV CABINA'}`;
+
       const labels = rgTuningTab === 0 ? [
-        `SIM :${activeRomId === 'fpv_wing' ? 'ALA FIJA FPV' : 'FPV DRONE 5"'}`,
-        `MAPA:${TERRAIN_THEMES[currentThemeIdx].name.slice(0, 17)}`,
-        `CIRC:${getActiveCircuitLabel().slice(0, 17)}`,
-        `VIEW:${activeSim.chaseCam ? 'FOLLOW 3D' : 'FPV CABINA'}`,
+        `SIM :${PLAYABLE_SIM_NAMES[activeRomId] || 'ALA FIJA FPV'}`,
+        row1World,
+        row2World,
+        row3View,
         `WIND:${Math.round(fcProfile.windScale * 100)}% (${Math.round(Math.hypot(aeroEnv.windX, aeroEnv.windZ) * 3.6)}KMH)`,
         `WDIR:${WIND_DIR_NAMES[fcProfile.windDirMode || 0]}`,
         `TREE:${treeLbl}`,
         `PATH:${fcProfile.showSplinePath ? 'LUCES GUIA ON' : 'OFF (LIMPIO)'}`,
-        `SND :${soundEnabled ? 'AUDIO ON' : 'AUDIO MUTE'}`
+        `SIMS:A=ABRIR SELECTOR`
       ] : (rgTuningTab === 1 ? [
         `TYPE:${w.name}`,
         `MODO:${fpvWingSim.mode} (WING)`,
@@ -5298,7 +6768,7 @@
         `INVP:${rcInputConfig.invPit > 0 ? 'NORM' : 'INVERT'}`,
         `INVR:${rcInputConfig.invRol > 0 ? 'NORM' : 'INVERT'}`,
         `CENT:A=CALIBRAR`,
-        `EXIT:A=LAUNCHER`
+        `SIMS:A=SELECTOR SIMS`
       ]));
 
       for (let i = 0; i < numRows; i++) {
@@ -5329,7 +6799,6 @@
 
         drawInavText320(rcInputConfig.padShortName.slice(0, 12), gx0 + 4, gy0 + 4, rcInputConfig.connected ? C565.GREEN : C565.ORANGE);
 
-        // 4 Barras de Canal en microsegundos (1000..2000 us): T (Throttle), R (Roll), P (Pitch), Y (Yaw)
         if (isWingStickyThrottleActive() && Math.abs(hwInput.ly) > 0.10) {
           const dStick = (hwInput.ly > 0 ? (hwInput.ly - 0.10) : (hwInput.ly + 0.10)) / 0.90;
           fpvWingSim.thrLatch = Math.max(0.0, Math.min(1.0, fpvWingSim.thrLatch + dStick * 0.72 * dt));
@@ -5356,7 +6825,6 @@
           }
         }
 
-        // Ejes crudos A0..A3 para diagnóstico directo de emisoras TX16S en Android / Windows
         const a0 = Math.round(rcInputConfig.rawAxes[0] * 100);
         const a1 = Math.round(rcInputConfig.rawAxes[1] * 100);
         const a2 = Math.round(rcInputConfig.rawAxes[2] * 100);
@@ -5400,7 +6868,6 @@
           prevPy = py;
         }
 
-        // Punto en vivo del Joystick Derecho (Roll/Pitch) sobre la curva para probar el tacto en directo
         const liveStick = Math.abs(hwInput.rx) >= Math.abs(hwInput.ry) ? hwInput.rx : hwInput.ry;
         const liveRateDeg = Math.round(evalActualRateRad(liveStick, curCenter, curMaxRate, curExpo) * RAD2DEG);
         const dotX = Math.round(gcx + liveStick * (gw * 0.48));
@@ -5418,18 +6885,17 @@
       fbDrawText('[-DEC]', 7, 56, 5);
       fbRect(36, 54, 30, 7, true, 8);
       fbDrawText('[+INC]', 39, 56, 3);
-      fbRect(68, 54, 26, 7, true, 8);
-      fbDrawText('[DEF]', 71, 56, 2);
+      fbRect(68, 54, 26, 7, true, 2);
+      fbDrawText('[SIMS]', 70, 56, 0);
       fbRect(96, 54, 28, 7, true, 4);
-      fbDrawText('B:FLY', 100, 56, 1);
+      fbDrawText('B:GO!', 101, 56, 1);
     }
 
     function updateAndRenderRetroGoOverlay(dt) {
-      // Todo el menú dentro de la app es ahora 100% congruente en resolución nativa 320x240 con 4 pestañas
       updateAndRenderTuningMenu(dt);
     }
 
-    // CARTUCHO 3: ILI9341V SPI + FT6336 TOUCH + ADC DIAGNOSTIC
+    // CARTUCHO DIAGNÓSTICO: ILI9341V SPI + FT6336 TOUCH + ADC DIAGNOSTIC
     function renderHwDiagnostic() {
       fbClear(0);
       fbRect(0, 0, 128, 8, true, 8);
@@ -5473,6 +6939,9 @@
         fbCircle(capTouch.lx128, capTouch.ly64, 5, 4);
         fbDrawLine(capTouch.lx128 - 8, capTouch.ly64, capTouch.lx128 + 8, capTouch.ly64, 0, 2);
         fbDrawLine(capTouch.lx128, capTouch.ly64 - 8, capTouch.lx128, capTouch.ly64 + 8, 0, 2);
+      }
+      if (hwInput.justPressed('SELECT')) {
+        osState = 'launcher';
       }
     }
 
@@ -5529,12 +6998,24 @@
                 for (let s = 0; s < 4; s++) fpvWingSim.step(dt * 0.25);
               }
               fpvWingSim.render();
+            } else if (activeRomId === 'rc_sailboat') {
+              if (!handleInFlightShortcuts(rcSailboatSim)) {
+                for (let s = 0; s < 4; s++) rcSailboatSim.step(dt * 0.25);
+              }
+              rcSailboatSim.render();
+            } else if (activeRomId === 'rc_car') {
+              if (!handleInFlightShortcuts(rcCarSim)) {
+                for (let s = 0; s < 4; s++) rcCarSim.step(dt * 0.25);
+              }
+              rcCarSim.render();
             } else if (activeRomId === 'hwtest') {
               renderHwDiagnostic();
             }
           } else {
             if (activeRomId === 'fpv_drone') fpvDroneSim.render();
             else if (activeRomId === 'fpv_wing') fpvWingSim.render();
+            else if (activeRomId === 'rc_sailboat') rcSailboatSim.render();
+            else if (activeRomId === 'rc_car') rcCarSim.render();
             else if (activeRomId === 'hwtest') renderHwDiagnostic();
 
             updateAndRenderRetroGoOverlay(dt);
