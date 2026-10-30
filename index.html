@@ -461,7 +461,7 @@
         <span>PWR</span>
         <span id="sdLed" class="led sd-act" title="Flash / SD Activity"></span>
         <span>SPI</span>
-        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + COMANCHE 3D (v53)</span>
+        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + COMANCHE 3D (v54)</span>
       </div>
       <div class="top-hw-pills">
         <a href="hardware.html" class="pill-btn" style="text-decoration:none;display:inline-flex;align-items:center;" title="Ver Guía y Diagrama de Conexiones ESP32-S3 N16R8">🔌 PINOUT</a>
@@ -4823,16 +4823,22 @@
               voxColor[zOff + mx] = rgb565(clampByte(r), clampByte(g), clampByte(b));
             }
           } else {
-            // Agua navegable (voxHeight = 0) con gradiente turquesa en la orilla y azul marino con crestas en el centro
+            // Agua navegable con TEXTURA FIJA DE ALTO CONTRASTE en coordenadas del mundo (caústicas + celdas fijas)
+            // para tener referencia visual absoluta de posición y velocidad del velero
             voxHeight[zOff + mx] = 0;
             const depthDist = -landVal; // > 0 hacia adentro del mar
             const shallow = Math.max(0.0, 1.0 - depthDist / 16.0);
-            const ripple = sinLut[((mx * 5 + mz * 7) & 511)] * waveZ;
-            const crest  = ripple > 0.72 ? (ripple - 0.72) * 145.0 : 0.0;
 
-            const r = 14 + shallow * 28 + crest;
-            const g = 68 + shallow * 76 + ripple * 12 + crest;
-            const b = 138 + shallow * 52 + ripple * 18 + crest * 0.85;
+            // Patrón celular fijo en el mundo (cada ~3.5m y ~7m) que no se mueve con el barco
+            const cellX = Math.floor((wx + 500.0) / 3.5);
+            const cellZ = Math.floor((wz + 500.0) / 3.5);
+            const checker = ((cellX + cellZ) & 1) ? 14 : -10;
+            const caustic = sinLut[(mx * 9 + mz * 13) & 511] * sinLut[(mx * 13 - mz * 7) & 511];
+            const speck   = caustic > 0.52 ? 34 : (caustic < -0.45 ? -16 : 0);
+
+            const r = 16 + shallow * 30 + checker * 0.6 + speck * 0.8;
+            const g = 74 + shallow * 78 + checker * 1.1 + speck * 1.2;
+            const b = 144 + shallow * 50 + checker * 1.3 + speck * 1.3;
             voxColor[zOff + mx] = rgb565(clampByte(r), clampByte(g), clampByte(b));
           }
         }
@@ -5007,25 +5013,45 @@
     function renderSailBuoysAndWake320(sim, projPoint320, projLine) {
       const t = aeroEnv.time;
 
-      // 0. Olas ligeras 3D animadas sobre la superficie del agua alrededor del velero (avanzando con el viento)
-      const waveScale = (fcProfile.wind && fcProfile.wind.waveScale !== undefined) ? fcProfile.wind.waveScale : 1.0;
-      const wLen = Math.hypot(aeroEnv.windX, aeroEnv.windZ) || 1.0;
-      const wDirX = aeroEnv.windX / wLen, wDirZ = aeroEnv.windZ / wLen;
-      const crestPerpX = -wDirZ, crestPerpZ = wDirX;
-      const waveScroll = (t * (1.8 + waveScale * 0.9)) % 4.5;
-      if (waveScale > 0.05) for (let w = -3; w <= 4; w++) {
-        const distAlong = w * 4.5 + waveScroll;
-        const cx = sim.px + wDirX * distAlong;
-        const cz = sim.pz + wDirZ * distAlong;
-        for (let seg = -2; seg <= 2; seg++) {
-          const latOffset = seg * 5.2 + ((w & 1) ? 2.4 : 0.0);
-          const wx0 = cx + crestPerpX * (latOffset - 1.35);
-          const wz0 = cz + crestPerpZ * (latOffset - 1.35);
-          const wx1 = cx + crestPerpX * (latOffset + 1.35);
-          const wz1 = cz + crestPerpZ * (latOffset + 1.35);
-          const wy0 = getSailWaveHeight(wx0, wz0, t) + 0.04;
-          const wy1 = getSailWaveHeight(wx1, wz1, t) + 0.04;
-          projLine(wx0, wy0, wz0, wx1, wy1, wz1, 1, 5);
+      // 0. Cuadrícula FIJA en el Mundo de Pequeños Voxels de Agua 3D (sin líneas azules móviles):
+      //    Cada voxel está anclado en una coordenada fija (gx, gz) de la bahía y SOLO sube y baja en Y con la ola.
+      //    Así el piloto ve con total claridad si el velero avanza, a qué velocidad cruza el agua y hacia dónde deriva.
+      const GRID_STEP = 3.2;
+      const baseIx = Math.round(sim.px / GRID_STEP);
+      const baseIz = Math.round(sim.pz / GRID_STEP);
+      const C_VOX_CREST = rgb565(185, 245, 255);
+      const C_VOX_MID   = rgb565(56,  178, 232);
+      const C_VOX_DEEP  = rgb565(18,   86, 156);
+      const C_VOX_SHAD  = rgb565(10,   48,  98);
+
+      for (let dz = -7; dz <= 7; dz++) {
+        const gz = (baseIz + dz) * GRID_STEP;
+        for (let dx = -7; dx <= 7; dx++) {
+          // Desfase fijo tipo damero alterno por fila del mundo para una distribución orgánica pero 100% estática en (X, Z)
+          const gx = (baseIx + dx) * GRID_STEP + (((baseIz + dz) & 1) ? GRID_STEP * 0.5 : 0.0);
+          if (getTerrainHeightMeters(gx, gz) > 0.05) continue;
+
+          const wy = getSailWaveHeight(gx, gz, t);
+          // Proyectar la base (nivel 0) y la cresta vertical (wy) del pequeño voxel de ola
+          const pTop  = projPoint320(gx, Math.max(0.02, wy + 0.08), gz);
+          if (!pTop) continue;
+          const sx = pTop.sx | 0;
+          const sy = pTop.sy | 0;
+          if (sx < 3 || sx >= DISP_W - 3 || sy < 3 || sy >= DISP_H - 3) continue;
+
+          // Color según la altura instantánea de la ola en ese voxel fijo
+          const topCol = wy > 0.06 ? C_VOX_CREST : (wy > -0.02 ? C_VOX_MID : C_VOX_DEEP);
+          const pBase  = projPoint320(gx, -0.06, gz);
+          const by     = pBase ? Math.max(sy + 1, Math.min(sy + 6, pBase.sy | 0)) : (sy + 2);
+
+          // Dibujar columna/cubo voxel 3D (cara superior iluminada 2x2 + faldón vertical oscuro de relieve)
+          for (let vy = sy; vy <= by; vy++) {
+            if (vy < 0 || vy >= DISP_H) continue;
+            const c = (vy === sy) ? topCol : C_VOX_SHAD;
+            const rowOff = vy * DISP_W;
+            vram565[rowOff + sx]     = c;
+            vram565[rowOff + sx + 1] = c;
+          }
         }
       }
 
