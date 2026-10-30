@@ -2,8 +2,9 @@
 
 Simulador de vuelo FPV en modo **Acro** con estética vectorial wireframe monocromática de **1 bit (128×64 píxeles, framebuffer de 1.024 bytes)**, diseñado como banco de pruebas interactivo y arquitectura base portable a C/C++ para una consola portátil basada en **ESP32-S3** con pantalla OLED (SSD1306 / SH1106) y sticks analógicos autocentrados.
 
-## 🌐 Demo Pública (Smartphone / PC)
-👉 **[https://guaroduino.github.io/FPVSim/](https://guaroduino.github.io/FPVSim/)**
+## 🌐 Demo Pública (Smartphone / PC) y Guía de Hardware
+- 🕹️ **Simulador Web Interactivo**: **[https://guaroduino.github.io/FPVSim/](https://guaroduino.github.io/FPVSim/)**
+- 🔌 **Guía de Construcción y Pinout Exacto (ESP32-S3 N16R8 + IPS 2.8")**: **[hardware.html](hardware.html)** (`https://guaroduino.github.io/FPVSim/hardware.html`)
 
 ---
 
