@@ -472,7 +472,7 @@
         <span>PWR</span>
         <span id="sdLed" class="led sd-act" title="Flash / SD Activity"></span>
         <span>SPI</span>
-        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + COMANCHE 3D (v37)</span>
+        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + COMANCHE 3D (v38)</span>
       </div>
       <div class="top-hw-pills">
         <button id="btnFollowCam" class="pill-btn" title="Alternar Vista Externa 3D Follow Cam (SELECT)">🎥 FOLLOW</button>
@@ -2353,30 +2353,35 @@
       const C_LEAF_2  = rgb565(52, 114, 38);
       const C_LEAF_3  = rgb565(76, 146, 48);
 
-      // Tipo 0: Samán / Caro-Caro de copa ancha tropical
+      // Tipo 0: Samán / Caro-Caro de copa redonda ancha y frondosa
       const blobs0 = [
-        { cx: 11.5, cy: 11.0, rx: 9.8, ry: 7.2 },
-        { cx:  7.2, cy: 13.5, rx: 6.2, ry: 5.2 },
-        { cx: 16.2, cy: 13.8, rx: 6.2, ry: 5.0 },
-        { cx: 11.8, cy:  7.5, rx: 6.8, ry: 5.2 }
+        { cx: 11.5, cy: 10.5, rx: 9.8, ry: 7.4 },
+        { cx:  6.8, cy: 12.8, rx: 6.2, ry: 5.5 },
+        { cx: 16.4, cy: 13.0, rx: 6.2, ry: 5.4 },
+        { cx: 11.5, cy:  7.2, rx: 7.2, ry: 5.5 },
+        { cx:  9.0, cy:  9.2, rx: 5.8, ry: 5.0 },
+        { cx: 14.2, cy:  9.5, rx: 5.8, ry: 5.0 }
       ];
       for (let y = 0; y < TREE_SP_H; y++) {
         for (let x = 0; x < TREE_SP_W; x++) {
           let col = 0;
-          // Tronco y ramas inferiores
-          if (y >= 16 && y < 27 && Math.abs(x - 11.5) <= (y > 22 ? 2.1 : 1.5)) {
-            col = x < 12 ? C_TRUNK_L : C_TRUNK_D;
+          // Tronco y horqueta de ramas inferiores
+          if (y >= 16 && y < 27) {
+            const branchSpread = y < 20 ? (20 - y) * 0.45 : 0;
+            if (Math.abs(x - 11.5) <= (y > 23 ? 2.2 : 1.5) || (y < 20 && Math.abs(Math.abs(x - 11.5) - branchSpread) <= 1.0)) {
+              col = x < 12 ? C_TRUNK_L : C_TRUNK_D;
+            }
           }
-          // Copa frondosa con iluminación solar superior-izquierda
+          // Copa redonda frondosa con iluminación solar superior-izquierda
           for (let b = 0; b < blobs0.length; b++) {
             const bl = blobs0[b];
             const dx = (x - bl.cx) / bl.rx;
             const dy = (y - bl.cy) / bl.ry;
             const d2 = dx * dx + dy * dy;
-            const n  = (((x * 37 + y * 59 + b * 17) & 7) - 3) * 0.06;
+            const n  = (((x * 37 + y * 59 + b * 17) & 7) - 3) * 0.055;
             if (d2 + n <= 1.0) {
-              const shade = -dx * 0.45 - dy * 0.55 + (((x * 19 ^ y * 31) & 3) * 0.08);
-              col = shade > 0.32 ? C_LEAF_3 : (shade > 0.0 ? C_LEAF_2 : (shade > -0.32 ? C_LEAF_1 : C_LEAF_0));
+              const shade = -dx * 0.42 - dy * 0.55 + (((x * 19 ^ y * 31) & 3) * 0.08);
+              col = shade > 0.30 ? C_LEAF_3 : (shade > -0.02 ? C_LEAF_2 : (shade > -0.32 ? C_LEAF_1 : C_LEAF_0));
               break;
             }
           }
@@ -2384,21 +2389,35 @@
         }
       }
 
-      // Tipo 1: Árbol alto piramidal / Chaguaramo-Ciprés de lindero
+      // Tipo 1: Mango / Cují de copa redonda esférica densa (sin forma de pino)
+      const C_OLIVE_0 = rgb565(26, 60, 22);
+      const C_OLIVE_1 = rgb565(42, 92, 30);
+      const C_OLIVE_2 = rgb565(64, 124, 40);
+      const C_OLIVE_3 = rgb565(92, 156, 52);
+      const blobs1 = [
+        { cx: 11.5, cy: 10.5, rx: 8.6, ry: 8.2 },
+        { cx:  7.8, cy: 11.8, rx: 5.8, ry: 5.8 },
+        { cx: 15.2, cy: 12.0, rx: 5.8, ry: 5.8 },
+        { cx: 11.5, cy:  6.8, rx: 6.4, ry: 5.4 },
+        { cx: 11.5, cy: 14.0, rx: 7.4, ry: 4.8 }
+      ];
       const off1 = TREE_SP_W * TREE_SP_H;
       for (let y = 0; y < TREE_SP_H; y++) {
         for (let x = 0; x < TREE_SP_W; x++) {
           let col = 0;
-          if (y >= 18 && y < 27 && Math.abs(x - 11.5) <= 1.4) {
+          if (y >= 17 && y < 27 && Math.abs(x - 11.5) <= (y > 23 ? 2.0 : 1.4)) {
             col = x < 12 ? C_TRUNK_L : C_TRUNK_D;
           }
-          if (y >= 2 && y <= 21) {
-            const halfW = 1.8 + ((y - 2) / 19.0) * 6.8 + ((y & 3) === 0 ? 1.1 : 0.0);
-            const dx = x - 11.5;
-            const n = (((x * 43 + y * 29) & 7) - 3) * 0.25;
-            if (Math.abs(dx) + n <= halfW) {
-              const shade = (-dx / Math.max(2.0, halfW)) * 0.50 + ((20 - y) / 20.0) * 0.35 + (((x ^ y) & 1) * 0.12);
-              col = shade > 0.38 ? C_LEAF_3 : (shade > 0.05 ? C_LEAF_2 : (shade > -0.25 ? C_LEAF_1 : C_LEAF_0));
+          for (let b = 0; b < blobs1.length; b++) {
+            const bl = blobs1[b];
+            const dx = (x - bl.cx) / bl.rx;
+            const dy = (y - bl.cy) / bl.ry;
+            const d2 = dx * dx + dy * dy;
+            const n  = (((x * 43 + y * 29 + b * 13) & 7) - 3) * 0.055;
+            if (d2 + n <= 1.0) {
+              const shade = -dx * 0.44 - dy * 0.54 + (((x * 23 ^ y * 17) & 3) * 0.08);
+              col = shade > 0.30 ? C_OLIVE_3 : (shade > -0.02 ? C_OLIVE_2 : (shade > -0.32 ? C_OLIVE_1 : C_OLIVE_0));
+              break;
             }
           }
           TREE_SPRITE_ROM[off1 + y * TREE_SP_W + x] = col;
@@ -2485,9 +2504,9 @@
           pos.z += 18.0;
         }
 
-        const spriteType = (i % 3 === 0) ? 1 : 0;
-        const heightM = 4.8 + r3 * 3.0; // Entre 4.8 m y 7.8 m (siempre <= 8.0 m máximo)
-        const widthM  = spriteType === 0 ? heightM * 0.92 : heightM * 0.62;
+        const spriteType = (i & 1);
+        const heightM = 5.0 + r3 * 2.8; // Entre 5.0 m y 7.8 m (siempre <= 8.0 m máximo)
+        const widthM  = spriteType === 0 ? heightM * 1.05 : heightM * 0.90;
         WORLD_TREES.push({
           x: pos.x,
           z: pos.z,
@@ -2499,13 +2518,22 @@
     }
     rebuildWorldObjectsForScale();
 
-    // Dibuja un sprite de árbol 24x28 rotado con el horizonte (cosR, sinR) y escalado en punto fijo 16.16
-    function drawTreeBillboard320(sxBase, syBase, wPx, hPx, type, cosR, sinR) {
+    // Dibuja un sprite de árbol 24x28 anclado 100% perpendicular al terreno 3D (entre ptTop y ptBase) en punto fijo 16.16
+    function drawTreeBillboard320(ptBase, ptTop, wPx, type) {
+      const vx = ptBase.sx - ptTop.sx;
+      const vy = ptBase.sy - ptTop.sy;
+      const hPx = Math.hypot(vx, vy);
       if (hPx < 3.0 || wPx < 2.5) return;
-      // Centro del sprite a mitad de altura sobre la base (sxBase, syBase) en la dirección perpendicular al horizonte
-      const halfH = hPx * 0.48;
-      const cx = sxBase + sinR * halfH;
-      const cy = syBase - cosR * halfH;
+
+      // Vector unitario en pantalla desde la copa (tv=0) hacia la base en el suelo (tv=TREE_SP_H)
+      const downX = vx / hPx;
+      const downY = vy / hPx;
+      // Vector unitario perpendicular hacia la derecha del árbol en el terreno (tu=0 -> tu=TREE_SP_W)
+      const rightX =  downY;
+      const rightY = -downX;
+
+      const cx = (ptBase.sx + ptTop.sx) * 0.5;
+      const cy = (ptBase.sy + ptTop.sy) * 0.5;
 
       const rad = Math.ceil(Math.max(wPx, hPx) * 0.68);
       const x0 = Math.max(0, Math.floor(cx - rad));
@@ -2517,10 +2545,10 @@
       const scaleU = TREE_SP_W / Math.max(2.0, wPx);
       const scaleV = TREE_SP_H / Math.max(2.0, hPx);
 
-      const du_dx = Math.round( cosR * scaleU * 65536);
-      const dv_dx = Math.round( sinR * scaleV * 65536);
-      const du_dy = Math.round(-sinR * scaleU * 65536);
-      const dv_dy = Math.round( cosR * scaleV * 65536);
+      const du_dx = Math.round(rightX * scaleU * 65536);
+      const dv_dx = Math.round(downX  * scaleV * 65536);
+      const du_dy = Math.round(rightY * scaleU * 65536);
+      const dv_dy = Math.round(downY  * scaleV * 65536);
 
       const centerU_Q16 = (TREE_SP_W >> 1) << 16;
       const centerV_Q16 = (TREE_SP_H >> 1) << 16;
@@ -2658,9 +2686,6 @@
         VIS_SORT_ORD[j + 1] = keyOrd;
       }
 
-      const phi  = Math.atan2(cRy, cUy);
-      const cosR = Math.cos(phi), sinR = Math.sin(phi);
-
       for (let k = 0; k < count; k++) {
         const ord  = VIS_SORT_ORD[k];
         const type = VIS_OBJ_TYPE[ord];
@@ -2670,11 +2695,11 @@
         } else {
           const tr = WORLD_TREES[idx];
           const yFloor = getTerrainHeightMeters(tr.x, tr.z);
-          const pt = projPoint320(tr.x, yFloor, tr.z);
-          if (pt) {
-            const hPx = (tr.h * FOCAL_240) / pt.cz;
-            const wPx = (tr.w * FOCAL_240) / pt.cz;
-            drawTreeBillboard320(pt.sx, pt.sy, wPx, hPx, tr.type, cosR, sinR);
+          const ptBase = projPoint320(tr.x, yFloor, tr.z);
+          const ptTop  = projPoint320(tr.x, yFloor + tr.h, tr.z);
+          if (ptBase && ptTop) {
+            const wPx = (tr.w * FOCAL_240) / ptBase.cz;
+            drawTreeBillboard320(ptBase, ptTop, wPx, tr.type);
           }
         }
       }
