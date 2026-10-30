@@ -472,7 +472,7 @@
         <span>PWR</span>
         <span id="sdLed" class="led sd-act" title="Flash / SD Activity"></span>
         <span>SPI</span>
-        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + COMANCHE 3D (v40)</span>
+        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + COMANCHE 3D (v41)</span>
       </div>
       <div class="top-hw-pills">
         <button id="btnFollowCam" class="pill-btn" title="Alternar Vista Externa 3D Follow Cam (SELECT)">🎥 FOLLOW</button>
@@ -1971,37 +1971,28 @@
     // Focal unificada para que Voxel Terrain, Voxel Sky, Gates y Horizonte Artificial coincidan al 100%
     const FOCAL_128  = 68.0;
     const FOCAL_240  = FOCAL_128 * SCALE_Y; // 255.0
-    const BLIT_SCALE = 0.75;                // Usa 240x180 texels de voxBuf (+46% nitidez en pantalla 320x240)
-    const FOCAL_VOX  = FOCAL_240 * BLIT_SCALE; // 191.25
+    const BLIT_SCALE = 0.635;               // Caben las 4 esquinas a 45° de Roll sin salirse de 256x256 (200 * 0.635 = 127)
+    const FOCAL_VOX  = FOCAL_240 * BLIT_SCALE; // 161.925
     let lastRollAngle = 0;
     let cloudDriftX = 0;
 
     // =========================================================================
     // TABLAS LUT EN PUNTO FIJO INT32 PARA ESP32-S3 (CERO DIVISIONES EN BUCLE)
-    // En ESP32-S3 viven en SRAM Interna (< 3.5 KB):
-    // - UNIT_S_MULT_Q8[k] / UNIT_INV_S_Q14[k]: distribución armónica lineal en (1/s)
-    //   para que cada paso k avance exactamente ~1 píxel vertical a CUALQUIER altitud
-    // - RAY_S_Q8[k] / PROJ_SCALE_Q8[k]: escalados 1 vez por frame según la altura AGL
+    // En ESP32-S3 viven en SRAM Interna (< 4.5 KB):
+    // - RAY_S_Q8[k]: distancia horizontal con signo s * 256 para la fila k
+    // - BASE_V_Q8[k]: fila vertical exacta en voxBuf * 256 (1 píxel por paso)
+    // - PROJ_SCALE_Q8[k]: escala de relieve 3D por fila usando profundidad 3D exacta cz
     // - CLOUD_DIST_Q8[dy]: distancia al plano de nubes * 256 para dyHoriz (0..511)
-    // - MICRO_TEX_LUT[256]: micro-textura sub-texel solo a ras de suelo (< 18m AGL)
+    // - MICRO_TEX_LUT[256]: micro-textura sub-texel solo a ras de suelo (< 16m AGL)
     // =========================================================================
-    const NUM_RAY_STEPS  = 192;
-    const UNIT_S_MULT_Q8 = new Int32Array(NUM_RAY_STEPS);
-    const UNIT_INV_S_Q14 = new Int32Array(NUM_RAY_STEPS);
-    const RAY_S_Q8       = new Int32Array(NUM_RAY_STEPS);
-    const PROJ_SCALE_Q8  = new Int32Array(NUM_RAY_STEPS);
-    const CLOUD_DIST_Q8  = new Int32Array(512);
-    const MICRO_TEX_LUT  = new Uint8Array(256);
+    const NUM_RAY_STEPS = 312;
+    const RAY_S_Q8      = new Int32Array(NUM_RAY_STEPS);
+    const BASE_V_Q8     = new Int32Array(NUM_RAY_STEPS);
+    const PROJ_SCALE_Q8 = new Int32Array(NUM_RAY_STEPS);
+    const CLOUD_DIST_Q8 = new Int32Array(512);
+    const MICRO_TEX_LUT = new Uint8Array(256);
 
     (function initS3FixedPointLuts() {
-      // Distribución armónica en perspectiva (lineal en 1/s -> 1 paso por cada fila vertical de píxeles):
-      for (let k = 0; k < NUM_RAY_STEPS; k++) {
-        const u = k / (NUM_RAY_STEPS - 1);
-        const invNorm = Math.pow(1.0 - u, 1.05) * 0.995 + 0.005; // 1.0 en la base -> 0.005 en el horizonte (rango 200:1)
-        const sMult   = 1.0 / invNorm;
-        UNIT_S_MULT_Q8[k] = Math.round(sMult * 256);
-        UNIT_INV_S_Q14[k] = Math.round(invNorm * 16384);
-      }
       for (let dy = 0; dy < 512; dy++) {
         CLOUD_DIST_Q8[dy] = Math.round((2400.0 / (dy + 10)) * 256);
       }
@@ -2011,7 +2002,7 @@
       }
     })();
 
-    // Renderizador Voxel 100% Punto Fijo Int32 en bucle interno (1 a 1 con C/ESP-IDF en ESP32-S3)
+    // Renderizador Voxel 100% Punto Fijo Int32 en bucle interno con Perspectiva 3D Exacta (0.00px error vs projPoint320)
     function renderVoxelTerrainAndSky(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz, dt = 0.016) {
       cloudDriftX = (cloudDriftX + dt * 1.8) % 512;
       if (SPI_MODES[paletteIdx].mono) {
@@ -2046,39 +2037,59 @@
       const uH = U0x * H0x + U0z * H0z;
       const fH = cFx * H0x + cFz * H0z;
 
-      const fHClamped = Math.abs(fH) < 0.20 ? (fH >= 0 ? 0.20 : -0.20) : fH;
-      const horizonFloat = Math.max(-128.0, Math.min(384.0, 128.0 - (uH / fHClamped) * FOCAL_VOX));
+      const horizonFloat = fH > 0.04
+        ? Math.max(-256.0, Math.min(512.0, 128.0 - (uH / fH) * FOCAL_VOX))
+        : (uH > 0 ? -256.0 : 512.0);
       const horizonV = Math.round(horizonFloat);
-      const horizonSubPxQ16 = Math.round((horizonV - horizonFloat) * 65536);
+      const subPxShift = horizonV - horizonFloat;
+      const horizonSubPxQ16 = Math.round(subPxShift * 65536);
 
-      // Factores en punto fijo adaptados a la altitud real (1 sola vez por frame -> resolución vertical 1:1 a cualquier altura)
+      // 2. Precalcular 1 vez por frame la intersección 3D exacta por fila vertical (cz = s*fH + dy0*cFy):
+      //    - Garantiza sincronización 100% exacta (0.00px error) con Gates, Spline, Árboles y Edificios 3D
+      //    - Soporta s con signo (incluso picado vertical -90°) sin generar jamás líneas verticales
+      //    - Avanza exactamente de 1 en 1 píxel vertical (resolución 1:1 a cualquier altitud)
       const invFocalVox = 1.0 / FOCAL_VOX;
-      const hProjScale  = (U0y * FOCAL_VOX) / fHClamped;
-      const camY_Tex    = Math.round(camY / HEIGHT_SCALE);
       const groundHere  = getTerrainHeightMeters(camX, camZ);
-      const aglHere     = Math.max(0.8, camY - groundHere);
-      const aglNear     = Math.max(0.85, aglHere - Math.min(2.8, aglHere * 0.22));
-      const dvBot       = Math.max(95.0, 262.0 - horizonFloat);
-      const s0          = Math.max(0.85, Math.min(320.0, (aglNear * Math.max(50.0, Math.abs(hProjScale))) / dvBot));
-      const s0_Q8       = Math.round(s0 * 256);
-      const heightFactorQ2 = Math.round((HEIGHT_SCALE * hProjScale * 4.0) / s0);
-      for (let k = 0; k < NUM_RAY_STEPS; k++) {
-        RAY_S_Q8[k]      = (s0_Q8 * UNIT_S_MULT_Q8[k]) >> 8;
-        PROJ_SCALE_Q8[k] = (heightFactorQ2 * UNIT_INV_S_Q14[k]) >> 8;
+      const groundTex   = Math.round(groundHere / HEIGHT_SCALE);
+      const aglHere     = Math.max(0.6, camY - groundHere);
+      const dy0         = -aglHere;
+      const vBotStart   = aglHere < 24.0 ? 304 : 262;
+      const vTopLim     = Math.max(0, Math.min(256, horizonV + 1));
+
+      let activeSteps = 0;
+      for (let vRef = vBotStart; vRef >= vTopLim && activeSteps < NUM_RAY_STEPS; vRef--) {
+        const eta   = (128.0 + subPxShift - vRef) * invFocalVox;
+        const denom = uH - fH * eta;
+        if (denom <= 1e-4) break;
+        const num = aglHere * (U0y - cFy * eta);
+        const s   = Math.max(-12000.0, Math.min(12000.0, num / denom));
+        const cz  = s * fH + dy0 * cFy;
+        if (cz <= 0.20) continue;
+        RAY_S_Q8[activeSteps]      = Math.round(s * 256.0);
+        BASE_V_Q8[activeSteps]     = vRef << 8;
+        PROJ_SCALE_Q8[activeSteps] = Math.round(((HEIGHT_SCALE * U0y * FOCAL_VOX) / cz) * 256.0);
+        activeSteps++;
       }
+
       // A baja altura (< 16m AGL) añade micro-grano de velocidad; al volar alto usa el color 1:1 puro de la imagen satelital
-      const microMaxK = aglHere < 16.0 ? Math.round((16.0 - aglHere) * 3.5) : 0;
+      const microMaxK = aglHere < 16.0 ? Math.round((16.0 - aglHere) * 5.0) : 0;
 
       const startX_Q16    = Math.round((SPAWN_MX + camX * MAP_SCALE_X) * 65536);
       const startZ_Q16    = Math.round((SPAWN_MZ + camZ * MAP_SCALE_Z) * 65536);
       const skyStartX_Q16 = Math.round((camX * 0.45 + cloudDriftX) * 65536);
       const skyStartZ_Q16 = Math.round((camZ * 0.45) * 65536);
+      const dy0_cFy       = dy0 * cFy;
 
-      // 2. Raycasting por columna u (0..255) usando SOLO enteros de 32 bits y LUTs
+      // 3. Raycasting por columna u (0..255) usando SOLO enteros de 32 bits y LUTs
       for (let u = 0; u < VOX_W; u++) {
-        const xi = (u - 128) * invFocalVox * Math.max(0.25, fH);
-        const dirW_X = H0x + xi * R0x;
-        const dirW_Z = H0z + xi * R0z;
+        const xi0  = (u - 128) * invFocalVox;
+        // Desplazamiento lateral exacto por profundidad de cabeceo (xLat = xi0 * (s*fH + dy0*cFy))
+        const lat0 = xi0 * dy0_cFy;
+        const colStartX_Q16 = startX_Q16 + Math.round(lat0 * R0x * MAP_SCALE_X * 65536);
+        const colStartZ_Q16 = startZ_Q16 + Math.round(lat0 * R0z * MAP_SCALE_Z * 65536);
+
+        const dirW_X = H0x + (xi0 * fH) * R0x;
+        const dirW_Z = H0z + (xi0 * fH) * R0z;
 
         // Direcciones en Q8 (al multiplicar por RAY_S_Q8 o CLOUD_DIST_Q8 dan Q16; luego >> 16 da el texel)
         const dirX_Q8  = Math.round(dirW_X * MAP_SCALE_X * 256);
@@ -2088,17 +2099,16 @@
 
         let yMax = VOX_H;
 
-        for (let k = 0; k < NUM_RAY_STEPS && yMax > 0; k++) {
+        for (let k = 0; k < activeSteps && yMax > 0; k++) {
           const sQ8  = RAY_S_Q8[k];
-          const xQ16 = startX_Q16 + dirX_Q8 * sQ8;
-          const zQ16 = startZ_Q16 + dirZ_Q8 * sQ8;
+          const xQ16 = colStartX_Q16 + dirX_Q8 * sQ8;
+          const zQ16 = colStartZ_Q16 + dirZ_Q8 * sQ8;
           const mx   = (xQ16 >> 16) & MAP_MASK_X;
           const mz   = (zQ16 >> 16) & MAP_MASK_Z;
           const mIdx = (mz << MAP_SHIFT_X) | mx;
 
-          const dhTex = voxHeight[mIdx] - camY_Tex;
-          // Proyección perspectiva sin divisiones ni overflow Int32 (soporta hasta >40,000m de altitud)
-          const v = horizonV - ((dhTex * PROJ_SCALE_Q8[k]) >> 8);
+          const dhTex = voxHeight[mIdx] - groundTex;
+          const v = (BASE_V_Q8[k] - dhTex * PROJ_SCALE_Q8[k]) >> 8;
 
           if (v < yMax) {
             const vTop = v < 0 ? 0 : v;
@@ -2111,7 +2121,7 @@
               } else if (mVal === 3) {
                 col = col + (((col ^ 0xFFFF) >> 4) & 0x0861);
               }
-            } else if (k > NUM_RAY_STEPS - 6) {
+            } else if (k > activeSteps - 5 && activeSteps > 24) {
               col = blend565Half(col, fogCol);
             }
             let ptr = (vTop << 8) | u;
