@@ -472,7 +472,7 @@
         <span>PWR</span>
         <span id="sdLed" class="led sd-act" title="Flash / SD Activity"></span>
         <span>SPI</span>
-        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + 3 CIRCUITOS (v19)</span>
+        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + 3 CIRCUITOS (v20)</span>
       </div>
       <div class="top-hw-pills">
         <button id="btnPalette" class="pill-btn">🎨 IPS 60MHz</button>
@@ -1289,37 +1289,6 @@
       playTone(840, 0.05);
     }
 
-    // Marca suavemente las líneas de los 3 circuitos (Rojo, Morado, Naranja) sobre el terreno PSRAM
-    function paintCircuitsOnTerrain() {
-      for (let c = 0; c < CHOROBOBO_CIRCUITS.length; c++) {
-        const circuit = CHOROBOBO_CIRCUITS[c];
-        const gates = circuit.gates;
-        const col565 = circuit.lineCol565;
-        const n = gates.length;
-
-        for (let i = 0; i < n; i++) {
-          const g0 = gates[i];
-          const g1 = gates[(i + 1) % n];
-          const mx0 = Math.round(SPAWN_MX + g0.x * MAP_SCALE_X);
-          const mz0 = Math.round(SPAWN_MZ + g0.z * MAP_SCALE_Z);
-          const mx1 = Math.round(SPAWN_MX + g1.x * MAP_SCALE_X);
-          const mz1 = Math.round(SPAWN_MZ + g1.z * MAP_SCALE_Z);
-
-          const steps = Math.max(Math.abs(mx1 - mx0), Math.abs(mz1 - mz0), 1);
-          for (let s = 0; s <= steps; s++) {
-            const mx = Math.round(mx0 + ((mx1 - mx0) * s) / steps) & MAP_MASK_X;
-            const mz = Math.round(mz0 + ((mz1 - mz0) * s) / steps) & MAP_MASK_Z;
-            const idx = (mz << MAP_SHIFT_X) | mx;
-            voxColor[idx] = blend565Half(voxColor[idx], col565);
-            // Aplanar árboles justo debajo del arco de cada Gate para paso limpio a 8-20m
-            if (s < 3 || s > steps - 3) {
-              if (voxHeight[idx] > 12) voxHeight[idx] = 12;
-            }
-          }
-        }
-      }
-    }
-
     // 4 Mapas / Temas con Cielo Azul + Nubes Voxel (El #1 es el ortomosaico satelital 6x4 km de Chorobobo)
     const TERRAIN_THEMES = [
       {
@@ -1454,7 +1423,6 @@
           voxColor[zOff + mx] = rgb565(clampByte(r * shade), clampByte(g * shade), clampByte(b * shade));
         }
       }
-      paintCircuitsOnTerrain();
     }
 
     // Decodifica la ortofoto satelital limpia de 6 km x 4 km (chorobobo.jpg) en el mapa PSRAM 2048x1024
@@ -1523,7 +1491,6 @@
           voxColor[zOff + mx]  = rgb565(clampByte(r), clampByte(g), clampByte(b));
         }
       }
-      paintCircuitsOnTerrain();
     }
 
     function initChoroboboSatelliteMap() {
@@ -1818,13 +1785,6 @@
           projLine(rx, gFloor, rz, rx, yTop, rz, 0, col);
           projLine(lx, yTop,   lz, rx, yTop, rz, 0, isAct ? 2 : col);
           projLine(lx, yBot,   lz, rx, yBot, rz, 0, col);
-
-          // Línea guía en el suelo hacia la siguiente puerta del circuito activo
-          if (isCurrentCircuit) {
-            const gNxt = gates[(i + 1) % gates.length];
-            const fNxt = getTerrainHeightMeters(gNxt.x, gNxt.z);
-            projLine(g.x, gFloor + 0.6, g.z, gNxt.x, fNxt + 0.6, gNxt.z, 2, baseCol);
-          }
 
           if (isAct) {
             // Chevron luminoso sobre la puerta activa actual (Gate 1..15)
