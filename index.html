@@ -472,9 +472,10 @@
         <span>PWR</span>
         <span id="sdLed" class="led sd-act" title="Flash / SD Activity"></span>
         <span>SPI</span>
-        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + CHOROBOBO HD (v25)</span>
+        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + TX16S/BT PAD (v26)</span>
       </div>
       <div class="top-hw-pills">
+        <button id="btnRcPad" class="pill-btn" title="Configurar Emisora TX16S USB/BT y Gamepad Bluetooth">🎮 RC/PAD</button>
         <button id="btnRates" class="pill-btn active" title="Configurar Rates, PID y Físicas">⚙️ RATES</button>
         <button id="btnPalette" class="pill-btn">🎨 IPS 60MHz</button>
         <button id="btnAudio" class="pill-btn">🔇 SND</button>
@@ -1110,6 +1111,171 @@
       canvasEl.classList.toggle('engaged', active || clicked);
     }
 
+    // =========================================================================
+    // SUBSISTEMA USB-C / BLUETOOTH RC & GAMEPAD (TX16S EdgeTX, ELRS BT, Xbox/PS/Android HID)
+    // =========================================================================
+    const RC_MAP_NAMES = [
+      'AUTO (TX16S/PAD)',
+      'TX16S AETR (BF)',
+      'GAMEPAD MODE 2',
+      'RC TAER (JR/SPK)',
+      'ANDROID BT ALT'
+    ];
+    const RC_THR_NAMES = [
+      'AUTO (RC/PAD)',
+      'RADIO (-100/+100)',
+      'SPRING (CENTRO)'
+    ];
+
+    const rcInputConfig = {
+      mapMode: 0,      // 0=AUTO, 1=TX16S AETR, 2=GAMEPAD MODE2, 3=RC TAER, 4=ANDROID BT ALT
+      thrMode: 0,      // 0=AUTO, 1=RADIO FULL (-1..+1 -> 0..100%), 2=PAD SPRING (0 -> hover)
+      deadzone: 0.03,  // 3% deadzone por defecto
+      invThr: 1,       // +1 normal, -1 invertido
+      invYaw: 1,
+      invPit: 1,
+      invRol: 1,
+      trimYaw: 0.0,
+      trimPit: 0.0,
+      trimRol: 0.0,
+      // Estado en vivo (sin asignaciones dinámicas por frame)
+      connected: false,
+      isEdgeTxRadio: false,
+      activeMapResolved: 2, // 1=AETR, 2=PAD_M2, 3=TAER, 4=ANDROID_ALT
+      padShortName: 'NO PAD (TOUCH)',
+      rawAxes: new Float32Array(8),
+      rawBtns: new Uint8Array(16),
+      prevGpBtn: {
+        A: false, B: false, X: false, Y: false,
+        L3: false, R3: false, SELECT: false, MENU: false,
+        UP: false, DOWN: false, LEFT: false, RIGHT: false
+      },
+      prevAux5Zone: -99,
+      prevAux6Zone: -99
+    };
+
+    function detectControllerProfile(gp) {
+      const idLow = (gp.id || '').toLowerCase();
+      const isRadio = (
+        idLow.includes('opentx') ||
+        idLow.includes('edgetx') ||
+        idLow.includes('radiomaster') ||
+        idLow.includes('tx16') ||
+        idLow.includes('tx12') ||
+        idLow.includes('boxer') ||
+        idLow.includes('pocket') ||
+        idLow.includes('zorro') ||
+        idLow.includes('elrs') ||
+        idLow.includes('expresslrs') ||
+        idLow.includes('betafpv') ||
+        idLow.includes('frsky') ||
+        idLow.includes('taranis') ||
+        idLow.includes('jumper') ||
+        idLow.includes('flysky') ||
+        idLow.includes('futaba') ||
+        idLow.includes('spektrum') ||
+        idLow.includes('vjoy')
+      );
+      rcInputConfig.isEdgeTxRadio = isRadio;
+
+      // Limpiar nombre corto para el OSD / Menú (máx 14 chars)
+      if (isRadio) {
+        if (idLow.includes('elrs') || idLow.includes('expresslrs')) rcInputConfig.padShortName = 'ELRS BT RADIO';
+        else if (idLow.includes('tx16')) rcInputConfig.padShortName = 'TX16S EDGETX';
+        else rcInputConfig.padShortName = 'EDGETX RADIO';
+      } else {
+        if (idLow.includes('xbox') || idLow.includes('xinput')) rcInputConfig.padShortName = 'XBOX/WIN PAD';
+        else if (idLow.includes(' wireless controller') || idLow.includes('dualshock') || idLow.includes('dualsense') || idLow.includes('054c')) rcInputConfig.padShortName = 'PS BT GAMEPAD';
+        else if (idLow.includes('8bitdo')) rcInputConfig.padShortName = '8BITDO BT PAD';
+        else {
+          const clean = (gp.id || 'BT GAMEPAD').replace(/\([^)]*\)/g, '').trim().toUpperCase();
+          rcInputConfig.padShortName = clean.slice(0, 14) || 'BT/USB PAD';
+        }
+      }
+    }
+
+    window.addEventListener('gamepadconnected', (e) => {
+      const gp = e.gamepad;
+      if (!gp) return;
+      detectControllerProfile(gp);
+      rcInputConfig.connected = true;
+      const btnRc = document.getElementById('btnRcPad');
+      if (btnRc) {
+        btnRc.classList.add('active');
+        btnRc.textContent = rcInputConfig.isEdgeTxRadio ? '🎮 TX16S OK' : '🎮 PAD OK';
+      }
+      if (typeof showToast === 'function') {
+        showToast(`CONECTADO: ${rcInputConfig.padShortName}`);
+      }
+    });
+
+    window.addEventListener('gamepaddisconnected', () => {
+      rcInputConfig.connected = false;
+      rcInputConfig.isEdgeTxRadio = false;
+      rcInputConfig.padShortName = 'NO PAD (TOUCH)';
+      const btnRc = document.getElementById('btnRcPad');
+      if (btnRc) {
+        btnRc.classList.remove('active');
+        btnRc.textContent = '🎮 RC/PAD';
+      }
+      if (typeof showToast === 'function') {
+        showToast('CONTROLADOR DESCONECTADO');
+      }
+    });
+
+    function applyAxisDeadzone(val, dz) {
+      const av = Math.abs(val);
+      if (av <= dz) return 0.0;
+      const sign = val >= 0 ? 1.0 : -1.0;
+      return Math.max(-1.0, Math.min(1.0, sign * ((av - dz) / Math.max(0.05, 1.0 - dz))));
+    }
+
+    function isRadioThrottleActive() {
+      if (!rcInputConfig.connected) return false;
+      if (rcInputConfig.thrMode === 1) return true;
+      if (rcInputConfig.thrMode === 2) return false;
+      // En AUTO: si el mapeo activo es AETR (1) o TAER (3) o se detectó emisora EdgeTX, usar recorrido completo -1..+1 -> 0..100%
+      return rcInputConfig.isEdgeTxRadio || rcInputConfig.activeMapResolved === 1 || rcInputConfig.activeMapResolved === 3;
+    }
+
+    // Convierte hwInput.ly en comando de acelerador (0.0 a 1.0) respetando si es Gimbal sin resorte (TX16S) o Stick con resorte (Gamepad/Touch)
+    function evalRcThrottle(baseCruiseThr) {
+      if (isRadioThrottleActive() && !hwInput.leftActive) {
+        // Gimbal real de emisora RC (TX16S / EdgeTX): -1.0 abajo = 0% gas, 0.0 medio = 50% gas, +1.0 arriba = 100% gas
+        return Math.max(0.0, Math.min(1.0, (hwInput.ly + 1.0) * 0.5));
+      }
+      // Stick con resorte al centro (Gamepad Bluetooth / Touch / Teclado): 0.0 centro = baseCruiseThr
+      return hwInput.ly >= 0
+        ? baseCruiseThr + hwInput.ly * (1.0 - baseCruiseThr)
+        : baseCruiseThr * (1.0 + hwInput.ly);
+    }
+
+    function calibrateControllerCenter() {
+      // Guarda el centro actual de Yaw, Pitch y Roll para corregir deriva o centrado en Android/Windows
+      if (!rcInputConfig.connected) return;
+      const a0 = rcInputConfig.rawAxes[0], a1 = rcInputConfig.rawAxes[1];
+      const a2 = rcInputConfig.rawAxes[2], a3 = rcInputConfig.rawAxes[3];
+      const a5 = rcInputConfig.rawAxes[5];
+      const mode = rcInputConfig.activeMapResolved;
+      if (mode === 1) { // AETR: CH1=Rol(a0), CH2=Pit(a1), CH4=Yaw(a3)
+        rcInputConfig.trimRol = a0;
+        rcInputConfig.trimPit = a1;
+        rcInputConfig.trimYaw = a3;
+      } else if (mode === 3) { // TAER: CH2=Rol(a1), CH3=Pit(a2), CH4=Yaw(a3)
+        rcInputConfig.trimRol = a1;
+        rcInputConfig.trimPit = a2;
+        rcInputConfig.trimYaw = a3;
+      } else if (mode === 4) { // ANDROID BT ALT: L=a0/a1, R=a2/a5
+        rcInputConfig.trimYaw = a0;
+        rcInputConfig.trimRol = a2;
+        rcInputConfig.trimPit = -a5;
+      } else { // GAMEPAD MODE 2: L=a0/a1, R=a2/a3
+        rcInputConfig.trimYaw = a0;
+        rcInputConfig.trimRol = a2;
+        rcInputConfig.trimPit = -a3;
+      }
+    }
+
     function updateInputPolling() {
       // Si no se toca el stick izquierdo, la cruceta D-Pad o WASD también pueden mover el eje izquierdo
       if (!hwInput.leftActive) {
@@ -1123,32 +1289,158 @@
         hwInput.ry = (rawKeys['ArrowUp'] ? 0.8 : 0)    - (rawKeys['ArrowDown'] ? 0.8 : 0);
       }
 
+      // Escaneo de Gamepads USB-C / Bluetooth (Windows XInput/DInput, Android Bluetooth HID, TX16S EdgeTX USB/ELRS BT)
       const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+      let activeGp = null;
       for (let i = 0; i < pads.length; i++) {
         const gp = pads[i];
         if (gp && gp.connected) {
-          if (Math.abs(gp.axes[0]) > 0.08) hwInput.lx = gp.axes[0];
-          if (Math.abs(gp.axes[1]) > 0.08) hwInput.ly = -gp.axes[1];
-          if (Math.abs(gp.axes[2]) > 0.08) hwInput.rx = gp.axes[2];
-          if (Math.abs(gp.axes[3]) > 0.08) hwInput.ry = -gp.axes[3];
-          if (gp.buttons[0]?.pressed) hwInput.btn.A = true;
-          if (gp.buttons[1]?.pressed) hwInput.btn.B = true;
-          if (gp.buttons[2]?.pressed) hwInput.btn.X = true;
-          if (gp.buttons[3]?.pressed) hwInput.btn.Y = true;
-          if (gp.buttons[10]?.pressed) hwInput.btn.L3 = true;
-          if (gp.buttons[11]?.pressed) hwInput.btn.R3 = true;
-          if (gp.buttons[8]?.pressed) hwInput.btn.SELECT = true;
-          if (gp.buttons[9]?.pressed) hwInput.btn.MENU = true;
-          if (gp.buttons[12]?.pressed) hwInput.btn.UP = true;
-          if (gp.buttons[13]?.pressed) hwInput.btn.DOWN = true;
-          if (gp.buttons[14]?.pressed) hwInput.btn.LEFT = true;
-          if (gp.buttons[15]?.pressed) hwInput.btn.RIGHT = true;
-          break;
+          activeGp = gp;
+          // Si hay varios dispositivos en el navegador, priorizar una emisora EdgeTX/OpenTX/ELRS o el que tenga más ejes activos
+          const idLow = (gp.id || '').toLowerCase();
+          if (idLow.includes('opentx') || idLow.includes('edgetx') || idLow.includes('tx16') || idLow.includes('radiomaster') || idLow.includes('elrs')) {
+            break;
+          }
         }
       }
 
-      drawThumbstickWell(ctxLeft, stickLeftCanvas, hwInput.lx, hwInput.ly, hwInput.leftActive, hwInput.btn.L3, 'LEFT STICK');
-      drawThumbstickWell(ctxRight, stickRightCanvas, hwInput.rx, hwInput.ry, hwInput.rightActive, hwInput.btn.R3, 'RIGHT STICK');
+      if (activeGp) {
+        if (!rcInputConfig.connected) {
+          detectControllerProfile(activeGp);
+          rcInputConfig.connected = true;
+          const btnRc = document.getElementById('btnRcPad');
+          if (btnRc) {
+            btnRc.classList.add('active');
+            btnRc.textContent = rcInputConfig.isEdgeTxRadio ? '🎮 TX16S OK' : '🎮 PAD OK';
+          }
+        }
+
+        // Copiar hasta 8 ejes y 16 botones en buffers estáticos para telemetría en vivo
+        const axLen = Math.min(8, activeGp.axes ? activeGp.axes.length : 0);
+        for (let a = 0; a < 8; a++) {
+          rcInputConfig.rawAxes[a] = a < axLen ? (activeGp.axes[a] || 0.0) : 0.0;
+        }
+        const btLen = Math.min(16, activeGp.buttons ? activeGp.buttons.length : 0);
+        for (let b = 0; b < 16; b++) {
+          const btnObj = b < btLen ? activeGp.buttons[b] : null;
+          rcInputConfig.rawBtns[b] = (btnObj && (btnObj.pressed || btnObj.value > 0.65)) ? 1 : 0;
+        }
+
+        // Resolver modo de mapeo de los 4 canales principales (Throttle, Yaw, Pitch, Roll)
+        let mode = rcInputConfig.mapMode;
+        if (mode === 0) {
+          if (rcInputConfig.isEdgeTxRadio) {
+            mode = 1; // TX16S / EdgeTX / ELRS BT usa orden estándar Betaflight AETR (CH1=Ail, CH2=Ele, CH3=Thr, CH4=Rud)
+          } else if (activeGp.mapping !== 'standard' && axLen >= 6 && Math.abs(rcInputConfig.rawAxes[5]) > 0.02 && Math.abs(rcInputConfig.rawAxes[3] + 1.0) < 0.05) {
+            mode = 4; // Android Bluetooth HID genérico donde Right Stick Y viene en axes[5] (RZ) y axes[3] es gatillo L2 en -1.0
+          } else {
+            mode = 2; // Gamepad Estándar Mode 2 (Xbox, PlayStation, 8BitDo, Android Standard)
+          }
+        }
+        rcInputConfig.activeMapResolved = mode;
+
+        const a0 = rcInputConfig.rawAxes[0];
+        const a1 = rcInputConfig.rawAxes[1];
+        const a2 = rcInputConfig.rawAxes[2];
+        const a3 = rcInputConfig.rawAxes[3];
+        const a5 = rcInputConfig.rawAxes[5];
+
+        let rawThr = 0, rawYaw = 0, rawPit = 0, rawRol = 0;
+        if (mode === 1) {
+          // 1: TX16S / EDGETX AETR (CH1=Roll, CH2=Pitch, CH3=Throttle, CH4=Yaw)
+          rawRol = a0 - rcInputConfig.trimRol;
+          rawPit = a1 - rcInputConfig.trimPit;
+          rawThr = a2;
+          rawYaw = a3 - rcInputConfig.trimYaw;
+        } else if (mode === 3) {
+          // 3: RC TAER (CH1=Throttle, CH2=Roll, CH3=Pitch, CH4=Yaw)
+          rawThr = a0;
+          rawRol = a1 - rcInputConfig.trimRol;
+          rawPit = a2 - rcInputConfig.trimPit;
+          rawYaw = a3 - rcInputConfig.trimYaw;
+        } else if (mode === 4) {
+          // 4: ANDROID BT ALT (Left=AX0/AX1, Right=AX2/AX5)
+          rawYaw =  a0 - rcInputConfig.trimYaw;
+          rawThr = -a1;
+          rawRol =  a2 - rcInputConfig.trimRol;
+          rawPit = -a5 - rcInputConfig.trimPit;
+        } else {
+          // 2: GAMEPAD ESTÁNDAR MODE 2 (Left=AX0/AX1, Right=AX2/AX3)
+          rawYaw =  a0 - rcInputConfig.trimYaw;
+          rawThr = -a1;
+          rawRol =  a2 - rcInputConfig.trimRol;
+          rawPit = -a3 - rcInputConfig.trimPit;
+        }
+
+        const dz = rcInputConfig.deadzone;
+        const thrRadio = isRadioThrottleActive();
+        const mappedThr = Math.max(-1.0, Math.min(1.0, (thrRadio ? rawThr : applyAxisDeadzone(rawThr, dz)) * rcInputConfig.invThr));
+        const mappedYaw = applyAxisDeadzone(rawYaw * rcInputConfig.invYaw, dz);
+        const mappedPit = applyAxisDeadzone(rawPit * rcInputConfig.invPit, dz);
+        const mappedRol = applyAxisDeadzone(rawRol * rcInputConfig.invRol, dz);
+
+        if (!hwInput.leftActive) {
+          if (thrRadio || Math.abs(mappedThr) > 0.001) hwInput.ly = mappedThr;
+          if (Math.abs(mappedYaw) > 0.001) hwInput.lx = mappedYaw;
+        }
+        if (!hwInput.rightActive) {
+          if (Math.abs(mappedRol) > 0.001) hwInput.rx = mappedRol;
+          if (Math.abs(mappedPit) > 0.001) hwInput.ry = mappedPit;
+        }
+
+        // Botones de Gamepad / Switches HID + D-Pad por ejes Hat (Android Bluetooth suele enviar D-Pad en axes[6]/axes[7])
+        const hatX = axLen >= 8 ? rcInputConfig.rawAxes[6] : 0.0;
+        const hatY = axLen >= 8 ? rcInputConfig.rawAxes[7] : 0.0;
+
+        const curGpBtn = {
+          A:      !!(rcInputConfig.rawBtns[0] || rcInputConfig.rawBtns[7]), // A / Cross / R2 / Switch 1
+          B:      !!(rcInputConfig.rawBtns[1] || rcInputConfig.rawBtns[5]), // B / Circle / R1 / Switch 2
+          X:      !!(rcInputConfig.rawBtns[2] || rcInputConfig.rawBtns[4]), // X / Square / L1 / Switch 3
+          Y:      !!(rcInputConfig.rawBtns[3] || rcInputConfig.rawBtns[6]), // Y / Triangle / L2 / Switch 4
+          SELECT: !!(rcInputConfig.rawBtns[8]),
+          MENU:   !!(rcInputConfig.rawBtns[9]),
+          L3:     !!(rcInputConfig.rawBtns[10]),
+          R3:     !!(rcInputConfig.rawBtns[11]),
+          UP:     !!(rcInputConfig.rawBtns[12] || hatY < -0.5),
+          DOWN:   !!(rcInputConfig.rawBtns[13] || hatY >  0.5),
+          LEFT:   !!(rcInputConfig.rawBtns[14] || hatX < -0.5),
+          RIGHT:  !!(rcInputConfig.rawBtns[15] || hatX >  0.5)
+        };
+
+        // Actualizar hwInput.btn liberando correctamente cuando se suelta el botón en el Gamepad/TX16S
+        for (const k in curGpBtn) {
+          if (curGpBtn[k]) {
+            hwInput.btn[k] = true;
+          } else if (rcInputConfig.prevGpBtn[k] && !btnTouchCounts[k]) {
+            hwInput.btn[k] = false;
+          }
+          rcInputConfig.prevGpBtn[k] = curGpBtn[k];
+        }
+
+        // Soporte de Switches Auxiliares de 3 posiciones en Emisoras EdgeTX (CH5 = axes[4] Modo de Vuelo, CH6 = axes[5] Reset/Cámara)
+        if ((mode === 1 || mode === 3) && axLen >= 5) {
+          const aux5 = rcInputConfig.rawAxes[4];
+          const zone5 = aux5 < -0.35 ? 0 : (aux5 > 0.35 ? 2 : 1);
+          if (rcInputConfig.prevAux5Zone !== -99 && zone5 !== rcInputConfig.prevAux5Zone) {
+            hwInput.btn.Y = true; // Dispara cambio de modo (MANU / ACRO / HOR) al mover switch SA/SB (CH5)
+            rcInputConfig.prevGpBtn.Y = true;
+          }
+          rcInputConfig.prevAux5Zone = zone5;
+
+          if (axLen >= 6) {
+            const aux6 = rcInputConfig.rawAxes[5];
+            const zone6 = aux6 < -0.35 ? 0 : (aux6 > 0.35 ? 2 : 1);
+            if (rcInputConfig.prevAux6Zone !== -99 && zone6 !== rcInputConfig.prevAux6Zone && zone6 === 2) {
+              hwInput.btn.X = true; // Dispara Reset al subir el switch SC/SD (CH6)
+              rcInputConfig.prevGpBtn.X = true;
+            }
+            rcInputConfig.prevAux6Zone = zone6;
+          }
+        }
+      }
+
+      drawThumbstickWell(ctxLeft, stickLeftCanvas, hwInput.lx, hwInput.ly, hwInput.leftActive || rcInputConfig.connected, hwInput.btn.L3, rcInputConfig.connected ? 'THR / YAW' : 'LEFT STICK');
+      drawThumbstickWell(ctxRight, stickRightCanvas, hwInput.rx, hwInput.ry, hwInput.rightActive || rcInputConfig.connected, hwInput.btn.R3, rcInputConfig.connected ? 'PIT / ROL' : 'RIGHT STICK');
 
       const adcLX = Math.round((hwInput.lx + 1) * 2047.5);
       const adcLY = Math.round((hwInput.ly + 1) * 2047.5);
@@ -2493,9 +2785,9 @@
         const groundH = getTerrainHeightMeters(this.px, this.pz);
         updateAeroEnvironment(this.px, this.py, this.pz, groundH, dt);
 
-        // 1. Comando de acelerador + Anti-Gravity boost en cambios bruscos de gas
+        // 1. Comando de acelerador + Anti-Gravity boost (soporta Gimbal real TX16S 0..100% o Stick con resorte)
         const baseThr = 0.34;
-        let thr = hwInput.ly >= 0 ? baseThr + hwInput.ly * (1.0 - baseThr) : baseThr * (1.0 + hwInput.ly);
+        let thr = evalRcThrottle(baseThr);
         if (hwInput.btn.A) thr = Math.min(1.0, thr + 0.28);
         this.thrCmd = thr;
 
@@ -2799,10 +3091,9 @@
         const groundH = getTerrainHeightMeters(this.px, this.pz);
         updateAeroEnvironment(this.px, this.py, this.pz, groundH, dt);
 
-        // 1. Comando de motor + spool-up de hélice trasera (pusher prop Z-84)
-        // Con stick centrado (ly=0) mantiene 40% de crucero; al bajar stick (ly=-1) corta a 0% para planear/frenar
+        // 1. Comando de motor + spool-up de hélice trasera (soporta Gimbal real TX16S 0..100% o Stick con resorte)
         const baseThr = 0.40;
-        let thr = hwInput.ly >= 0 ? baseThr + hwInput.ly * (1.0 - baseThr) : Math.max(0.0, baseThr * (1.0 + hwInput.ly));
+        let thr = evalRcThrottle(baseThr);
         if (hwInput.btn.A) thr = Math.min(1.0, thr + 0.38);
         this.thrCmd = thr;
         this.motorRpm += (thr - this.motorRpm) * Math.min(1.0, 14.0 * dt);
@@ -3222,7 +3513,7 @@
         }
       }
 
-      const navY = Math.abs(hwInput.ly) > Math.abs(hwInput.ry) ? hwInput.ly : hwInput.ry;
+      const navY = isRadioThrottleActive() ? hwInput.ry : (Math.abs(hwInput.ly) > Math.abs(hwInput.ry) ? hwInput.ly : hwInput.ry);
       const navX = Math.abs(hwInput.lx) > Math.abs(hwInput.rx) ? hwInput.lx : hwInput.rx;
 
       if (navCooldown <= 0) {
@@ -3287,8 +3578,8 @@
       if (rgTabIdx === 2) {
         fbDrawText('QUAD: 4-MOTOR PID + AIRMODE', 4, 13, 2);
         fbDrawText('WING: SEMIALAS + TIP-STALL', 4, 21, 5);
-        fbDrawText('OSD : MAX7456 + MOTOR BARS', 4, 29, 3);
-        fbDrawText('CFG : PULSA X O ⚙️ RATES', 4, 37, 1);
+        fbDrawText('USB/BT: TX16S AETR + GAMEPAD', 4, 29, 3);
+        fbDrawText('CFG : PULSA X O 🎮 RC/PAD', 4, 37, 1);
         fbDrawText('FPS : 240HZ PHY / 60FPS DMA', 4, 45, 9);
         fbDrawLine(0, 53, 127, 53, 0, 6);
         fbDrawText('SELECT: CAMBIAR TEMA VOXEL', 4, 56, 2);
@@ -3317,8 +3608,21 @@
     }
 
     // =========================================================================
-    // CONFIGURADOR INTERACTIVO BETAFLIGHT / INAV DE RATES, PID Y FÍSICAS (VRAM)
+    // CONFIGURADOR INTERACTIVO BETAFLIGHT / INAV DE RATES, PID, FÍSICAS Y RC/PAD
     // =========================================================================
+    function resetRcInputDefaults() {
+      rcInputConfig.mapMode = 0;
+      rcInputConfig.thrMode = 0;
+      rcInputConfig.deadzone = 0.03;
+      rcInputConfig.invThr = 1;
+      rcInputConfig.invYaw = 1;
+      rcInputConfig.invPit = 1;
+      rcInputConfig.invRol = 1;
+      rcInputConfig.trimYaw = 0.0;
+      rcInputConfig.trimPit = 0.0;
+      rcInputConfig.trimRol = 0.0;
+    }
+
     function adjustTuningParameter(tab, row, dir) {
       playTone(dir > 0 ? 690 : 540, 0.025);
       if (tab === 0) {
@@ -3345,7 +3649,7 @@
           fcProfile.windScale = Math.max(0.0, Math.min(2.0, Math.round((fcProfile.windScale + dir * 0.2) * 10) / 10));
           d.propwash = fcProfile.windScale;
         }
-      } else {
+      } else if (tab === 1) {
         const w = fcProfile.wing;
         if (row === 0) {
           applyWingPreset(fcProfile.wingPresetIdx + dir);
@@ -3367,6 +3671,31 @@
         } else if (row === 8) {
           fcProfile.windScale = Math.max(0.0, Math.min(2.0, Math.round((fcProfile.windScale + dir * 0.2) * 10) / 10));
         }
+      } else {
+        // Pestaña 2: Configuración de Emisora TX16S (USB-C / ELRS BT) y Gamepad Bluetooth (Android / Windows)
+        if (row === 0) {
+          rcInputConfig.mapMode = ((rcInputConfig.mapMode + dir) % RC_MAP_NAMES.length + RC_MAP_NAMES.length) % RC_MAP_NAMES.length;
+          showToast(`MAP: ${RC_MAP_NAMES[rcInputConfig.mapMode]}`);
+        } else if (row === 1) {
+          rcInputConfig.thrMode = ((rcInputConfig.thrMode + dir) % RC_THR_NAMES.length + RC_THR_NAMES.length) % RC_THR_NAMES.length;
+          showToast(`THR: ${RC_THR_NAMES[rcInputConfig.thrMode]}`);
+        } else if (row === 2) {
+          rcInputConfig.deadzone = Math.max(0.0, Math.min(0.18, Math.round((rcInputConfig.deadzone + dir * 0.01) * 100) / 100));
+        } else if (row === 3) {
+          rcInputConfig.invThr *= -1;
+        } else if (row === 4) {
+          rcInputConfig.invYaw *= -1;
+        } else if (row === 5) {
+          rcInputConfig.invPit *= -1;
+        } else if (row === 6) {
+          rcInputConfig.invRol *= -1;
+        } else if (row === 7) {
+          calibrateControllerCenter();
+          showToast('STICKS CENTRADOS OK');
+        } else if (row === 8) {
+          resetRcInputDefaults();
+          showToast('RC/PAD RESET OK');
+        }
       }
     }
 
@@ -3377,8 +3706,9 @@
       // Interacción táctil directa sobre la pantalla IPS 320x240 (128x64 lógicos)
       if (capTouch.justTapped) {
         if (capTouch.ly64 <= 10) {
-          if (capTouch.lx128 < 52) { rgTuningTab = 0; playTone(640, 0.03); }
-          else if (capTouch.lx128 < 102) { rgTuningTab = 1; playTone(640, 0.03); }
+          if (capTouch.lx128 < 34) { rgTuningTab = 0; playTone(640, 0.03); }
+          else if (capTouch.lx128 < 68) { rgTuningTab = 1; playTone(640, 0.03); }
+          else if (capTouch.lx128 < 103) { rgTuningTab = 2; playTone(640, 0.03); }
           else { rgTuningOpen = false; rgOverlayOpen = false; playTone(520, 0.03); return; }
         } else if (capTouch.ly64 >= 11 && capTouch.ly64 <= 53 && capTouch.lx128 <= 82) {
           const clickedRow = Math.floor((capTouch.ly64 - 11) / 4.7);
@@ -3395,7 +3725,8 @@
           else if (capTouch.lx128 < 68) adjustTuningParameter(rgTuningTab, rgTuningCursor, 1);
           else if (capTouch.lx128 < 98) {
             if (rgTuningTab === 0) applyDronePreset(fcProfile.dronePresetIdx);
-            else applyWingPreset(fcProfile.wingPresetIdx);
+            else if (rgTuningTab === 1) applyWingPreset(fcProfile.wingPresetIdx);
+            else resetRcInputDefaults();
             showToast('DEFAULTS RESTORED');
           } else {
             rgTuningOpen = false;
@@ -3407,8 +3738,9 @@
         capTouch.justTapped = false;
       }
 
-      const navY = hwInput.ly;
-      const navX = hwInput.lx;
+      // En la pestaña [RC/PAD] (tab 2) dejamos libres los sticks analógicos para poder probarlos en las barras PWM sin mover el cursor
+      const navY = rgTuningTab === 2 ? 0 : (isRadioThrottleActive() ? hwInput.ry : hwInput.ly);
+      const navX = rgTuningTab === 2 ? 0 : hwInput.lx;
 
       if (navCooldown <= 0) {
         if (navY < -0.45 || hwInput.justPressed('DOWN')) {
@@ -3429,13 +3761,14 @@
       }
 
       if (hwInput.justPressed('Y') || hwInput.justPressed('SELECT')) {
-        rgTuningTab = rgTuningTab === 0 ? 1 : 0;
+        rgTuningTab = (rgTuningTab + 1) % 3;
         playTone(640, 0.03);
       }
       if (hwInput.justPressed('X')) {
         if (rgTuningTab === 0) applyDronePreset(fcProfile.dronePresetIdx);
-        else applyWingPreset(fcProfile.wingPresetIdx);
-        showToast('PRESET RESET');
+        else if (rgTuningTab === 1) applyWingPreset(fcProfile.wingPresetIdx);
+        else calibrateControllerCenter();
+        showToast(rgTuningTab === 2 ? 'STICKS CENTRADOS' : 'PRESET RESET');
         playTone(580, 0.04);
       }
       if (hwInput.justPressed('B')) {
@@ -3450,19 +3783,24 @@
       fbRect(2, 2, 124, 60, false, 5);
       fbRect(2, 2, 124, 8, true, 8);
 
-      // Pestañas superiores: [DRONE 5"] | [WING Z84] | [FLY]
-      fbRect(4, 3, 44, 6, true, rgTuningTab === 0 ? 2 : 8);
-      fbDrawText('DRONE 5"', 8, 4, rgTuningTab === 0 ? 0 : 1);
+      // Pestañas superiores: [DRONE] | [WING] | [RC/PAD] | [FLY]
+      fbRect(4, 3, 30, 6, true, rgTuningTab === 0 ? 2 : 8);
+      fbDrawText('DRONE', 7, 4, rgTuningTab === 0 ? 0 : 1);
 
-      fbRect(50, 3, 44, 6, true, rgTuningTab === 1 ? 3 : 8);
-      fbDrawText('WING Z84', 54, 4, rgTuningTab === 1 ? 0 : 1);
+      fbRect(36, 3, 30, 6, true, rgTuningTab === 1 ? 3 : 8);
+      fbDrawText('WING', 41, 4, rgTuningTab === 1 ? 0 : 1);
 
-      fbRect(102, 3, 22, 6, true, 4);
+      fbRect(68, 3, 33, 6, true, rgTuningTab === 2 ? 5 : 8);
+      fbDrawText('RC/PAD', 71, 4, rgTuningTab === 2 ? 0 : 1);
+
+      fbRect(103, 3, 21, 6, true, 4);
       fbDrawText('FLY', 107, 4, 1);
 
-      // Lista de 9 parámetros configurables en columna izquierda (nativa en 320x240 usando OSD ROM / fbDrawText)
+      // Lista de 9 parámetros configurables en columna izquierda (nativa en 320x240 usando OSD ROM)
       const d = fcProfile.drone;
       const w = fcProfile.wing;
+      const mapShort = ['AUTO', 'TX16S AETR', 'PAD MODE2', 'RC TAER', 'ANDROID BT'][rcInputConfig.mapMode];
+      const thrShort = ['AUTO', 'RADIO 0-100', 'PAD SPRING'][rcInputConfig.thrMode];
       const labels = rgTuningTab === 0 ? [
         `PSET:${d.name}`,
         `P/R :${d.rcRate} D/S`,
@@ -3473,7 +3811,7 @@
         `TILT:${d.camTilt} DEG`,
         `AIRM:${d.airMode ? 'ON (BF)' : 'OFF'}`,
         `WIND:${Math.round(fcProfile.windScale * 100)}%`
-      ] : [
+      ] : (rgTuningTab === 1 ? [
         `PSET:${w.name}`,
         `PIT :${w.pitchRate} D/S`,
         `ROL :${w.rollRate} D/S`,
@@ -3483,66 +3821,123 @@
         `CG  :${w.cgOffset >= 0 ? '+' : ''}${Math.round(w.cgOffset * 100)}%`,
         `STAL:${Math.round(w.tipStall * 100)}%`,
         `WIND:${Math.round(fcProfile.windScale * 100)}%`
-      ];
+      ] : [
+        `MAP :${mapShort}`,
+        `THR :${thrShort}`,
+        `DEAD:${Math.round(rcInputConfig.deadzone * 100)}%`,
+        `INVT:${rcInputConfig.invThr > 0 ? 'NORM' : 'INVERT'}`,
+        `INVY:${rcInputConfig.invYaw > 0 ? 'NORM' : 'INVERT'}`,
+        `INVP:${rcInputConfig.invPit > 0 ? 'NORM' : 'INVERT'}`,
+        `INVR:${rcInputConfig.invRol > 0 ? 'NORM' : 'INVERT'}`,
+        `CENT:A=CALIBRAR`,
+        `DEF :A=RESET RC`
+      ]);
 
       for (let i = 0; i < numRows; i++) {
         const py320 = 42 + i * 17;
         const isSel = (i === rgTuningCursor);
         if (isSel) {
           for (let y = py320 - 1; y < py320 + 13; y++) {
-            vram565.fill(C565.NAVY, y * DISP_W + 10, y * DISP_W + 204);
+            vram565.fill(C565.NAVY, y * DISP_W + 10, y * DISP_W + 202);
           }
         }
         drawInavText320((isSel ? '>' : ' ') + labels[i], 12, py320, isSel ? C565.GOLD : C565.WHITE);
       }
 
-      // Panel Derecho en 320x240: Gráfica en vivo de la Curva SuperExpo / Actual Rates (x: 210..308, y: 44..144)
-      const gx0 = 210, gy0 = 44, gw = 98, gh = 96;
-      const gcx = gx0 + (gw >> 1), gcy = gy0 + (gh >> 1);
-      for (let y = gy0; y <= gy0 + gh; y++) {
-        vram565.fill(rgb565(12, 18, 32), y * DISP_W + gx0, y * DISP_W + gx0 + gw);
-        setPx320(gx0, y, C565.CYAN);
-        setPx320(gx0 + gw, y, C565.CYAN);
-        setPx320(gcx, y, C565.GREY);
-      }
-      for (let x = gx0; x <= gx0 + gw; x++) {
-        setPx320(x, gy0, C565.CYAN);
-        setPx320(x, gy0 + gh, C565.CYAN);
-        setPx320(x, gcy, C565.GREY);
-      }
-
-      // Trazar curva de Rates de -1.0 a +1.0 en píxeles nativos 320x240
-      const maxRateRef = rgTuningTab === 0 ? 960.0 : 540.0;
-      const curMaxRate = rgTuningTab === 0 ? d.rcRate : w.rollRate;
-      const curCenter  = rgTuningTab === 0 ? d.centerSens : w.rollRate * (1.0 - w.expo);
-      const curExpo    = rgTuningTab === 0 ? d.expo : w.expo;
-
-      let prevPy = gcy;
-      for (let px = 0; px <= gw; px++) {
-        const rcVal = (px / (gw * 0.5)) - 1.0;
-        const rateDeg = evalActualRateRad(rcVal, curCenter, curMaxRate, curExpo) * RAD2DEG;
-        const normY = Math.max(-1.0, Math.min(1.0, rateDeg / maxRateRef));
-        const py = Math.round(gcy - normY * (gh * 0.46));
-        const sx = gx0 + px;
-        const yMin = Math.min(prevPy, py), yMax = Math.max(prevPy, py);
-        for (let y = yMin; y <= yMax; y++) {
-          setPx320(sx, y, C565.GREEN);
-          setPx320(sx, Math.min(gy0 + gh - 1, y + 1), C565.GREEN);
+      if (rgTuningTab === 2) {
+        // Panel Derecho en 320x240 para [RC/PAD]: Monitor de Canales PWM (1000..2000 us) estilo Betaflight Receiver
+        const gx0 = 206, gy0 = 42, gw = 104, gh = 148;
+        for (let y = gy0; y <= gy0 + gh; y++) {
+          vram565.fill(rgb565(10, 16, 28), y * DISP_W + gx0, y * DISP_W + gx0 + gw);
+          setPx320(gx0, y, C565.CYAN);
+          setPx320(gx0 + gw, y, C565.CYAN);
         }
-        prevPy = py;
+        for (let x = gx0; x <= gx0 + gw; x++) {
+          setPx320(x, gy0, C565.CYAN);
+          setPx320(x, gy0 + gh, C565.CYAN);
+        }
+
+        drawInavText320(rcInputConfig.padShortName.slice(0, 12), gx0 + 4, gy0 + 4, rcInputConfig.connected ? C565.GREEN : C565.ORANGE);
+
+        // 4 Barras de Canal en microsegundos (1000..2000 us): T (Throttle), R (Roll), P (Pitch), Y (Yaw)
+        const thrNorm01 = evalRcThrottle(0.5);
+        const chNames = ['T', 'R', 'P', 'Y'];
+        const chVals  = [thrNorm01 * 2.0 - 1.0, hwInput.rx, hwInput.ry, hwInput.lx];
+        const chCols  = [C565.ORANGE, C565.CYAN, C565.GREEN, C565.GOLD];
+
+        for (let c = 0; c < 4; c++) {
+          const by = gy0 + 20 + c * 22;
+          const val = Math.max(-1.0, Math.min(1.0, chVals[c]));
+          const us  = Math.round(1500 + val * 500);
+          drawInavText320(`${chNames[c]}:${us}`, gx0 + 4, by, C565.WHITE);
+
+          const barX = gx0 + 54, barW = 44, barH = 8;
+          for (let y = by + 2; y < by + 2 + barH; y++) {
+            vram565.fill(rgb565(28, 36, 52), y * DISP_W + barX, y * DISP_W + barX + barW);
+          }
+          const fillW = Math.max(1, Math.min(barW, Math.round(((val + 1.0) * 0.5) * barW)));
+          for (let y = by + 2; y < by + 2 + barH; y++) {
+            vram565.fill(chCols[c], y * DISP_W + barX, y * DISP_W + barX + fillW);
+            setPx320(barX + (barW >> 1), y, C565.WHITE);
+          }
+        }
+
+        // Ejes crudos A0..A3 para diagnóstico directo de emisoras TX16S en Android / Windows
+        const a0 = Math.round(rcInputConfig.rawAxes[0] * 100);
+        const a1 = Math.round(rcInputConfig.rawAxes[1] * 100);
+        const a2 = Math.round(rcInputConfig.rawAxes[2] * 100);
+        const a3 = Math.round(rcInputConfig.rawAxes[3] * 100);
+        drawInavText320(`A0:${a0} A1:${a1}`, gx0 + 4, gy0 + 112, C565.CYAN);
+        drawInavText320(`A2:${a2} A3:${a3}`, gx0 + 4, gy0 + 128, C565.CYAN);
+      } else {
+        // Panel Derecho en 320x240: Gráfica en vivo de la Curva SuperExpo / Actual Rates (x: 210..308, y: 44..144)
+        const gx0 = 210, gy0 = 44, gw = 98, gh = 96;
+        const gcx = gx0 + (gw >> 1), gcy = gy0 + (gh >> 1);
+        for (let y = gy0; y <= gy0 + gh; y++) {
+          vram565.fill(rgb565(12, 18, 32), y * DISP_W + gx0, y * DISP_W + gx0 + gw);
+          setPx320(gx0, y, C565.CYAN);
+          setPx320(gx0 + gw, y, C565.CYAN);
+          setPx320(gcx, y, C565.GREY);
+        }
+        for (let x = gx0; x <= gx0 + gw; x++) {
+          setPx320(x, gy0, C565.CYAN);
+          setPx320(x, gy0 + gh, C565.CYAN);
+          setPx320(x, gcy, C565.GREY);
+        }
+
+        // Trazar curva de Rates de -1.0 a +1.0 en píxeles nativos 320x240
+        const maxRateRef = rgTuningTab === 0 ? 960.0 : 540.0;
+        const curMaxRate = rgTuningTab === 0 ? d.rcRate : w.rollRate;
+        const curCenter  = rgTuningTab === 0 ? d.centerSens : w.rollRate * (1.0 - w.expo);
+        const curExpo    = rgTuningTab === 0 ? d.expo : w.expo;
+
+        let prevPy = gcy;
+        for (let px = 0; px <= gw; px++) {
+          const rcVal = (px / (gw * 0.5)) - 1.0;
+          const rateDeg = evalActualRateRad(rcVal, curCenter, curMaxRate, curExpo) * RAD2DEG;
+          const normY = Math.max(-1.0, Math.min(1.0, rateDeg / maxRateRef));
+          const py = Math.round(gcy - normY * (gh * 0.46));
+          const sx = gx0 + px;
+          const yMin = Math.min(prevPy, py), yMax = Math.max(prevPy, py);
+          for (let y = yMin; y <= yMax; y++) {
+            setPx320(sx, y, C565.GREEN);
+            setPx320(sx, Math.min(gy0 + gh - 1, y + 1), C565.GREEN);
+          }
+          prevPy = py;
+        }
+
+        // Punto en vivo del Joystick Derecho (Roll/Pitch) sobre la curva para probar el tacto en directo
+        const liveStick = Math.abs(hwInput.rx) >= Math.abs(hwInput.ry) ? hwInput.rx : hwInput.ry;
+        const liveRateDeg = Math.round(evalActualRateRad(liveStick, curCenter, curMaxRate, curExpo) * RAD2DEG);
+        const dotX = Math.round(gcx + liveStick * (gw * 0.48));
+        const dotY = Math.round(gcy - Math.max(-1.0, Math.min(1.0, liveRateDeg / maxRateRef)) * (gh * 0.46));
+        drawInavCircleDot320(dotX, dotY, 3, C565.GOLD);
+
+        drawInavText320('EXPO CURVE', 218, 47, C565.CYAN);
+        drawInavText320(`${Math.abs(liveRateDeg)}D/S`, 216, 148, C565.GOLD);
+        drawInavText320(rgTuningTab === 0 ? `TWR:${(d.maxThrustAcc / 9.81).toFixed(1)}:1` : `VS:${(8.8 * Math.sqrt(w.wingLoad)).toFixed(1)}M/S`, 216, 166, C565.WHITE);
+        drawInavText320('MOVE R-STICK!', 208, 184, C565.GREEN);
       }
-
-      // Punto en vivo del Joystick Derecho (Roll/Pitch) sobre la curva para probar el tacto en directo
-      const liveStick = Math.abs(hwInput.rx) >= Math.abs(hwInput.ry) ? hwInput.rx : hwInput.ry;
-      const liveRateDeg = Math.round(evalActualRateRad(liveStick, curCenter, curMaxRate, curExpo) * RAD2DEG);
-      const dotX = Math.round(gcx + liveStick * (gw * 0.48));
-      const dotY = Math.round(gcy - Math.max(-1.0, Math.min(1.0, liveRateDeg / maxRateRef)) * (gh * 0.46));
-      drawInavCircleDot320(dotX, dotY, 3, C565.GOLD);
-
-      drawInavText320('EXPO CURVE', 218, 47, C565.CYAN);
-      drawInavText320(`${Math.abs(liveRateDeg)}D/S`, 216, 148, C565.GOLD);
-      drawInavText320(rgTuningTab === 0 ? `TWR:${(d.maxThrustAcc / 9.81).toFixed(1)}:1` : `VS:${(8.8 * Math.sqrt(w.wingLoad)).toFixed(1)}M/S`, 216, 166, C565.WHITE);
-      drawInavText320('MOVE R-STICK!', 208, 184, C565.GREEN);
 
       // Barra inferior de botones táctiles / atajos
       fbRect(4, 54, 30, 7, true, 8);
@@ -3570,7 +3965,7 @@
         }
       }
 
-      const navY = Math.abs(hwInput.ly) > Math.abs(hwInput.ry) ? hwInput.ly : hwInput.ry;
+      const navY = isRadioThrottleActive() ? hwInput.ry : (Math.abs(hwInput.ly) > Math.abs(hwInput.ry) ? hwInput.ly : hwInput.ry);
       if (navCooldown <= 0) {
         if (navY < -0.45 || hwInput.justPressed('DOWN') || hwInput.justPressed('SELECT')) {
           rgOverlayCursor = (rgOverlayCursor + 1) % RG_OVERLAY_ITEMS.length;
@@ -3684,7 +4079,7 @@
       fbDrawText(`SPI:${mode.spiMhz}MHZ (${dmaMs}MS)`, 40, 35, 3);
       fbDrawText(`TCH:${capTouch.x320},${capTouch.y240}`, 40, 43, capTouch.active ? 2 : 5);
       fbRect(0, 55, 128, 9, true, 8);
-      fbDrawText('VOXEL PSRAM: 1.2MB | 60FPS OK', 4, 57, 3);
+      fbDrawText(rcInputConfig.connected ? `RC: ${rcInputConfig.padShortName} OK` : 'RC: CONECTA TX16S USB/BT PAD', 4, 57, rcInputConfig.connected ? 3 : 2);
 
       if (capTouch.active) {
         fbCircle(capTouch.lx128, capTouch.ly64, 5, 4);
@@ -3696,6 +4091,22 @@
     /***************************************************************************
      * 8. BUCLE PRINCIPAL DE SISTEMA RETRO-GO (CON SIMULADOR SPI DMA ILI9341V)
      ***************************************************************************/
+    document.getElementById('btnRcPad').addEventListener('click', () => {
+      if (osState !== 'ingame') {
+        osState = 'ingame';
+        if (activeRomId !== 'fpv_drone' && activeRomId !== 'fpv_wing') activeRomId = 'fpv_drone';
+      }
+      if (rgOverlayOpen && rgTuningOpen && rgTuningTab === 2) {
+        rgTuningOpen = false;
+        rgOverlayOpen = false;
+      } else {
+        rgOverlayOpen = true;
+        rgTuningOpen = true;
+        rgTuningTab = 2;
+      }
+      playTone(720, 0.04);
+    });
+
     document.getElementById('btnRates').addEventListener('click', () => {
       if (osState !== 'ingame') {
         osState = 'ingame';
