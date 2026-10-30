@@ -461,7 +461,7 @@
         <span>PWR</span>
         <span id="sdLed" class="led sd-act" title="Flash / SD Activity"></span>
         <span>SPI</span>
-        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + COMANCHE 3D (v51)</span>
+        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + COMANCHE 3D (v52)</span>
       </div>
       <div class="top-hw-pills">
         <a href="hardware.html" class="pill-btn" style="text-decoration:none;display:inline-flex;align-items:center;" title="Ver Guía y Diagrama de Conexiones ESP32-S3 N16R8">🔌 PINOUT</a>
@@ -3717,12 +3717,48 @@
       { name: 'EDGE 540 3D', hasRudder: 1, pitchRate: 320, rollRate: 430, yawRate: 190, rudderRoll: 0.18, expo: 0.45, wingLoad: 0.82, maxThrustAcc: 25.0, cgOffset: -0.02, tipStall: 1.3, thrHold: 1 }
     ];
 
-    const WIND_DIR_NAMES = ['AUTO VALLE', 'NORTE (+Z)', 'ESTE (+X)', 'SUR (-Z)', 'OESTE (-X)'];
-    const WIND_DIR_RADS  = [1.12, Math.PI * 0.5, 0.0, -Math.PI * 0.5, Math.PI];
+    const WIND_DIR_NAMES = [
+      'AUTO BAHIA/VAL',
+      'NORTE (0 DEG)',
+      'NORESTE (45D)',
+      'ESTE (90 DEG)',
+      'SURESTE (135D)',
+      'SUR (180 DEG)',
+      'SUROESTE(225D)',
+      'OESTE (270 D)',
+      'NOROESTE(315D)'
+    ];
+    // Ángulo hacia donde SOPLA el viento en el plano (X=Este, Z=Norte):
+    // 1=DESDE EL NORTE (sopla hacia -Z = -PI/2), 2=DESDE NE (-3PI/4), 3=DESDE ESTE (PI), 4=DESDE SE (3PI/4),
+    // 5=DESDE SUR (+PI/2), 6=DESDE SW (+PI/4), 7=DESDE OESTE (0), 8=DESDE NW (-PI/4)
+    const WIND_DIR_RADS = [
+      -1.28,
+      -Math.PI * 0.5,
+      -Math.PI * 0.75,
+       Math.PI,
+       Math.PI * 0.75,
+       Math.PI * 0.5,
+       Math.PI * 0.25,
+       0.0,
+      -Math.PI * 0.25
+    ];
+
+    // 6 Presets de Clima y Viento por defecto (para Velero RC, Ala Fija y Dron FPV)
+    const WIND_PRESETS = [
+      { name: 'CALMA (0 KT)',   baseKts:  0.0, gustPct: 0.00, turbPct: 0.00, shiftDeg:  0, thermalPct: 0.00, waveScale: 0.15 },
+      { name: 'DIA TRANQUILO',  baseKts:  6.0, gustPct: 0.10, turbPct: 0.10, shiftDeg:  4, thermalPct: 0.20, waveScale: 0.55 },
+      { name: 'CONSTANTE FIJO', baseKts: 11.0, gustPct: 0.00, turbPct: 0.00, shiftDeg:  0, thermalPct: 0.00, waveScale: 0.80 },
+      { name: 'BRISA REGATA',   baseKts: 12.0, gustPct: 0.25, turbPct: 0.20, shiftDeg: 10, thermalPct: 0.40, waveScale: 1.00 },
+      { name: 'TURBULENTO',     baseKts: 16.0, gustPct: 0.65, turbPct: 0.75, shiftDeg: 22, thermalPct: 0.80, waveScale: 1.45 },
+      { name: 'TORMENTA GALE',  baseKts: 22.0, gustPct: 0.90, turbPct: 1.00, shiftDeg: 32, thermalPct: 1.00, waveScale: 2.00 }
+    ];
 
     const fcProfile = {
       windScale: 1.0,
-      windDirMode: 0,     // 0 = AUTO VALLE, 1 = NORTE, 2 = ESTE, 3 = SUR, 4 = OESTE
+      windDirMode: 0,     // 0 = AUTO BAHIA/VALLE, 1..8 = Rumbos Cardinales (De dónde viene el viento)
+      windPresetIdx: 3,   // Por defecto: 3 = BRISA REGATA (12 KT)
+      windCustom: false,
+      wind: { ...WIND_PRESETS[3] },
       treeDensity: 1.0,   // 1.0 = 100%, 0.5 = 50%, 0.0 = OFF
       showSplinePath: 1,  // 1 = ON (luces guía en el piso), 0 = OFF
       dronePresetIdx: 0,
@@ -3730,6 +3766,28 @@
       drone: { ...DRONE_PRESETS[0] },
       wing:  { ...WING_PRESETS[0] }
     };
+
+    function applyWindPreset(idx) {
+      fcProfile.windPresetIdx = ((idx % WIND_PRESETS.length) + WIND_PRESETS.length) % WIND_PRESETS.length;
+      const p = WIND_PRESETS[fcProfile.windPresetIdx];
+      fcProfile.wind.name       = p.name;
+      fcProfile.wind.baseKts    = p.baseKts;
+      fcProfile.wind.gustPct    = p.gustPct;
+      fcProfile.wind.turbPct    = p.turbPct;
+      fcProfile.wind.shiftDeg   = p.shiftDeg;
+      fcProfile.wind.thermalPct = p.thermalPct;
+      fcProfile.wind.waveScale  = p.waveScale;
+      fcProfile.windCustom      = false;
+      fcProfile.windScale       = Math.round((p.baseKts / 11.0) * 100) / 100;
+      fcProfile.drone.propwash  = Math.max(0.2, Math.min(1.6, fcProfile.windScale));
+    }
+
+    function syncCustomWindScale() {
+      fcProfile.windCustom     = true;
+      fcProfile.wind.name      = 'CUSTOM MANU';
+      fcProfile.windScale      = Math.round((fcProfile.wind.baseKts / 11.0) * 100) / 100;
+      fcProfile.drone.propwash = Math.max(0.2, Math.min(1.6, fcProfile.windScale));
+    }
 
     function applyDronePreset(idx) {
       fcProfile.dronePresetIdx = ((idx % DRONE_PRESETS.length) + DRONE_PRESETS.length) % DRONE_PRESETS.length;
@@ -3840,32 +3898,37 @@
         aeroEnv.failsafeTimer = Math.max(0, aeroEnv.failsafeTimer - dt);
       }
 
-      // 1. Dirección y velocidad del viento (configurable en [WORLD]: AUTO VALLE o rumbo cardinal fijo + cizalladura)
-      const dirMode = fcProfile.windDirMode || 0;
-      const windDir = dirMode === 0
-        ? (1.12 + 0.28 * Math.sin(t * 0.09) + 0.12 * Math.cos(t * 0.23))
-        : (WIND_DIR_RADS[dirMode] + 0.08 * Math.sin(t * 0.14));
-      const shear   = Math.min(1.85, 0.72 + 0.28 * Math.log(1.0 + agl * 0.35));
-      const baseSpd = (3.8 + 0.9 * Math.sin(t * 0.17)) * shear * wScale;
+      // 1. Parámetros del Motor de Viento Unificado (fcProfile.wind configurable en la pestaña [WIND])
+      const wCfg     = fcProfile.wind;
+      const dirMode  = fcProfile.windDirMode || 0;
+      const baseWindDir = dirMode === 0 ? 1.12 : WIND_DIR_RADS[dirMode];
+      const shiftRad = (wCfg.shiftDeg * DEG2RAD) * (0.68 * Math.sin(t * 0.11) + 0.32 * Math.cos(t * 0.27));
+      const windDir  = baseWindDir + shiftRad;
 
-      // 2. Ráfagas espectrales multi-frecuencia (Dryden ligero) + térmicas verticales sobre parcelas
-      const sPhaseX = px * 0.035 + t * 1.9;
-      const sPhaseZ = pz * 0.035 + t * 1.5;
-      const gustX = (1.35 * Math.sin(sPhaseX) + 0.75 * Math.cos(sPhaseZ * 1.7 + t * 3.4) + 0.42 * Math.sin(t * 6.8)) * wScale;
-      const gustZ = (1.25 * Math.cos(sPhaseZ) + 0.70 * Math.sin(sPhaseX * 1.6 - t * 3.1) + 0.38 * Math.cos(t * 7.3)) * wScale;
+      const baseMs   = wCfg.baseKts * 0.51444; // 1 KT = 0.51444 m/s
+      const shear    = 1.0 + wCfg.thermalPct * Math.min(0.65, 0.24 * Math.log(1.0 + agl * 0.35));
+      const gustMod  = 1.0 + wCfg.gustPct * (0.42 * Math.sin(t * 0.38) + 0.28 * Math.cos(t * 0.95));
+      const effSpd   = Math.max(0.0, baseMs * shear * gustMod);
+
+      // 2. Ráfagas espectrales multi-frecuencia (Dryden escalado por gustPct y turbPct) + térmicas verticales
+      const sPhaseX  = px * 0.035 + t * 1.9;
+      const sPhaseZ  = pz * 0.035 + t * 1.5;
+      const drydenAmp = baseMs * 0.28 * wCfg.turbPct;
+      const gustX = (0.55 * Math.sin(sPhaseX) + 0.30 * Math.cos(sPhaseZ * 1.7 + t * 3.4) + 0.15 * Math.sin(t * 6.8)) * drydenAmp;
+      const gustZ = (0.52 * Math.cos(sPhaseZ) + 0.28 * Math.sin(sPhaseX * 1.6 - t * 3.1) + 0.15 * Math.cos(t * 7.3)) * drydenAmp;
 
       // Térmicas ascendentes / descendentes y rotor mecánico cerca de árboles (groundH > 2.2m)
       const treeWake = (groundH > 2.2 && agl < 14.0) ? (1.0 - agl / 14.0) * 1.95 : 0.45;
       const thermalY = (1.45 * Math.sin(px * 0.022 + pz * 0.025 + t * 0.85)
                      + 0.85 * Math.cos(pz * 0.045 - t * 1.65)
-                     + 0.65 * Math.cos(px * 0.08 - t * 2.8) * treeWake) * wScale;
+                     + 0.65 * Math.cos(px * 0.08 - t * 2.8) * treeWake) * wCfg.thermalPct * Math.max(0.3, wScale);
 
-      aeroEnv.windX = Math.cos(windDir) * baseSpd + gustX;
-      aeroEnv.windZ = Math.sin(windDir) * baseSpd + gustZ;
+      aeroEnv.windX = Math.cos(windDir) * effSpd + gustX;
+      aeroEnv.windZ = Math.sin(windDir) * effSpd + gustZ;
       aeroEnv.windY = thermalY;
 
       // 3. Gradientes rotacionales de turbulencia moderados + bolsas de aire suaves en cada semiala
-      const turbAmp = (0.75 + treeWake * 0.65) * wScale;
+      const turbAmp = (0.85 + treeWake * 0.65) * wCfg.turbPct * Math.max(0.35, wScale);
       aeroEnv.turbRoll  = (0.36 * Math.sin(t * 1.45 + px * 0.025) + 0.24 * Math.cos(t * 3.1 + pz * 0.045) + 0.14 * Math.sin(t * 6.4 + px * 0.07)) * turbAmp;
       aeroEnv.turbPitch = (0.26 * Math.cos(t * 1.25 + pz * 0.022) + 0.18 * Math.sin(t * 2.8 - px * 0.040) + 0.10 * Math.cos(t * 5.8 - pz * 0.06)) * turbAmp;
       aeroEnv.turbYaw   = (0.24 * Math.sin(t * 1.15 - px * 0.026) + 0.15 * Math.cos(t * 2.6 + pz * 0.040) + 0.08 * Math.sin(t * 5.2 + px * 0.05)) * turbAmp;
@@ -4682,10 +4745,12 @@
     let wakeHeadIdx = 0;
 
     function getSailWaveHeight(wx, wz, t) {
+      const wScale = (fcProfile.wind && fcProfile.wind.waveScale !== undefined) ? fcProfile.wind.waveScale : 1.0;
+      if (wScale <= 0.01) return 0.0;
       const i1 = (Math.round(wx * 12.0 + wz * 5.0 - t * 48.0) & 511);
       const i2 = (Math.round(wz * 16.0 - wx * 7.0 - t * 38.0) & 511);
       const i3 = (Math.round((wx + wz) * 24.0 + t * 64.0) & 511);
-      return (sinLut[i1] * 0.11 + sinLut[i2] * 0.07 + sinLut[i3] * 0.03);
+      return (sinLut[i1] * 0.11 + sinLut[i2] * 0.07 + sinLut[i3] * 0.03) * wScale;
     }
 
     function generateSailboatBayVoxelMap() {
@@ -4943,11 +5008,12 @@
       const t = aeroEnv.time;
 
       // 0. Olas ligeras 3D animadas sobre la superficie del agua alrededor del velero (avanzando con el viento)
+      const waveScale = (fcProfile.wind && fcProfile.wind.waveScale !== undefined) ? fcProfile.wind.waveScale : 1.0;
       const wLen = Math.hypot(aeroEnv.windX, aeroEnv.windZ) || 1.0;
       const wDirX = aeroEnv.windX / wLen, wDirZ = aeroEnv.windZ / wLen;
       const crestPerpX = -wDirZ, crestPerpZ = wDirX;
-      const waveScroll = (t * 2.6) % 4.5;
-      for (let w = -3; w <= 4; w++) {
+      const waveScroll = (t * (1.8 + waveScale * 0.9)) % 4.5;
+      if (waveScale > 0.05) for (let w = -3; w <= 4; w++) {
         const distAlong = w * 4.5 + waveScroll;
         const cx = sim.px + wDirX * distAlong;
         const cz = sim.pz + wDirZ * distAlong;
@@ -5219,20 +5285,24 @@
         this.flightTime += dt;
         const preset = SAIL_PRESETS[this.presetIdx];
 
-        // 1. Brisa marina estable y coherente sobre la bahía (sin turbulencia 3D de alta frecuencia que invierta la rosa de viento)
+        // 1. Motor de Viento Marino Paramétrico sobre la bahía (controlado al 100% desde el menú [WIND])
         updateAeroEnvironment(this.px, 2.0, this.pz, 0.0, dt);
         const t = aeroEnv.time;
+        const wCfg    = fcProfile.wind;
         const dirMode = fcProfile.windDirMode || 0;
-        // Por defecto el viento sopla desde el Norte-Noroeste hacia el Sur-Sureste (-1.28 rad), de modo que:
-        //  - Subir hacia las boyas del norte (+Z) es CEÑIDA (Close-Hauled)
-        //  - Cruzar la bahía de izquierda a derecha (-X <-> +X) es TRAVÉS (Beam Reach)
-        //  - Bajar hacia el muelle sur (-Z) es POPA (Running)
-        const marineWindDir = dirMode === 0
-          ? (-1.28 + 0.07 * Math.sin(t * 0.08))
-          : (WIND_DIR_RADS[dirMode] + 0.05 * Math.sin(t * 0.10));
-        const effWindScale  = Math.max(0.65, fcProfile.windScale);
-        const boostFactor   = hwInput.btn.A ? 1.45 : 1.0;
-        const marineWindSpd = (5.5 + 0.45 * Math.sin(t * 0.18)) * effWindScale * boostFactor;
+        // Rumbo base del viento: 0 = AUTO BAHIA (-1.28 rad: brisa del Norte-Noroeste hacia el Sur-Sureste) o rumbo cardinal fijo
+        const baseDir  = dirMode === 0 ? -1.28 : WIND_DIR_RADS[dirMode];
+        // Roles de dirección (shiftDeg) + micro-turbulencia direccional (turbPct)
+        const shiftRad = (wCfg.shiftDeg * DEG2RAD) * (0.70 * Math.sin(t * 0.09) + 0.30 * Math.cos(t * 0.23))
+                       + (wCfg.turbPct * 0.14) * Math.sin(t * 1.6 + this.px * 0.04);
+        const marineWindDir = baseDir + shiftRad;
+
+        // Velocidad base en m/s (baseKts * 0.51444) + Ráfagas (gustPct) + Turbulencia rápida (turbPct) + Botón A (Ráfaga manual)
+        const baseMs   = wCfg.baseKts * 0.51444;
+        const gustEnv  = 1.0 + wCfg.gustPct * (0.42 * Math.sin(t * 0.32) + 0.28 * Math.cos(t * 0.78 - this.pz * 0.02))
+                             + wCfg.turbPct * (0.16 * Math.sin(t * 2.4 + this.px * 0.05));
+        const boostAdd = hwInput.btn.A ? Math.max(2.5, baseMs * 0.45) : 0.0;
+        const marineWindSpd = Math.max(0.0, baseMs * Math.max(0.15, gustEnv) + boostAdd);
         const trueWindX = Math.cos(marineWindDir) * marineWindSpd;
         const trueWindZ = Math.sin(marineWindDir) * marineWindSpd;
         aeroEnv.windX = trueWindX;
@@ -5405,7 +5475,8 @@
         this.pitchAngle = Math.atan2(waveHFwd - waveH, 1.35) * 0.95;
 
         const waveRoll   = Math.atan2(waveH - waveHRgt, 0.65) * 0.35;
-        const targetHeel = Math.max(-0.68, Math.min(0.68, (sailSideR * 0.16) / preset.keelRighting + waveRoll));
+        const turbHeel   = (fcProfile.wind ? fcProfile.wind.turbPct : 0.2) * 0.06 * Math.sin(aeroEnv.time * 3.8 + this.px * 0.08);
+        const targetHeel = Math.max(-0.68, Math.min(0.68, (sailSideR * 0.16) / preset.keelRighting + waveRoll + turbHeel));
         const heelAcc    = (targetHeel - this.heelAngle) * 16.0 - this.heelRate * 4.2;
         this.heelRate   += heelAcc * dt;
         this.heelAngle  += this.heelRate * dt;
@@ -6618,7 +6689,7 @@
     }
 
     function resetWorldDefaults() {
-      fcProfile.windScale = 1.0;
+      applyWindPreset(3); // BRISA REGATA (12 KT)
       fcProfile.windDirMode = 0;
       fcProfile.treeDensity = 1.0;
       fcProfile.showSplinePath = 1;
@@ -6630,7 +6701,7 @@
       const activeSim = getActiveSimObject();
 
       if (tab === 0) {
-        // Pestaña 0 [WORLD]: Simulador Activo (Wing / Drone / Sailboat / RC Car), Mapa, Circuito/Modo, Cámara, Viento, Árboles, Spline y Audio
+        // Pestaña 0 [WRLD]: Simulador Activo, Mapa/Clase, Circuito/Regata, Cámara, Clima/Viento, Menú Viento, Árboles, Spline y Launcher
         if (row === 0) {
           let idx = PLAYABLE_SIM_IDS.indexOf(activeRomId);
           if (idx < 0) idx = 0;
@@ -6672,13 +6743,13 @@
             showToast(activeSim.chaseCam ? 'VISTA: FOLLOW 3D MODERNO' : 'VISTA: CABINA FPV');
           }
         } else if (row === 4) {
-          fcProfile.windScale = Math.max(0.0, Math.min(2.0, Math.round((fcProfile.windScale + dir * 0.2) * 10) / 10));
-          fcProfile.drone.propwash = fcProfile.windScale;
-          showToast(`VIENTO: ${Math.round(fcProfile.windScale * 100)}%`);
+          applyWindPreset(fcProfile.windPresetIdx + dir);
+          showToast(`CLIMA: ${fcProfile.wind.name} (${fcProfile.wind.baseKts}KT)`);
         } else if (row === 5) {
-          const nDirs = WIND_DIR_NAMES.length;
-          fcProfile.windDirMode = (((fcProfile.windDirMode || 0) + dir) % nDirs + nDirs) % nDirs;
-          showToast(`RUMBO VIENTO: ${WIND_DIR_NAMES[fcProfile.windDirMode]}`);
+          // Abrir directamente la Pestaña 1 [WIND] para ajustar todos los parámetros de viento y olas
+          rgTuningTab    = 1;
+          rgTuningCursor = 0;
+          showToast('MENU COMPLETO DE VIENTO Y OLAS');
         } else if (row === 6) {
           const densities = [0.0, 0.5, 1.0];
           let curIdx = fcProfile.treeDensity <= 0.1 ? 0 : (fcProfile.treeDensity < 0.8 ? 1 : 2);
@@ -6697,7 +6768,45 @@
           showToast('SELECTOR DE SIMULADORES');
         }
       } else if (tab === 1) {
-        // Pestaña 1 [WING]: Modelo de Ala/Avión, Modo de Vuelo, Rates, Rudder, Expo, Carga Alar, Motor y Modo de Gas
+        // Pestaña 1 [WIND]: Menú Completo dedicado al Viento, Ráfagas, Turbulencia, Roles, Térmicas y Olas
+        const wnd = fcProfile.wind;
+        if (row === 0) {
+          applyWindPreset(fcProfile.windPresetIdx + dir);
+          showToast(`CLIMA: ${wnd.name} (${wnd.baseKts} KT)`);
+        } else if (row === 1) {
+          wnd.baseKts = Math.max(0.0, Math.min(30.0, Math.round((wnd.baseKts + dir * 1.0) * 10) / 10));
+          syncCustomWindScale();
+          showToast(`VIENTO BASE: ${wnd.baseKts} KT (${Math.round(wnd.baseKts * 1.852)} KMH)`);
+        } else if (row === 2) {
+          const nDirs = WIND_DIR_NAMES.length;
+          fcProfile.windDirMode = (((fcProfile.windDirMode || 0) + dir) % nDirs + nDirs) % nDirs;
+          showToast(`DIRECCION: ${WIND_DIR_NAMES[fcProfile.windDirMode]}`);
+        } else if (row === 3) {
+          wnd.gustPct = Math.max(0.0, Math.min(1.0, Math.round((wnd.gustPct + dir * 0.10) * 100) / 100));
+          syncCustomWindScale();
+          showToast(`RAFAGAS (GUSTS): ${Math.round(wnd.gustPct * 100)}%`);
+        } else if (row === 4) {
+          wnd.turbPct = Math.max(0.0, Math.min(1.0, Math.round((wnd.turbPct + dir * 0.10) * 100) / 100));
+          syncCustomWindScale();
+          showToast(`TURBULENCIA: ${Math.round(wnd.turbPct * 100)}%`);
+        } else if (row === 5) {
+          wnd.shiftDeg = Math.max(0, Math.min(40, wnd.shiftDeg + dir * 4));
+          syncCustomWindScale();
+          showToast(`ROLES DE DIRECCION: +/- ${wnd.shiftDeg} DEG`);
+        } else if (row === 6) {
+          wnd.thermalPct = Math.max(0.0, Math.min(1.0, Math.round((wnd.thermalPct + dir * 0.10) * 100) / 100));
+          syncCustomWindScale();
+          showToast(`TERMICAS / SHEAR: ${Math.round(wnd.thermalPct * 100)}%`);
+        } else if (row === 7) {
+          wnd.waveScale = Math.max(0.0, Math.min(2.0, Math.round((wnd.waveScale + dir * 0.20) * 100) / 100));
+          syncCustomWindScale();
+          showToast(`OLAS DEL AGUA: ${Math.round(wnd.waveScale * 100)}%`);
+        } else if (row === 8) {
+          applyWindPreset(fcProfile.windPresetIdx);
+          showToast(`RESTAURADO: ${WIND_PRESETS[fcProfile.windPresetIdx].name}`);
+        }
+      } else if (tab === 2) {
+        // Pestaña 2 [WING]: Modelo de Ala/Avión, Modo de Vuelo, Rates, Rudder, Expo, Carga Alar, Motor y Modo de Gas
         const w = fcProfile.wing;
         if (row === 0) {
           applyWingPreset(fcProfile.wingPresetIdx + dir);
@@ -6727,8 +6836,8 @@
           if (rcInputConfig.thrMode === 2 || rcInputConfig.thrMode === 3) rcInputConfig.thrMode = 0;
           showToast(w.thrHold ? 'THR ALA: FIJO (STICK IZQ)' : 'THR ALA: DIRECTO (RESORTE)');
         }
-      } else if (tab === 2) {
-        // Pestaña 2 [DRONE]: Preset, Modo de Vuelo, Rates P/R y Yaw, Expo, Masa, Potencia, Tilt de Cámara y AirMode
+      } else if (tab === 3) {
+        // Pestaña 3 [DRON]: Preset, Modo de Vuelo, Rates P/R y Yaw, Expo, Masa, Potencia, Tilt de Cámara y AirMode
         const d = fcProfile.drone;
         if (row === 0) {
           applyDronePreset(fcProfile.dronePresetIdx + dir);
@@ -6753,7 +6862,7 @@
           d.airMode = d.airMode ? 0 : 1;
         }
       } else {
-        // Pestaña 3 [RC/PAD]: Mapeo de Emisora TX16S / Gamepad BT, Modo Throttle, Deadzone, Inversión, Calibrar y Launcher
+        // Pestaña 4 [RC]: Mapeo de Emisora TX16S / Gamepad BT, Modo Throttle, Deadzone, Inversión, Calibrar y Launcher
         if (row === 0) {
           rcInputConfig.mapMode = ((rcInputConfig.mapMode + dir) % RC_MAP_NAMES.length + RC_MAP_NAMES.length) % RC_MAP_NAMES.length;
           showToast(`MAP: ${RC_MAP_NAMES[rcInputConfig.mapMode]}`);
@@ -6781,6 +6890,69 @@
           showToast('SELECTOR DE SIMULADORES');
         }
       }
+    }
+
+    // Panel Derecho en 320x240 para la Pestaña 1 [WIND]: Rosa Náutica + Cono de Roles + Medidores de Rachas/Olas en Vivo
+    function renderWindAnalyzerPanel320(gx0, gy0, gw, gh) {
+      for (let y = gy0; y <= gy0 + gh; y++) {
+        vram565.fill(rgb565(10, 18, 30), y * DISP_W + gx0, y * DISP_W + gx0 + gw);
+        setPx320(gx0, y, C565.CYAN);
+        setPx320(gx0 + gw, y, C565.CYAN);
+      }
+      for (let x = gx0; x <= gx0 + gw; x++) {
+        setPx320(x, gy0, C565.CYAN);
+        setPx320(x, gy0 + gh, C565.CYAN);
+      }
+
+      drawInavText320('WIND RADAR', gx0 + 10, gy0 + 4, C565.CYAN);
+
+      // Rosa de los Vientos grande en el centro del panel
+      const wcx = gx0 + (gw >> 1), wcy = gy0 + 54, wr = 30;
+      for (let a = 0; a < 16; a++) {
+        const ang = a * (Math.PI / 8.0);
+        const rIn = (a & 3) === 0 ? wr - 4 : wr - 1;
+        const x0 = wcx + Math.round(Math.cos(ang) * rIn);
+        const y0 = wcy - Math.round(Math.sin(ang) * rIn);
+        const x1 = wcx + Math.round(Math.cos(ang) * wr);
+        const y1 = wcy - Math.round(Math.sin(ang) * wr);
+        drawOutlinedLine320(x0, y0, x1, y1, (a & 3) === 0 ? C565.WHITE : C565.GREY);
+      }
+      drawOsdSmall320('N', wcx - 2, wcy - wr - 7, C565.GOLD);
+      drawOsdSmall320('S', wcx - 2, wcy + wr + 2, C565.GREY);
+      drawOsdSmall320('E', wcx + wr + 3, wcy - 3, C565.GREY);
+      drawOsdSmall320('W', wcx - wr - 6, wcy - 3, C565.GREY);
+
+      // Cono de oscilación (shiftDeg) y vector instantáneo del viento en vivo
+      const wCfg    = fcProfile.wind;
+      const dirMode = fcProfile.windDirMode || 0;
+      const baseDir = dirMode === 0 ? (activeRomId === 'rc_sailboat' ? -1.28 : 1.12) : WIND_DIR_RADS[dirMode];
+      if (wCfg.shiftDeg > 0 && wCfg.baseKts > 0.1) {
+        const sRad = wCfg.shiftDeg * DEG2RAD;
+        const a1 = baseDir - sRad, a2 = baseDir + sRad;
+        drawOutlinedLine320(wcx, wcy, wcx + Math.round(Math.cos(a1) * (wr - 4)), wcy - Math.round(Math.sin(a1) * (wr - 4)), C565.ORANGE);
+        drawOutlinedLine320(wcx, wcy, wcx + Math.round(Math.cos(a2) * (wr - 4)), wcy - Math.round(Math.sin(a2) * (wr - 4)), C565.ORANGE);
+      }
+
+      const liveMs  = Math.hypot(aeroEnv.windX, aeroEnv.windZ);
+      const liveKts = liveMs * 1.944;
+      const liveKmh = Math.round(liveMs * 3.6);
+      if (liveMs > 0.15) {
+        const wxN = aeroEnv.windX / liveMs, wzN = aeroEnv.windZ / liveMs;
+        const lenPx = Math.max(8, Math.min(wr - 3, Math.round(8 + (liveKts / 25.0) * (wr - 10))));
+        const tx = wcx + Math.round(wxN * lenPx), ty = wcy - Math.round(wzN * lenPx);
+        const bx = wcx - Math.round(wxN * 10),    by = wcy + Math.round(wzN * 10);
+        drawOutlinedLine320(bx, by, tx, ty, C565.CYAN);
+        drawInavCircleDot320(tx, ty, 3, C565.GREEN);
+      } else {
+        drawInavCircleDot320(wcx, wcy, 2, C565.GREY);
+      }
+
+      // Lecturas digitales de velocidad en Nudos (KT), KM/H y estado del mar
+      drawInavText320(`${liveKts.toFixed(1)}KT/${liveKmh}KMH`, gx0 + 6, gy0 + 96, C565.GOLD);
+      const seaStr = wCfg.waveScale <= 0.05 ? 'MAR:ESPEJO' : (wCfg.waveScale < 0.75 ? 'MAR:RIZADO' : (wCfg.waveScale < 1.35 ? 'MAR:MODERADO' : 'MAR:PICADO!'));
+      drawInavText320(seaStr, gx0 + 6, gy0 + 113, C565.CYAN);
+      const turbStr = wCfg.gustPct <= 0.02 && wCfg.turbPct <= 0.02 ? 'FLUJO LAMINAR' : `GUST:${Math.round(wCfg.gustPct * 100)}% T:${Math.round(wCfg.turbPct * 100)}%`;
+      drawInavText320(turbStr, gx0 + 6, gy0 + 130, C565.GREEN);
     }
 
     function renderWorldMinimapPanel320(gx0, gy0, gw, gh) {
@@ -6906,15 +7078,16 @@
     function updateAndRenderTuningMenu(dt) {
       if (navCooldown > 0) navCooldown -= dt;
       const numRows = 9;
-      const numTabs = 4; // 0 = [WORLD], 1 = [WING], 2 = [DRONE], 3 = [RC/PAD]
+      const numTabs = 5; // 0 = [WRLD], 1 = [WIND], 2 = [WING], 3 = [DRON], 4 = [RC]
 
       // Interacción táctil directa sobre la pantalla IPS 320x240 (128x64 lógicos)
       if (capTouch.justTapped) {
         if (capTouch.ly64 <= 10) {
-          if (capTouch.lx128 < 29)      { rgTuningTab = 0; playTone(640, 0.03); }
-          else if (capTouch.lx128 < 52) { rgTuningTab = 1; playTone(640, 0.03); }
-          else if (capTouch.lx128 < 78) { rgTuningTab = 2; playTone(640, 0.03); }
-          else if (capTouch.lx128 < 107){ rgTuningTab = 3; playTone(640, 0.03); }
+          if (capTouch.lx128 < 24)      { rgTuningTab = 0; playTone(640, 0.03); }
+          else if (capTouch.lx128 < 45) { rgTuningTab = 1; playTone(640, 0.03); }
+          else if (capTouch.lx128 < 66) { rgTuningTab = 2; playTone(640, 0.03); }
+          else if (capTouch.lx128 < 87) { rgTuningTab = 3; playTone(640, 0.03); }
+          else if (capTouch.lx128 < 105){ rgTuningTab = 4; playTone(640, 0.03); }
           else { rgTuningOpen = false; rgOverlayOpen = false; playTone(520, 0.03); return; }
         } else if (capTouch.ly64 >= 11 && capTouch.ly64 <= 53 && capTouch.lx128 <= 82) {
           const clickedRow = Math.floor((capTouch.ly64 - 11) / 4.7);
@@ -6947,9 +7120,9 @@
         capTouch.justTapped = false;
       }
 
-      // En la pestaña [RC/PAD] (tab 3) dejamos libres los sticks analógicos para poder probarlos en las barras PWM sin mover el cursor
-      const navY = rgTuningTab === 3 ? 0 : (isRadioThrottleActive() ? hwInput.ry : hwInput.ly);
-      const navX = rgTuningTab === 3 ? 0 : hwInput.lx;
+      // En la pestaña [RC] (tab 4) dejamos libres los sticks analógicos para poder probarlos en las barras PWM sin mover el cursor
+      const navY = rgTuningTab === 4 ? 0 : (isRadioThrottleActive() ? hwInput.ry : hwInput.ly);
+      const navX = rgTuningTab === 4 ? 0 : hwInput.lx;
 
       if (navCooldown <= 0) {
         if (navY < -0.45 || hwInput.justPressed('DOWN')) {
@@ -6983,10 +7156,11 @@
       }
       if (hwInput.justPressed('X')) {
         if (rgTuningTab === 0) resetWorldDefaults();
-        else if (rgTuningTab === 1) applyWingPreset(fcProfile.wingPresetIdx);
-        else if (rgTuningTab === 2) applyDronePreset(fcProfile.dronePresetIdx);
+        else if (rgTuningTab === 1) applyWindPreset(fcProfile.windPresetIdx);
+        else if (rgTuningTab === 2) applyWingPreset(fcProfile.wingPresetIdx);
+        else if (rgTuningTab === 3) applyDronePreset(fcProfile.dronePresetIdx);
         else calibrateControllerCenter();
-        showToast(rgTuningTab === 3 ? 'STICKS CENTRADOS' : 'VALORES POR DEFECTO');
+        showToast(rgTuningTab === 4 ? 'STICKS CENTRADOS' : 'VALORES POR DEFECTO');
         playTone(580, 0.04);
       }
       if (hwInput.justPressed('B')) {
@@ -7001,25 +7175,29 @@
       fbRect(2, 2, 124, 60, false, 5);
       fbRect(2, 2, 124, 8, true, 8);
 
-      // 4 Pestañas superiores + Botón [FLY]: [WORLD] | [WING] | [DRONE] | [RC/PAD] | [FLY]
-      fbRect(4, 3, 24, 6, true, rgTuningTab === 0 ? 3 : 8);
-      fbDrawText('WORLD', 6, 4, rgTuningTab === 0 ? 0 : 1);
+      // 5 Pestañas superiores + Botón [GO]: [WRLD] | [WIND] | [WING] | [DRON] | [RC] | [GO]
+      fbRect(3,  3, 20, 6, true, rgTuningTab === 0 ? 3 : 8);
+      fbDrawText('WRLD', 5, 4, rgTuningTab === 0 ? 0 : 1);
 
-      fbRect(30, 3, 21, 6, true, rgTuningTab === 1 ? 2 : 8);
-      fbDrawText('WING', 33, 4, rgTuningTab === 1 ? 0 : 1);
+      fbRect(24, 3, 20, 6, true, rgTuningTab === 1 ? 5 : 8);
+      fbDrawText('WIND', 26, 4, rgTuningTab === 1 ? 0 : 1);
 
-      fbRect(53, 3, 24, 6, true, rgTuningTab === 2 ? 5 : 8);
-      fbDrawText('DRONE', 55, 4, rgTuningTab === 2 ? 0 : 1);
+      fbRect(45, 3, 20, 6, true, rgTuningTab === 2 ? 2 : 8);
+      fbDrawText('WING', 47, 4, rgTuningTab === 2 ? 0 : 1);
 
-      fbRect(79, 3, 27, 6, true, rgTuningTab === 3 ? 9 : 8);
-      fbDrawText('RC/PAD', 81, 4, rgTuningTab === 3 ? 0 : 1);
+      fbRect(66, 3, 20, 6, true, rgTuningTab === 3 ? 9 : 8);
+      fbDrawText('DRON', 68, 4, rgTuningTab === 3 ? 0 : 1);
 
-      fbRect(108, 3, 16, 6, true, 4);
-      fbDrawText('FLY', 110, 4, 1);
+      fbRect(87, 3, 17, 6, true, rgTuningTab === 4 ? 3 : 8);
+      fbDrawText('RC', 91, 4, rgTuningTab === 4 ? 0 : 1);
+
+      fbRect(105, 3, 19, 6, true, 4);
+      fbDrawText('GO!', 109, 4, 1);
 
       // Lista de 9 parámetros configurables en columna izquierda (nativa en 320x240 usando OSD ROM)
-      const d = fcProfile.drone;
-      const w = fcProfile.wing;
+      const d   = fcProfile.drone;
+      const w   = fcProfile.wing;
+      const wnd = fcProfile.wind;
       const activeSim = getActiveSimObject();
       const mapShort = ['AUTO', 'TX16S AETR', 'PAD MODE2', 'RC TAER', 'ANDROID BT'][rcInputConfig.mapMode];
       const thrShort = ['AUTO(W:FIJO)', 'RADIO 0-100', 'FIJO (INC)', 'SPRING DIR'][rcInputConfig.thrMode];
@@ -7046,12 +7224,22 @@
         row1World,
         row2World,
         row3View,
-        `WIND:${Math.round(fcProfile.windScale * 100)}% (${Math.round(Math.hypot(aeroEnv.windX, aeroEnv.windZ) * 3.6)}KMH)`,
-        `WDIR:${WIND_DIR_NAMES[fcProfile.windDirMode || 0]}`,
+        `CLIM:${wnd.name} (${wnd.baseKts}KT)`,
+        `WIND:A=ABRIR MENU VIENTO`,
         `TREE:${treeLbl}`,
         `PATH:${fcProfile.showSplinePath ? 'LUCES GUIA ON' : 'OFF (LIMPIO)'}`,
         `SIMS:A=ABRIR SELECTOR`
       ] : (rgTuningTab === 1 ? [
+        `PSET:${wnd.name}`,
+        `VEL :${wnd.baseKts.toFixed(0)}KT (${Math.round(wnd.baseKts * 1.852)} KM/H)`,
+        `DIR :${WIND_DIR_NAMES[fcProfile.windDirMode || 0]}`,
+        `GUST:${Math.round(wnd.gustPct * 100)}% ${wnd.gustPct <= 0.02 ? '(CONSTANTE)' : '(RACHAS)'}`,
+        `TURB:${Math.round(wnd.turbPct * 100)}% ${wnd.turbPct <= 0.02 ? '(LAMINAR)' : '(DRYDEN)'}`,
+        `SHFT:+/-${wnd.shiftDeg} DEG (ROLES)`,
+        `THER:${Math.round(wnd.thermalPct * 100)}% (TERM/SHEAR)`,
+        `WAVE:${Math.round(wnd.waveScale * 100)}% (OLAS AGUA)`,
+        `DEF :A=RESTAURAR PRESET`
+      ] : (rgTuningTab === 2 ? [
         `TYPE:${w.name}`,
         `MODO:${fpvWingSim.mode} (WING)`,
         `PIT :${w.pitchRate} D/S`,
@@ -7061,7 +7249,7 @@
         `LOAD:${Math.round(w.wingLoad * 100)}%`,
         `PWR :${Math.round(w.maxThrustAcc)}M/S2`,
         `THRL:${w.thrHold ? 'FIJO (INC)' : 'RESORTE'}`
-      ] : (rgTuningTab === 2 ? [
+      ] : (rgTuningTab === 3 ? [
         `PSET:${d.name}`,
         `MODO:${fpvDroneSim.mode} (QUAD)`,
         `P/R :${d.rcRate} D/S`,
@@ -7081,7 +7269,7 @@
         `INVR:${rcInputConfig.invRol > 0 ? 'NORM' : 'INVERT'}`,
         `CENT:A=CALIBRAR`,
         `SIMS:A=SELECTOR SIMS`
-      ]));
+      ])));
 
       for (let i = 0; i < numRows; i++) {
         const py320 = 42 + i * 17;
@@ -7096,8 +7284,10 @@
 
       if (rgTuningTab === 0) {
         renderWorldMinimapPanel320(206, 42, 104, 148);
-      } else if (rgTuningTab === 3) {
-        // Panel Derecho en 320x240 para [RC/PAD]: Monitor de Canales PWM (1000..2000 us) estilo Betaflight Receiver
+      } else if (rgTuningTab === 1) {
+        renderWindAnalyzerPanel320(206, 42, 104, 148);
+      } else if (rgTuningTab === 4) {
+        // Panel Derecho en 320x240 para [RC]: Monitor de Canales PWM (1000..2000 us) estilo Betaflight Receiver
         const gx0 = 206, gy0 = 42, gw = 104, gh = 148;
         for (let y = gy0; y <= gy0 + gh; y++) {
           vram565.fill(rgb565(10, 16, 28), y * DISP_W + gx0, y * DISP_W + gx0 + gw);
@@ -7144,8 +7334,8 @@
         drawInavText320(`A0:${a0} A1:${a1}`, gx0 + 4, gy0 + 112, C565.CYAN);
         drawInavText320(`A2:${a2} A3:${a3}`, gx0 + 4, gy0 + 128, C565.CYAN);
       } else {
-        // Panel Derecho en 320x240 para [WING] (tab 1) y [DRONE] (tab 2): Gráfica en vivo de la Curva SuperExpo / Actual Rates
-        const isDroneTab = (rgTuningTab === 2);
+        // Panel Derecho en 320x240 para [WING] (tab 2) y [DRON] (tab 3): Gráfica en vivo de la Curva SuperExpo / Actual Rates
+        const isDroneTab = (rgTuningTab === 3);
         const gx0 = 210, gy0 = 44, gw = 98, gh = 96;
         const gcx = gx0 + (gw >> 1), gcy = gy0 + (gh >> 1);
         for (let y = gy0; y <= gy0 + gh; y++) {
