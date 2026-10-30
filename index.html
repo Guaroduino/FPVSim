@@ -472,7 +472,7 @@
         <span>PWR</span>
         <span id="sdLed" class="led sd-act" title="Flash / SD Activity"></span>
         <span>SPI</span>
-        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + AERO PHYSICS (v18)</span>
+        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + 3 CIRCUITOS (v19)</span>
       </div>
       <div class="top-hw-pills">
         <button id="btnPalette" class="pill-btn">🎨 IPS 60MHz</button>
@@ -1216,15 +1216,109 @@
     const VOX_H = 256;
     const voxBuf = new Uint16Array(VOX_W * VOX_H);
 
-    // Circuito de 6 Gates sobre la Pista Aeromodelismo A.I.A Chorobobo y las parcelas vecinas
-    const CIRCUIT_GATES = [
-      { x:  0, y: 2.5, z:   5, w: 5.0, h: 4.0 },
-      { x:  6, y: 3.0, z:  22, w: 5.0, h: 4.0 },
-      { x: 22, y: 3.2, z:  34, w: 5.0, h: 4.0 },
-      { x: 34, y: 2.5, z:  16, w: 5.0, h: 4.0 },
-      { x: 22, y: 2.5, z:  -6, w: 5.0, h: 4.0 },
-      { x:  0, y: 2.5, z: -18, w: 5.0, h: 4.0 }
+    // Conversión exacta de coordenada normalizada (u, v) sobre la ortofoto 6x4 km a metros (wx, wz)
+    function uvToWorld(u, v) {
+      return {
+        x: Math.round((u - (SPAWN_MX / MAP_W)) * WORLD_W_M),
+        z: Math.round(((SPAWN_MZ / MAP_H) - v) * WORLD_H_M)
+      };
+    }
+
+    // Construye un circuito de 15 Gates orientados perpendicularmente a la tangente de vuelo (altura ideal 8-20m)
+    function buildOrientedCircuit(id, name, shortCode, lineCol565, palIdx, uvList) {
+      const n = uvList.length;
+      const pts = uvList.map(([u, v]) => uvToWorld(u, v));
+      const gates = [];
+      for (let i = 0; i < n; i++) {
+        const cur = pts[i];
+        const nxt = pts[(i + 1) % n];
+        const prv = pts[(i - 1 + n) % n];
+        // Vector tangente promedio en la puerta i
+        let tx = nxt.x - prv.x;
+        let tz = nxt.z - prv.z;
+        const tLen = Math.hypot(tx, tz) || 1.0;
+        tx /= tLen;
+        tz /= tLen;
+        // Vector lateral derecho perpendicular a la tangente: (nx, nz) = (tz, -tx)
+        gates.push({
+          x: cur.x,
+          y: 12.0,     // Centro de puerta a ~12m sobre el suelo (ideal para volar entre 8m y 20m)
+          z: cur.z,
+          w: 18.0,     // 18m de ancho para paso fluido a escala real 6x4 km
+          h: 12.0,     // 12m de alto (de 6m a 18m AGL)
+          tx, tz,
+          nx: tz,
+          nz: -tx
+        });
+      }
+      return { id, name, shortCode, lineCol565, palIdx, gates };
+    }
+
+    // Los 3 Circuitos de 15 Gates trazados sobre el valle de Chorobobo (Rojo, Morado y Naranja)
+    const CHOROBOBO_CIRCUITS = [
+      // 1. CIRCUITO ROJO (15 Gates): Óvalo central por la Pista A.I.A Chorobobo y los tablones centrales
+      buildOrientedCircuit('rojo', 'C1 ROJO PISTA', 'C1', rgb565(235, 52, 48), 4, [
+        [0.575, 0.362], [0.532, 0.348], [0.488, 0.334], [0.442, 0.320], [0.402, 0.318],
+        [0.412, 0.365], [0.436, 0.418], [0.462, 0.468], [0.492, 0.502], [0.542, 0.506],
+        [0.592, 0.510], [0.642, 0.510], [0.658, 0.472], [0.656, 0.415], [0.618, 0.382]
+      ]),
+      // 2. CIRCUITO MORADO (15 Gates): Circuito medio hasta la laguna oeste, PDVSA Etanol y borde sur del bosque
+      buildOrientedCircuit('morado', 'C2 MORADO VALLE', 'C2', rgb565(190, 58, 235), 10, [
+        [0.545, 0.352], [0.455, 0.325], [0.352, 0.305], [0.268, 0.340], [0.214, 0.388],
+        [0.174, 0.478], [0.215, 0.525], [0.315, 0.545], [0.415, 0.562], [0.515, 0.582],
+        [0.610, 0.595], [0.680, 0.568], [0.692, 0.475], [0.665, 0.408], [0.605, 0.376]
+      ]),
+      // 3. CIRCUITO NARANJA (15 Gates): Gran circuito largo por los meandros del Río Turbio y recta sur
+      buildOrientedCircuit('naranja', 'C3 NARANJA RIO', 'C3', rgb565(248, 132, 28), 9, [
+        [0.550, 0.335], [0.544, 0.215], [0.522, 0.102], [0.462, 0.082], [0.392, 0.148],
+        [0.318, 0.215], [0.242, 0.278], [0.135, 0.312], [0.068, 0.392], [0.145, 0.468],
+        [0.285, 0.495], [0.425, 0.518], [0.560, 0.538], [0.665, 0.508], [0.642, 0.405]
+      ])
     ];
+
+    let currentCircuitIdx = 0;
+    let CIRCUIT_GATES = CHOROBOBO_CIRCUITS[0].gates;
+
+    function selectChoroboboCircuit(idx, craft = null) {
+      currentCircuitIdx = ((idx % CHOROBOBO_CIRCUITS.length) + CHOROBOBO_CIRCUITS.length) % CHOROBOBO_CIRCUITS.length;
+      CIRCUIT_GATES = CHOROBOBO_CIRCUITS[currentCircuitIdx].gates;
+      if (craft) {
+        craft.activeGate = 0;
+      }
+      showToast(`${CHOROBOBO_CIRCUITS[currentCircuitIdx].name} (15 GATES)`);
+      playTone(840, 0.05);
+    }
+
+    // Marca suavemente las líneas de los 3 circuitos (Rojo, Morado, Naranja) sobre el terreno PSRAM
+    function paintCircuitsOnTerrain() {
+      for (let c = 0; c < CHOROBOBO_CIRCUITS.length; c++) {
+        const circuit = CHOROBOBO_CIRCUITS[c];
+        const gates = circuit.gates;
+        const col565 = circuit.lineCol565;
+        const n = gates.length;
+
+        for (let i = 0; i < n; i++) {
+          const g0 = gates[i];
+          const g1 = gates[(i + 1) % n];
+          const mx0 = Math.round(SPAWN_MX + g0.x * MAP_SCALE_X);
+          const mz0 = Math.round(SPAWN_MZ + g0.z * MAP_SCALE_Z);
+          const mx1 = Math.round(SPAWN_MX + g1.x * MAP_SCALE_X);
+          const mz1 = Math.round(SPAWN_MZ + g1.z * MAP_SCALE_Z);
+
+          const steps = Math.max(Math.abs(mx1 - mx0), Math.abs(mz1 - mz0), 1);
+          for (let s = 0; s <= steps; s++) {
+            const mx = Math.round(mx0 + ((mx1 - mx0) * s) / steps) & MAP_MASK_X;
+            const mz = Math.round(mz0 + ((mz1 - mz0) * s) / steps) & MAP_MASK_Z;
+            const idx = (mz << MAP_SHIFT_X) | mx;
+            voxColor[idx] = blend565Half(voxColor[idx], col565);
+            // Aplanar árboles justo debajo del arco de cada Gate para paso limpio a 8-20m
+            if (s < 3 || s > steps - 3) {
+              if (voxHeight[idx] > 12) voxHeight[idx] = 12;
+            }
+          }
+        }
+      }
+    }
 
     // 4 Mapas / Temas con Cielo Azul + Nubes Voxel (El #1 es el ortomosaico satelital 6x4 km de Chorobobo)
     const TERRAIN_THEMES = [
@@ -1360,6 +1454,7 @@
           voxColor[zOff + mx] = rgb565(clampByte(r * shade), clampByte(g * shade), clampByte(b * shade));
         }
       }
+      paintCircuitsOnTerrain();
     }
 
     // Decodifica la ortofoto satelital limpia de 6 km x 4 km (chorobobo.jpg) en el mapa PSRAM 2048x1024
@@ -1397,9 +1492,6 @@
           }
 
           // Extraer relieve Voxel 3D a escala real (unidades de HEIGHT_SCALE = 0.125 m):
-          // - Bosques de galería del Río Turbio y arboleda central: 3.5m a 8.5m (h = 28..68)
-          // - Lomas del Noroeste (Rigoberto Quiroz) y Suroeste: hasta 22m (h = 40..176)
-          // - Tablones de cultivo de caña/maíz y caminos: planos (0.25m a 0.75m, h = 2..6)
           const luma = (r * 77 + g * 150 + b * 29) >> 8;
           const greenExcess = g - Math.max(r, b);
           let h = 2;
@@ -1422,7 +1514,6 @@
             }
           }
 
-          // Mantener completamente despejada y plana la zona de la Pista A.I.A Chorobobo y los 6 Gates
           const distSpawn = Math.hypot(wx, wz);
           if (distSpawn < 65) {
             h = Math.round(2 + (h - 2) * Math.max(0, (distSpawn - 38) / 27));
@@ -1432,6 +1523,7 @@
           voxColor[zOff + mx]  = rgb565(clampByte(r), clampByte(g), clampByte(b));
         }
       }
+      paintCircuitsOnTerrain();
     }
 
     function initChoroboboSatelliteMap() {
@@ -1448,7 +1540,7 @@
           console.warn('No se pudo decodificar chorobobo.jpg:', err);
         }
       };
-      img.src = 'chorobobo.jpg?v=17';
+      img.src = 'chorobobo.jpg?v=19';
     }
 
     generateGentleVoxelMap(0);
@@ -1475,10 +1567,10 @@
     // =========================================================================
     // TABLAS LUT EN PUNTO FIJO INT32 PARA ESP32-S3 (CERO DIVISIONES EN BUCLE)
     // En ESP32-S3 viven en SRAM Interna (< 2.5 KB):
-    // - RAY_S_Q8[k]: distancia horizontal s * 256 para cada paso k (0..127, de 0.6m a 1,650m)
+    // - RAY_S_Q8[k]: distancia horizontal s * 256 (optimizado para vuelo a 8-20m AGL)
     // - RAY_INV_S_Q14[k]: (1 / s) * 16384 precalculado (cambia '/' por '*' + '>> 16')
     // - CLOUD_DIST_Q8[dy]: distancia al plano de nubes * 256 para dyHoriz (0..511)
-    // - MICRO_TEX_LUT[256]: micro-textura sub-texel (~18 cm) para nitidez a baja altura
+    // - MICRO_TEX_LUT[256]: micro-textura sub-texel extendida hasta ~240m de alcance
     // =========================================================================
     const NUM_RAY_STEPS = 128;
     const RAY_S_Q8      = new Int32Array(NUM_RAY_STEPS);
@@ -1487,23 +1579,26 @@
     const MICRO_TEX_LUT = new Uint8Array(256);
 
     (function initS3FixedPointLuts() {
-      let s = 0.6, ds = 0.22;
+      // Distribución de pasos optimizada para volar entre 8m y 20m de altura:
+      // Los primeros 96 pasos (k = 0..95) cubren con alta densidad desde 0.8m hasta 240m frente a la aeronave
+      let s = 0.8, ds = 0.25;
       for (let k = 0; k < NUM_RAY_STEPS; k++) {
         RAY_S_Q8[k]      = Math.round(s * 256);
         RAY_INV_S_Q14[k] = Math.round((1.0 / s) * 16384);
-        if (k < 48) {
+        if (k < 96) {
           s  += ds;
-          ds += 0.012;
+          ds += 0.046; // En k=95 alcanza ~240m con excelente resolución para 8-20m de altura
         } else {
-          // Progresión geométrica de 24m hasta ~1,650m para cubrir el valle de 6 km x 4 km
-          s *= 1.054;
+          // Pasos 96..127 cubren desde 240m hasta ~1,650m hacia el horizonte del valle
+          s *= 1.062;
         }
       }
       for (let dy = 0; dy < 512; dy++) {
         CLOUD_DIST_Q8[dy] = Math.round((2400.0 / (dy + 10)) * 256);
       }
       for (let i = 0; i < 256; i++) {
-        MICRO_TEX_LUT[i] = ((i * 73 + (i >> 4) * 37) ^ (i * 19)) & 1;
+        const h = (i * 73 + (i >> 4) * 37) ^ (i * 29);
+        MICRO_TEX_LUT[i] = h & 3; // 0,1 = neutro, 2 = grano oscuro (-1 LSB), 3 = grano claro (+1 LSB)
       }
     })();
 
@@ -1586,15 +1681,20 @@
           if (v < yMax) {
             const vTop = v < 0 ? 0 : v;
             let col = voxColor[mIdx];
-            if (k < 38) {
-              // Micro-detalle sub-texel (~18 cm) en corto alcance para que el suelo se vea nítido al despegar
-              const subIdx = ((xQ16 >> 12) & 15) | (((zQ16 >> 12) & 15) << 4);
-              if (MICRO_TEX_LUT[subIdx]) {
+            if (k < 96) {
+              // Micro-pixelado sub-texel extendido hasta ~240m de distancia para que al volar a 8-20m
+              // de altura todo el terreno cercano y medio tenga textura fina y sensación de velocidad
+              const shiftSub = k < 48 ? 12 : 13;
+              const subIdx = ((xQ16 >> shiftSub) & 15) | (((zQ16 >> shiftSub) & 15) << 4);
+              const mVal = MICRO_TEX_LUT[subIdx];
+              if (mVal === 2) {
                 col = (col & 0xF7DE) - ((col & 0x0821) ? 0x0821 : 0);
+              } else if (mVal === 3) {
+                col = (col & 0xF7DE) + ((col & 0xF7DE) !== 0xF7DE ? 0x0821 : 0);
               }
-            } else if (k > 98) {
+            } else if (k > 106) {
               col = blend565Half(col, fogCol);
-              if (k > 114) col = blend565Half(col, fogCol);
+              if (k > 118) col = blend565Half(col, fogCol);
             }
             let ptr = (vTop << 8) | u;
             for (let y = vTop; y < yMax; y++, ptr += VOX_W) {
@@ -1655,7 +1755,7 @@
       }
     }
 
-    // Proyector 3D exacto en coordenadas nativas 320x240
+    // Proyector 3D exacto en coordenadas nativas 320x240 (alcance extendido a 950m para circuitos a escala 6x4 km)
     function createProjector320(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz) {
       function projPoint320(wx, wy, wz) {
         const dx = wx - camX, dy = wy - camY, dz = wz - camZ;
@@ -1676,7 +1776,7 @@
         let cx0 = dx0*cRx + dy0*cRy + dz0*cRz, cy0 = dx0*cUx + dy0*cUy + dz0*cUz, cz0 = dx0*cFx + dy0*cFy + dz0*cFz;
         let cx1 = dx1*cRx + dy1*cRy + dz1*cRz, cy1 = dx1*cUx + dy1*cUy + dz1*cUz, cz1 = dx1*cFx + dy1*cFy + dz1*cFz;
         if (cz0 < 0.2 && cz1 < 0.2) return;
-        if (cz0 > 75 && cz1 > 75) return;
+        if (cz0 > 950 && cz1 > 950) return;
         if (cz0 < 0.2) { const t = (0.2 - cz0)/(cz1 - cz0); cx0 += t*(cx1 - cx0); cy0 += t*(cy1 - cy0); cz0 = 0.2; }
         else if (cz1 < 0.2) { const t = (0.2 - cz1)/(cz0 - cz1); cx1 += t*(cx0 - cx1); cy1 += t*(cy0 - cy1); cz1 = 0.2; }
 
@@ -1690,20 +1790,47 @@
       return { projPoint320, projLine };
     }
 
+    // Renderiza los 3 Circuitos de 15 Gates orientados 3D (Rojo, Morado, Naranja) + resalta la puerta activa
     function renderCircuitGates(projLine, activeGate) {
-      for (let i = 0; i < CIRCUIT_GATES.length; i++) {
-        const g = CIRCUIT_GATES[i];
-        const hw = g.w * 0.5, hh = g.h * 0.5;
-        const isAct = (i === activeGate);
-        const col = isAct ? 10 : 5;
-        const gFloor = getTerrainHeightMeters(g.x, g.z);
-        projLine(g.x - hw, gFloor, g.z, g.x - hw, g.y + hh, g.z, 0, col);
-        projLine(g.x + hw, gFloor, g.z, g.x + hw, g.y + hh, g.z, 0, col);
-        projLine(g.x - hw, g.y + hh, g.z, g.x + hw, g.y + hh, g.z, 0, isAct ? 2 : col);
-        projLine(g.x - hw, g.y - hh, g.z, g.x + hw, g.y - hh, g.z, 0, col);
-        if (isAct) {
-          projLine(g.x, g.y + hh + 1.2, g.z, g.x - 1, g.y + hh + 2.4, g.z, 0, 2);
-          projLine(g.x, g.y + hh + 1.2, g.z, g.x + 1, g.y + hh + 2.4, g.z, 0, 2);
+      for (let c = 0; c < CHOROBOBO_CIRCUITS.length; c++) {
+        const circuit = CHOROBOBO_CIRCUITS[c];
+        const isCurrentCircuit = (c === currentCircuitIdx);
+        const gates = circuit.gates;
+        const baseCol = circuit.palIdx; // 4 = Rojo, 10 = Morado, 9 = Naranja
+
+        for (let i = 0; i < gates.length; i++) {
+          const g = gates[i];
+          const isAct = isCurrentCircuit && (i === activeGate);
+          const isNext = isCurrentCircuit && (i === (activeGate + 1) % gates.length);
+          const col = isAct ? 3 : (isNext ? 2 : baseCol);
+
+          const hw = g.w * 0.5, hh = g.h * 0.5;
+          const gFloor = getTerrainHeightMeters(g.x, g.z);
+          const gCenterY = gFloor + g.y;
+          const yBot = gFloor + Math.max(2.0, g.y - hh);
+          const yTop = gCenterY + hh;
+
+          const lx = g.x - g.nx * hw, lz = g.z - g.nz * hw;
+          const rx = g.x + g.nx * hw, rz = g.z + g.nz * hw;
+
+          // Postes laterales desde el suelo hasta el tope + travesaño superior e inferior orientados 3D
+          projLine(lx, gFloor, lz, lx, yTop, lz, 0, col);
+          projLine(rx, gFloor, rz, rx, yTop, rz, 0, col);
+          projLine(lx, yTop,   lz, rx, yTop, rz, 0, isAct ? 2 : col);
+          projLine(lx, yBot,   lz, rx, yBot, rz, 0, col);
+
+          // Línea guía en el suelo hacia la siguiente puerta del circuito activo
+          if (isCurrentCircuit) {
+            const gNxt = gates[(i + 1) % gates.length];
+            const fNxt = getTerrainHeightMeters(gNxt.x, gNxt.z);
+            projLine(g.x, gFloor + 0.6, g.z, gNxt.x, fNxt + 0.6, gNxt.z, 2, baseCol);
+          }
+
+          if (isAct) {
+            // Chevron luminoso sobre la puerta activa actual (Gate 1..15)
+            projLine(g.x, yTop + 2.0, g.z, g.x - g.nx * 3.5, yTop + 5.0, g.z - g.nz * 3.5, 0, 2);
+            projLine(g.x, yTop + 2.0, g.z, g.x + g.nx * 3.5, yTop + 5.0, g.z + g.nz * 3.5, 0, 2);
+          }
         }
       }
     }
@@ -1986,8 +2113,10 @@
       drawInavText320(`${vario.toFixed(1)}M/S`,   252, 120, WHITE);
 
       const brgDeg = Math.round(gateBearingRad * RAD2DEG);
-      drawHomeIcon320(246, 155);
-      drawInavText320(`G${activeGate + 1} ${brgDeg >= 0 ? '+' : ''}${brgDeg}`, 258, 156, WHITE);
+      const cShort = CHOROBOBO_CIRCUITS[currentCircuitIdx].shortCode;
+      drawHomeIcon320(238, 155);
+      drawInavText320(`${cShort} ${activeGate + 1}/15`, 250, 140, WHITE);
+      drawInavText320(`BRG ${brgDeg >= 0 ? '+' : ''}${brgDeg}`, 250, 156, WHITE);
 
       const mins = String(Math.floor(flightTimeSec / 60)).padStart(2, '0');
       const secs = String(Math.floor(flightTimeSec % 60)).padStart(2, '0');
@@ -2019,6 +2148,16 @@
         showToast(TERRAIN_THEMES[currentThemeIdx].name);
         playTone(700, 0.04);
       }
+      if (hwInput.justPressed('UP')) {
+        selectChoroboboCircuit(currentCircuitIdx + 1, craft);
+        craft.reset();
+        return true;
+      }
+      if (hwInput.justPressed('DOWN')) {
+        selectChoroboboCircuit(currentCircuitIdx - 1, craft);
+        craft.reset();
+        return true;
+      }
       if (hwInput.justPressed('LEFT') || hwInput.justPressed('RIGHT')) {
         const nextId = activeRomId === 'fpv_drone' ? 'fpv_wing' : 'fpv_drone';
         launchRom(nextId);
@@ -2027,8 +2166,8 @@
       }
       if (capTouch.justTapped && capTouch.ly64 <= 12) {
         if (capTouch.lx128 < 45) {
-          generateGentleVoxelMap(currentThemeIdx + 1);
-          showToast(TERRAIN_THEMES[currentThemeIdx].name);
+          selectChoroboboCircuit(currentCircuitIdx + 1, craft);
+          craft.reset();
         } else if (capTouch.lx128 < 85) {
           cycleCraftFlightMode(craft);
         } else {
@@ -2149,13 +2288,16 @@
       totalDistKm: 0,
 
       reset() {
-        this.px = 0; this.py = 2.2; this.pz = -10;
-        this.vx = 0; this.vy = 0; this.vz = 0;
+        const g0 = CIRCUIT_GATES[0];
+        this.px = g0.x - g0.tx * 35.0;
+        this.pz = g0.z - g0.tz * 35.0;
+        this.py = getTerrainHeightMeters(this.px, this.pz) + 12.0;
+        this.vx = g0.tx * 8.0; this.vy = 0; this.vz = g0.tz * 8.0;
         this.pitchRate = 0; this.rollRate = 0; this.yawRate = 0;
-        this.rx = 1; this.ry = 0; this.rz = 0;
-        this.ux = 0; this.uy = 1; this.uz = 0;
-        this.fx = 0; this.fy = 0; this.fz = 1;
-        this.motorRpm = 0.35;
+        this.fx = g0.tx; this.fy = 0; this.fz = g0.tz;
+        this.ux = 0;     this.uy = 1; this.uz = 0;
+        this.rx = g0.nx; this.ry = 0; this.rz = g0.nz;
+        this.motorRpm = 0.36;
         this.activeGate = 0;
         this.flightTime = 0;
         this.totalDistKm = 0;
@@ -2276,9 +2418,11 @@
         }
 
         const g = CIRCUIT_GATES[this.activeGate];
-        if (Math.hypot(this.px - g.x, this.py - g.y, this.pz - g.z) < 3.6) {
+        const gFloor = getTerrainHeightMeters(g.x, g.z);
+        if (Math.hypot(this.px - g.x, this.pz - g.z) < 14.0 && Math.abs(this.py - (gFloor + g.y)) < 11.0) {
           this.activeGate = (this.activeGate + 1) % CIRCUIT_GATES.length;
-          showToast(`GATE ${this.activeGate}/${CIRCUIT_GATES.length} OK!`);
+          const cShort = CHOROBOBO_CIRCUITS[currentCircuitIdx].shortCode;
+          showToast(`${cShort} GATE ${this.activeGate || 15}/15 OK!`);
           playTone(880, 0.08);
         }
       },
@@ -2356,13 +2500,16 @@
       totalDistKm: 0,
 
       reset() {
-        this.px = 0; this.py = 4.0; this.pz = -14;
+        const g0 = CIRCUIT_GATES[0];
+        this.px = g0.x - g0.tx * 42.0;
+        this.pz = g0.z - g0.tz * 42.0;
+        this.py = getTerrainHeightMeters(this.px, this.pz) + 12.0;
         this.spd = 15.5;
-        this.vx = 0; this.vy = 0; this.vz = 15.5;
+        this.vx = g0.tx * 15.5; this.vy = 0; this.vz = g0.tz * 15.5;
         this.pitchRate = 0; this.rollRate = 0; this.yawRate = 0;
-        this.rx = 1; this.ry = 0; this.rz = 0;
-        this.ux = 0; this.uy = 1; this.uz = 0;
-        this.fx = 0; this.fy = 0; this.fz = 1;
+        this.fx = g0.tx; this.fy = 0; this.fz = g0.tz;
+        this.ux = 0;     this.uy = 1; this.uz = 0;
+        this.rx = g0.nx; this.ry = 0; this.rz = g0.nz;
         this.motorRpm = 0.46;
         this.activeGate = 0;
         this.flightTime = 0;
@@ -2522,9 +2669,11 @@
         }
 
         const g = CIRCUIT_GATES[this.activeGate];
-        if (Math.hypot(this.px - g.x, this.py - g.y, this.pz - g.z) < 3.8) {
+        const gFloor = getTerrainHeightMeters(g.x, g.z);
+        if (Math.hypot(this.px - g.x, this.pz - g.z) < 15.0 && Math.abs(this.py - (gFloor + g.y)) < 11.5) {
           this.activeGate = (this.activeGate + 1) % CIRCUIT_GATES.length;
-          showToast(`GATE ${this.activeGate}/${CIRCUIT_GATES.length} OK!`);
+          const cShort = CHOROBOBO_CIRCUITS[currentCircuitIdx].shortCode;
+          showToast(`${cShort} GATE ${this.activeGate || 15}/15 OK!`);
           playTone(920, 0.08);
         }
       },
@@ -2581,6 +2730,8 @@
         });
       }
     };
+    fpvDroneSim.reset();
+    fpvWingSim.reset();
 
     /***************************************************************************
      * 7. SISTEMA OPERATIVO RETRO-GO (SOLO SIMULADORES FPV + DIAG HARDWARE)
@@ -2646,9 +2797,9 @@
     let rgOverlayCursor = 0;
     const RG_OVERLAY_ITEMS = [
       'CONTINUE FLIGHT',
+      'CIRCUITO: ROJO/MOR/NAR',
       'SWITCH: DRONE <-> WING',
-      'TERRAIN THEME (1-3)',
-      'RESET AIRCRAFT',
+      'TERRAIN THEME (1-4)',
       'QUIT TO RETRO-GO'
     ];
     let toastMsg = '';
@@ -2886,16 +3037,18 @@
         if (rgOverlayCursor === 0) {
           rgOverlayOpen = false;
         } else if (rgOverlayCursor === 1) {
+          const activeSim = activeRomId === 'fpv_wing' ? fpvWingSim : fpvDroneSim;
+          selectChoroboboCircuit(currentCircuitIdx + 1, activeSim);
+          activeSim.reset();
+          rgOverlayOpen = false;
+        } else if (rgOverlayCursor === 2) {
           const nextId = activeRomId === 'fpv_drone' ? 'fpv_wing' : 'fpv_drone';
           launchRom(nextId);
           showToast(nextId === 'fpv_drone' ? 'SIM: FPV DRONE' : 'SIM: FIXED-WING');
-        } else if (rgOverlayCursor === 2) {
+        } else if (rgOverlayCursor === 3) {
           generateGentleVoxelMap(currentThemeIdx + 1);
           showToast(TERRAIN_THEMES[currentThemeIdx].name);
           rgOverlayOpen = false;
-        } else if (rgOverlayCursor === 3) {
-          launchRom(activeRomId);
-          showToast('CRAFT RESET');
         } else if (rgOverlayCursor === 4) {
           rgOverlayOpen = false;
           osState = 'launcher';
