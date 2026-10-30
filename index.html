@@ -472,7 +472,7 @@
         <span>PWR</span>
         <span id="sdLed" class="led sd-act" title="Flash / SD Activity"></span>
         <span>SPI</span>
-        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + VOXEL (v13)</span>
+        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + INAV (v14)</span>
       </div>
       <div class="top-hw-pills">
         <button id="btnPalette" class="pill-btn">🎨 IPS 60MHz</button>
@@ -1170,27 +1170,27 @@
       document.getElementById('uiHintBar').textContent = hint;
     }
 
-            /***************************************************************************
-     * 4. MOTOR TERRENO VOXEL (COMANCHE) + PROYECCION 3D EXACTA + INAV OSD
+                    /***************************************************************************
+     * 4. MOTOR VOXEL (TERRENO SUAVE + CIELO AZUL CON NUBES VOXEL) + INAV OSD 320x240
      ***************************************************************************/
     const DEG2RAD = Math.PI / 180.0;
+    const RAD2DEG = 180.0 / Math.PI;
 
-    // Mapa Voxel 512x512 en PSRAM (256KB alturas + 512KB color RGB565 = 768KB)
-    // Reemplaza la antigua cuadrícula plana por terreno Voxel con elevaciones suaves (0m a 3.2m)
+    // Mapa Voxel 512x512 en PSRAM (Terreno + Capa de Nubes 3D con la misma técnica)
     const MAP_DIM   = 512;
     const MAP_MASK  = 511;
     const MAP_SHIFT = 9;
-    const MAP_SCALE = 4.0; // 1 metro = 4 texels (alta definición cerca del suelo)
-    const HEIGHT_SCALE = 0.025; // 1 unidad = 2.5 cm -> elevaciones suaves de 0.0m a 3.2m
+    const MAP_SCALE = 4.0;      // 1 metro = 4 texels en terreno
+    const HEIGHT_SCALE = 0.025; // Elevaciones suaves de 0.0m a 3.2m
 
-    const voxHeight = new Uint8Array(MAP_DIM * MAP_DIM);
-    const voxColor  = new Uint16Array(MAP_DIM * MAP_DIM);
+    const voxHeight  = new Uint8Array(MAP_DIM * MAP_DIM);
+    const voxColor   = new Uint16Array(MAP_DIM * MAP_DIM);
+    const voxSkyMap  = new Uint16Array(MAP_DIM * MAP_DIM); // Textura Voxel 512x512 de cielo azul + nubes
 
     // Buffer intermedio des-rotado 256x256 para permitir Roll de 360° sin huecos
     const VOX_W = 256;
     const VOX_H = 256;
     const voxBuf = new Uint16Array(VOX_W * VOX_H);
-    const skyGradLut = new Uint16Array(512);
 
     // Circuito original de 6 Gates
     const CIRCUIT_GATES = [
@@ -1202,34 +1202,37 @@
       { x:  0, y: 2.5, z: -18, w: 5.0, h: 4.0 }
     ];
 
-    // 3 temas visuales suaves para el mismo mapa con colinas bajas
+    // 3 temas visuales con Cielo Azul + Nubes Voxel
     const TERRAIN_THEMES = [
       {
-        name: 'PRADERA VOXEL',
-        skyTop: [6, 12, 24],
-        skyBot: [18, 34, 58],
-        fogCol: rgb565(18, 34, 58),
-        baseA: [22, 68, 34],
-        baseB: [28, 82, 40],
-        hillCol: [65, 110, 48]
+        name: 'CAMPO INAV DIA',
+        skyZenith:  [52, 98, 175],
+        skyHorizon: [195, 192, 182],
+        cloudCol:   [245, 244, 240],
+        fogCol:     rgb565(188, 186, 175),
+        baseA:      [76, 98, 44],
+        baseB:      [88, 110, 50],
+        hillCol:    [122, 114, 62]
       },
       {
-        name: 'DESIERTO SUAVE',
-        skyTop: [10, 16, 34],
-        skyBot: [48, 42, 52],
-        fogCol: rgb565(48, 42, 52),
-        baseA: [92, 68, 42],
-        baseB: [108, 80, 48],
-        hillCol: [148, 108, 62]
+        name: 'PRADERA VERDE',
+        skyZenith:  [36, 88, 180],
+        skyHorizon: [155, 195, 225],
+        cloudCol:   [248, 250, 252],
+        fogCol:     rgb565(155, 195, 225),
+        baseA:      [38, 92, 42],
+        baseB:      [46, 106, 48],
+        hillCol:    [86, 134, 58]
       },
       {
-        name: 'NOCTURNO VOXEL',
-        skyTop: [4, 6, 12],
-        skyBot: [8, 20, 28],
-        fogCol: rgb565(8, 20, 28),
-        baseA: [8, 32, 28],
-        baseB: [12, 46, 38],
-        hillCol: [24, 92, 72]
+        name: 'ATARDECER DORADO',
+        skyZenith:  [42, 68, 135],
+        skyHorizon: [222, 168, 118],
+        cloudCol:   [252, 225, 192],
+        fogCol:     rgb565(215, 165, 118),
+        baseA:      [96, 78, 44],
+        baseB:      [112, 90, 50],
+        hillCol:    [152, 116, 64]
       }
     ];
     let currentThemeIdx = 0;
@@ -1238,25 +1241,21 @@
       return v < 0 ? 0 : (v > 255 ? 255 : (v | 0));
     }
 
-    function buildSkyLut(theme) {
-      const [rt, gt, bt] = theme.skyTop;
-      const [rb, gb, bb] = theme.skyBot;
-      for (let i = 0; i < 512; i++) {
-        const t = Math.max(0, Math.min(1, i / 256));
-        const d = (i & 1) ? 1.0 : -1.0;
-        const r = clampByte(rt + (rb - rt) * t + d);
-        const g = clampByte(gt + (gb - gt) * t + d);
-        const b = clampByte(bt + (bb - bt) * t + d);
-        skyGradLut[i] = rgb565(r, g, b);
-      }
+    const sinLut = new Float32Array(512);
+    for (let i = 0; i < 512; i++) sinLut[i] = Math.sin((i * 2 * Math.PI) / 512);
+
+    function fbmCloud(mx, mz) {
+      const n1 = sinLut[(mx + mz) & 511] * sinLut[(mx - mz + 128) & 511];
+      const n2 = sinLut[(mx * 2 + mz * 3 + 40) & 511] * sinLut[(mz * 2 - mx + 190) & 511];
+      const n3 = sinLut[(mx * 4 - mz * 3 + 70) & 511] * sinLut[(mx * 3 + mz * 5 + 110) & 511];
+      const n4 = sinLut[(mx * 7 + mz * 6) & 511];
+      return n1 * 0.45 + n2 * 0.30 + n3 * 0.16 + n4 * 0.09;
     }
 
-    // Genera el terreno Voxel con elevaciones pequeñas y suaves (0.0m a 3.2m)
+    // Genera el Terreno Voxel suave (0..3.2m) Y el Domo de Cielo Azul con Nubes Voxel
     function generateGentleVoxelMap(themeIdx) {
       currentThemeIdx = ((themeIdx % TERRAIN_THEMES.length) + TERRAIN_THEMES.length) % TERRAIN_THEMES.length;
       const theme = TERRAIN_THEMES[currentThemeIdx];
-      buildSkyLut(theme);
-
       const TWO_PI_512 = (2 * Math.PI) / 512;
 
       for (let mz = 0; mz < MAP_DIM; mz++) {
@@ -1266,30 +1265,34 @@
         for (let mx = 0; mx < MAP_DIM; mx++) {
           const wx = ((mx <= 256 ? mx : mx - 512)) / MAP_SCALE;
 
-          // Ondulaciones suaves periódicas (colinas bajas de 0m a 3.2m)
+          // 1. Alturas suaves del terreno (0.0m a 3.2m)
           const wave1 = Math.sin(mx * TWO_PI_512 * 3) * Math.cos(mz * TWO_PI_512 * 3);
           const wave2 = Math.sin((mx + mz) * TWO_PI_512 * 5) * 0.5;
           const wave3 = Math.cos((mx - mz * 2) * TWO_PI_512 * 8) * 0.25;
           let rawH = Math.max(0, (wave1 + wave2 + wave3 + 0.55) * 52);
 
-          // Mantener suave/plano cerca de los Gates y del punto de despegue (0, -10)
           const distSpawn = Math.hypot(wx, wz + 10);
-          if (distSpawn < 14) {
-            rawH *= Math.max(0, (distSpawn - 6) / 8);
-          }
+          if (distSpawn < 14) rawH *= Math.max(0, (distSpawn - 6) / 8);
+
           for (let g = 0; g < CIRCUIT_GATES.length; g++) {
             const gt = CIRCUIT_GATES[g];
             const dg = Math.hypot(wx - gt.x, wz - gt.z);
-            if (dg < 9) {
-              rawH *= Math.max(0.1, (dg - 3) / 6);
-            }
+            if (dg < 9) rawH *= Math.max(0.1, (dg - 3) / 6);
           }
-
           voxHeight[zOff + mx] = Math.max(0, Math.min(130, Math.round(rawH)));
+
+          // 2. Mapa Voxel de Cielo Azul + Nubes suaves (con la misma técnica 512x512)
+          const cn = fbmCloud(mx, mz);
+          const cloudDensity = Math.max(0, Math.min(1, (cn - 0.08) * 1.85));
+          const cSmooth = cloudDensity * cloudDensity * (3 - 2 * cloudDensity);
+          const sr = theme.skyZenith[0] * (1 - cSmooth) + theme.cloudCol[0] * cSmooth;
+          const sg = theme.skyZenith[1] * (1 - cSmooth) + theme.cloudCol[1] * cSmooth;
+          const sb = theme.skyZenith[2] * (1 - cSmooth) + theme.cloudCol[2] * cSmooth;
+          voxSkyMap[zOff + mx] = rgb565(clampByte(sr), clampByte(sg), clampByte(sb));
         }
       }
 
-      // Colorear el terreno Voxel con sombreado solar suave + textura de referencia espacial
+      // 3. Colorear terreno con franjas de cultivo/pradera (como en la foto de INAV) + sombreado solar
       for (let mz = 0; mz < MAP_DIM; mz++) {
         const zOff = mz << MAP_SHIFT;
         for (let mx = 0; mx < MAP_DIM; mx++) {
@@ -1297,20 +1300,20 @@
           const hR = voxHeight[zOff + ((mx + 2) & MAP_MASK)];
           const hD = voxHeight[((mz + 2) & MAP_MASK) << MAP_SHIFT | mx];
           const slope = (h - hR) * 1.8 + (h - hD) * 1.4;
-          const shade = Math.max(0.65, Math.min(1.30, 1.0 + slope * 0.025));
+          const shade = Math.max(0.68, Math.min(1.28, 1.0 + slope * 0.025));
 
-          // Damero suave cada 2 metros (8 texels) + líneas de referencia cada 8 metros (32 texels)
-          const checker = ((mx >> 3) ^ (mz >> 3)) & 1;
-          const isGridLine = ((mx & 31) === 0) || ((mz & 31) === 0);
-          const base = checker ? theme.baseA : theme.baseB;
+          // Franjas de campo agrícola / pradera + caminos rurales
+          const fieldStripe = ((mx >> 4) + ((mz >> 5) & 1)) & 1;
+          const isPath = ((mx & 63) === 0) || ((mz & 63) === 0);
+          const base = fieldStripe ? theme.baseA : theme.baseB;
           const tHill = Math.min(1.0, h / 95.0);
 
           let r = base[0] * (1 - tHill) + theme.hillCol[0] * tHill;
           let g = base[1] * (1 - tHill) + theme.hillCol[1] * tHill;
           let b = base[2] * (1 - tHill) + theme.hillCol[2] * tHill;
 
-          if (isGridLine) {
-            r += 14; g += 22; b += 16;
+          if (isPath) {
+            r += 24; g += 18; b += 8;
           }
 
           voxColor[zOff + mx] = rgb565(
@@ -1334,15 +1337,17 @@
       return (((c1 & 0xF7DE) >> 1) + ((c2 & 0xF7DE) >> 1));
     }
 
-    // Focal unificada para que el terreno Voxel y las líneas 3D coincidan al sub-píxel
-    const FOCAL_128 = 68.0;
-    const FOCAL_240 = FOCAL_128 * SCALE_Y; // 255.0 en espacio vertical de 240px
+    // Focal unificada para que Voxel Terrain, Voxel Sky, Gates y Horizonte Artificial coincidan al 100%
+    const FOCAL_128  = 68.0;
+    const FOCAL_240  = FOCAL_128 * SCALE_Y; // 255.0
     const BLIT_SCALE = 0.62;
-    const FOCAL_VOX = FOCAL_240 * BLIT_SCALE; // 158.1 en buffer Voxel 256x256
+    const FOCAL_VOX  = FOCAL_240 * BLIT_SCALE; // 158.1
     let lastRollAngle = 0;
+    let cloudDriftX = 0;
 
-    // Renderizador Voxel Space con perspectiva 3D 100% idéntica a projLine
-    function renderVoxelTerrain(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz) {
+    // Renderizador Voxel de Terreno + Cielo con Nubes 3D
+    function renderVoxelTerrainAndSky(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz, dt = 0.016) {
+      cloudDriftX = (cloudDriftX + dt * 1.8) % 512;
       if (SPI_MODES[paletteIdx].mono) {
         fbClear(0);
         return;
@@ -1351,9 +1356,7 @@
       const theme = TERRAIN_THEMES[currentThemeIdx];
       const fogCol = theme.fogCol;
 
-      // 1. Ángulo de Roll en pantalla y base des-rotada exacta (R0, U0, F)
-      // Nota: como X en 320x240 tiene escala 2.5 y Y tiene escala 3.75 (aspecto 1.5),
-      // usamos espacio isótropo en el buffer intermedio y proyectamos con la misma focal
+      // 1. Extraer ángulo de Roll y base des-rotada exacta (R0, U0, F)
       const upMag = Math.hypot(cRy, cUy);
       if (upMag > 0.04) {
         lastRollAngle = Math.atan2(cRy, cUy);
@@ -1361,40 +1364,39 @@
       const phi = lastRollAngle;
       const cosR = Math.cos(phi), sinR = Math.sin(phi);
 
-      // Vector derecho horizontal des-rotado (su componente Y es exactamente 0)
       let R0x = cosR * cRx - sinR * cUx;
       let R0z = cosR * cRz - sinR * cUz;
       const rLen = Math.hypot(R0x, R0z) || 1.0;
       R0x /= rLen;
       R0z /= rLen;
 
-      // Vector horizontal de avance H0 en el plano del suelo (X,Z) perpendicular a R0
       const H0x = -R0z;
       const H0z =  R0x;
 
-      // Vector Up des-rotado U0
       const U0x = sinR * cRx + cosR * cUx;
       const U0y = sinR * cRy + cosR * cUy;
       const U0z = sinR * cRz + cosR * cUz;
 
-      // Proyecciones exactas de U0 y F sobre el vector horizontal H0
       const uH = U0x * H0x + U0z * H0z;
       const fH = cFx * H0x + cFz * H0z;
 
-      // Línea de horizonte exacta en el buffer 256x256 cuando s -> infinito
       const fHClamped = Math.abs(fH) < 0.15 ? (fH >= 0 ? 0.15 : -0.15) : fH;
       const horizonV = Math.max(-128, Math.min(384, Math.round(128 - (uH / fHClamped) * FOCAL_VOX)));
 
       const invFocalVox = 1.0 / FOCAL_VOX;
-      const maxDist = 75.0; // Mismo alcance de visión (75m) que projLine original
+      const maxDist = 75.0;
       const startX = camX * MAP_SCALE;
       const startZ = camZ * MAP_SCALE;
+      const skyStartX = camX * 1.2 + cloudDriftX;
+      const skyStartZ = camZ * 1.2;
 
-      // 2. Raycasting Voxel Front-to-Back por cada columna u (0..255)
+      // 2. Raycasting por columna u (0..255): Terreno abajo + Techo de Nubes Voxel arriba
       for (let u = 0; u < VOX_W; u++) {
         const xi = (u - 128) * invFocalVox * Math.max(0.25, fH);
-        const dirX = (H0x + xi * R0x) * MAP_SCALE;
-        const dirZ = (H0z + xi * R0z) * MAP_SCALE;
+        const dirW_X = H0x + xi * R0x;
+        const dirW_Z = H0z + xi * R0z;
+        const dirX = dirW_X * MAP_SCALE;
+        const dirZ = dirW_Z * MAP_SCALE;
 
         let yMax = VOX_H;
         let s = 0.6;
@@ -1414,9 +1416,9 @@
             if (v < yMax) {
               const vTop = v < 0 ? 0 : v;
               let col = voxColor[mIdx];
-              if (s > 42.0) {
+              if (s > 38.0) {
                 col = blend565Half(col, fogCol);
-                if (s > 58.0) col = blend565Half(col, fogCol);
+                if (s > 55.0) col = blend565Half(col, fogCol);
               }
               let ptr = (vTop << 8) | u;
               for (let y = vTop; y < yMax; y++, ptr += VOX_W) {
@@ -1430,17 +1432,32 @@
           ds += 0.014;
         }
 
-        // Cielo visible en la columna u (0 .. yMax-1)
+        // 3. Cielo Azul + Nubes proyectadas en perspectiva Voxel (misma técnica de plano horizontal a altura fija)
         if (yMax > 0) {
           let ptr = u;
           for (let y = 0; y < yMax; y++, ptr += VOX_W) {
-            const lutIdx = Math.max(0, Math.min(511, 256 - (horizonV - y)));
-            voxBuf[ptr] = skyGradLut[lutIdx];
+            const dyHoriz = horizonV - y;
+            if (dyHoriz <= 2) {
+              // Bruma cálida justo en la línea del horizonte
+              voxBuf[ptr] = fogCol;
+            } else {
+              // Intersección del rayo con el techo de nubes Voxel
+              const sCloud = (2400.0 / (dyHoriz + 10));
+              const cmx = (skyStartX + dirW_X * sCloud) & MAP_MASK;
+              const cmz = (skyStartZ + dirW_Z * sCloud) & MAP_MASK;
+              let skyCol = voxSkyMap[(cmz << MAP_SHIFT) | cmx];
+              // Mezclar suavemente con la bruma cerca del horizonte (dyHoriz < 36)
+              if (dyHoriz < 36) {
+                skyCol = blend565Half(skyCol, fogCol);
+                if (dyHoriz < 16) skyCol = blend565Half(skyCol, fogCol);
+              }
+              voxBuf[ptr] = skyCol;
+            }
           }
         }
       }
 
-      // 3. Blit Rotado en Punto Fijo 16.16 hacia la pantalla completa 320x240
+      // 4. Blit Rotado en Punto Fijo 16.16 hacia la pantalla completa 320x240
       const du_dx = ( cosR * BLIT_SCALE * 65536) | 0;
       const dv_dx = (-sinR * BLIT_SCALE * 65536) | 0;
       const du_dy = ( sinR * BLIT_SCALE * 65536) | 0;
@@ -1468,9 +1485,22 @@
       }
     }
 
-    // Proyector 3D isótropo en 320x240 para que Gates y Horizonte coincidan al 100% con el terreno Voxel
-    function createIsotropicProjector(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz) {
-      return function projLine(x0, y0, z0, x1, y1, z1, dash = 0, col = 1) {
+    // Proyector 3D exacto en coordenadas nativas 320x240
+    function createProjector320(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz) {
+      function projPoint320(wx, wy, wz) {
+        const dx = wx - camX, dy = wy - camY, dz = wz - camZ;
+        const cx = dx*cRx + dy*cRy + dz*cRz;
+        const cy = dx*cUx + dy*cUy + dz*cUz;
+        const cz = dx*cFx + dy*cFy + dz*cFz;
+        if (cz < 0.25) return null;
+        return {
+          sx: 160 + (cx * FOCAL_240) / cz,
+          sy: 120 - (cy * FOCAL_240) / cz,
+          cz
+        };
+      }
+
+      function projLine(x0, y0, z0, x1, y1, z1, dash = 0, col = 1) {
         const dx0 = x0 - camX, dy0 = y0 - camY, dz0 = z0 - camZ;
         const dx1 = x1 - camX, dy1 = y1 - camY, dz1 = z1 - camZ;
         let cx0 = dx0*cRx + dy0*cRy + dz0*cRz, cy0 = dx0*cUx + dy0*cUy + dz0*cUz, cz0 = dx0*cFx + dy0*cFy + dz0*cFz;
@@ -1480,16 +1510,16 @@
         if (cz0 < 0.2) { const t = (0.2 - cz0)/(cz1 - cz0); cx0 += t*(cx1 - cx0); cy0 += t*(cy1 - cy0); cz0 = 0.2; }
         else if (cz1 < 0.2) { const t = (0.2 - cz1)/(cz0 - cz1); cx1 += t*(cx0 - cx1); cy1 += t*(cy0 - cy1); cz1 = 0.2; }
 
-        // Proyección con la misma focal (FOCAL_240 = 255.0) en ambos ejes X e Y de 320x240
         const sx0 = 160 + (cx0 * FOCAL_240) / cz0;
         const sy0 = 120 - (cy0 * FOCAL_240) / cz0;
         const sx1 = 160 + (cx1 * FOCAL_240) / cz1;
         const sy1 = 120 - (cy1 * FOCAL_240) / cz1;
         fbDrawLine(sx0 / SCALE_X, sy0 / SCALE_Y, sx1 / SCALE_X, sy1 / SCALE_Y, dash, col);
-      };
+      }
+
+      return { projPoint320, projLine };
     }
 
-    // Dibuja los 6 Gates del circuito anclados sobre el terreno Voxel
     function renderCircuitGates(projLine, activeGate) {
       for (let i = 0; i < CIRCUIT_GATES.length; i++) {
         const g = CIRCUIT_GATES[i];
@@ -1508,75 +1538,259 @@
       }
     }
 
-    // Texto con sombra 1px para OSD transparente estilo INAV sobre pantalla completa
-    function fbDrawTextOsd(str, x, y, color = 1) {
-      fbDrawText(str, x + 0.5, y + 0.4, 0);
-      fbDrawText(str, x, y, color);
+    /***************************************************************************
+     * PRIMITIVAS NATIVAS 320x240 PARA EL OSD ESTILO INAV (BLANCO CON BORDE NEGRO)
+     ***************************************************************************/
+    function setPx320(x, y, col565) {
+      const ix = x | 0, iy = y | 0;
+      if (ix >= 0 && ix < DISP_W && iy >= 0 && iy < DISP_H) {
+        vram565[iy * DISP_W + ix] = col565;
+      }
     }
 
-    // OSD estilo INAV superpuesto sobre la vista FPV a pantalla completa (sin barras negras)
-    function renderInavOsd({
-      craftName, mode, spdMs, thrPct, altM, vario,
-      activeGate, totalGates, gateDist, gateBearing,
-      cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz,
-      flightTimeSec
+    // Dibuja un bloque de 2x2 con contorno negro de 1px alrededor
+    function drawOutlinedDot320(x, y, fg565 = 0xFFFF) {
+      const ix = x | 0, iy = y | 0;
+      for (let dy = -1; dy <= 2; dy++) {
+        const py = iy + dy;
+        if (py < 0 || py >= DISP_H) continue;
+        const row = py * DISP_W;
+        for (let dx = -1; dx <= 2; dx++) {
+          const px = ix + dx;
+          if (px < 0 || px >= DISP_W) continue;
+          if (dx >= 0 && dx <= 1 && dy >= 0 && dy <= 1) {
+            vram565[row + px] = fg565;
+          } else if (vram565[row + px] !== fg565) {
+            vram565[row + px] = 0x0000;
+          }
+        }
+      }
+    }
+
+    // Dibuja un círculo pequeño estilo INAV (como las bolitas del horizonte artificial y escalas verticales)
+    function drawInavCircleDot320(cx, cy, r = 2, fg565 = 0xFFFF) {
+      const ix = Math.round(cx), iy = Math.round(cy);
+      for (let dy = -r - 1; dy <= r + 1; dy++) {
+        for (let dx = -r - 1; dx <= r + 1; dx++) {
+          const d2 = dx * dx + dy * dy;
+          if (d2 <= r * r) {
+            setPx320(ix + dx, iy + dy, fg565);
+          } else if (d2 <= (r + 1) * (r + 1) + 1) {
+            setPx320(ix + dx, iy + dy, 0x0000);
+          }
+        }
+      }
+    }
+
+    // Línea nativa en 320x240 con borde negro de 1px
+    function drawOutlinedLine320(x0, y0, x1, y1, fg565 = 0xFFFF) {
+      const steps = Math.max(1, Math.round(Math.hypot(x1 - x0, y1 - y0)));
+      for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        const x = Math.round(x0 + (x1 - x0) * t);
+        const y = Math.round(y0 + (y1 - y0) * t);
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            if (dx !== 0 || dy !== 0) setPx320(x + dx, y + dy, 0x0000);
+          }
+        }
+      }
+      for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        const x = Math.round(x0 + (x1 - x0) * t);
+        const y = Math.round(y0 + (y1 - y0) * t);
+        setPx320(x, y, fg565);
+      }
+    }
+
+    // Texto nativo 320x240 estilo chip OSD MAX7456 de INAV (blanco puro con borde negro de 1px)
+    const TICK_GLYPH = [2, 2, 0, 0, 0];
+    function drawInavText320(str, x320, y240, fg565 = 0xFFFF) {
+      const s = String(str).toUpperCase();
+      let cx = x320 | 0;
+      const cy = y240 | 0;
+
+      // Pasada 1: Contorno negro de 1px
+      for (let i = 0; i < s.length; i++) {
+        const g = s[i] === '\'' ? TICK_GLYPH : FONT_3X5[s[i]];
+        if (g) {
+          for (let r = 0; r < 5; r++) {
+            const rowBits = g[r];
+            for (let c = 0; c < 3; c++) {
+              if ((rowBits >> (2 - c)) & 1) {
+                const px = cx + c * 2;
+                const py = cy + r * 2;
+                for (let oy = -1; oy <= 2; oy++) {
+                  for (let ox = -1; ox <= 2; ox++) {
+                    setPx320(px + ox, py + oy, 0x0000);
+                  }
+                }
+              }
+            }
+          }
+        }
+        cx += 8;
+      }
+
+      // Pasada 2: Relleno blanco nítido 2x2 por texel de fuente
+      cx = x320 | 0;
+      for (let i = 0; i < s.length; i++) {
+        const g = s[i] === '\'' ? TICK_GLYPH : FONT_3X5[s[i]];
+        if (g) {
+          for (let r = 0; r < 5; r++) {
+            const rowBits = g[r];
+            for (let c = 0; c < 3; c++) {
+              if ((rowBits >> (2 - c)) & 1) {
+                const px = cx + c * 2;
+                const py = cy + r * 2;
+                setPx320(px,     py,     fg565);
+                setPx320(px + 1, py,     fg565);
+                setPx320(px,     py + 1, fg565);
+                setPx320(px + 1, py + 1, fg565);
+              }
+            }
+          }
+        }
+        cx += 8;
+      }
+    }
+
+    // Icono de batería INAV en 320x240
+    function drawBatteryIcon320(x, y) {
+      drawOutlinedLine320(x, y + 2, x + 7, y + 2);
+      drawOutlinedLine320(x, y + 11, x + 7, y + 11);
+      drawOutlinedLine320(x, y + 2, x, y + 11);
+      drawOutlinedLine320(x + 7, y + 2, x + 7, y + 11);
+      drawOutlinedLine320(x + 2, y, x + 5, y);
+      for (let py = y + 4; py <= y + 9; py++) {
+        for (let px = x + 2; px <= x + 5; px++) setPx320(px, py, 0xFFFF);
+      }
+    }
+
+    // Icono de Casa (Home / Gate) INAV en 320x240
+    function drawHomeIcon320(x, y) {
+      drawOutlinedLine320(x + 4, y, x, y + 4);
+      drawOutlinedLine320(x + 4, y, x + 8, y + 4);
+      drawOutlinedLine320(x + 1, y + 4, x + 1, y + 9);
+      drawOutlinedLine320(x + 7, y + 4, x + 7, y + 9);
+      drawOutlinedLine320(x + 1, y + 9, x + 7, y + 9);
+    }
+
+    // Renderizador completo del OSD estilo INAV (basado en la imagen de referencia del usuario)
+    function renderInavOsd320({
+      callsign, modeLabel, spdMs, thrPct, altM, vario,
+      activeGate, gateDist, gateBearingRad, totalDistKm,
+      flightTimeSec, camX, camY, camZ,
+      cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFz, projPoint320
     }) {
-      // 1. Barra Superior INAV OSD (Transparente, en la parte alta de la pantalla)
-      fbDrawTextOsd('4S 16.4V', 2, 2, 3);
-      fbDrawTextOsd(`${craftName}:${mode}`, 42, 2, mode === 'ACRO' ? 2 : 5);
+      const WHITE = 0xFFFF;
+      const GREEN_DOT = rgb565(120, 245, 120);
 
-      // Flecha de rumbo hacia el próximo Gate + distancia
-      const arrow = gateBearing < -0.35 ? '<<' : (gateBearing > 0.35 ? '>>' : '^^');
-      fbDrawTextOsd(`G${activeGate + 1}/${totalGates} ${arrow} ${Math.min(99, Math.round(gateDist))}M`, 80, 2, 2);
-
-      // Segunda fila superior: Telemetría alta (Velocidad, Altitud, Throttle)
-      fbDrawTextOsd(`SPD:${spdMs.toFixed(1)}M/S`, 2, 9, 1);
-      fbDrawTextOsd(`THR:${Math.round(thrPct)}%`, 48, 9, 2);
-      fbDrawTextOsd(`ALT:${altM.toFixed(1)}M`, 88, 9, 3);
-
-      // 2. Horizonte Artificial INAV en el centro (sigue el horizonte 3D real)
+      // 1. HORIZONTE ARTIFICIAL INAV (9 círculos proyectados en 3D usando la misma base R0, H0 del Voxel)
+      // Coincide con el horizonte Voxel a 14 decimales en cualquier combinación de Pitch, Roll y Yaw.
       const phi = Math.atan2(cRy, cUy);
       const cosR = Math.cos(phi), sinR = Math.sin(phi);
-      const R0x = cosR * cRx - sinR * cUx;
-      const R0z = cosR * cRz - sinR * cUz;
+      let R0x = cosR * cRx - sinR * cUx;
+      let R0z = cosR * cRz - sinR * cUz;
       const rLen = Math.hypot(R0x, R0z) || 1.0;
-      const H0x = -R0z / rLen, H0z = R0x / rLen;
-      const U0x = sinR * cRx + cosR * cUx, U0z = sinR * cRz + cosR * cUz;
-      const uH = U0x * H0x + U0z * H0z;
-      const fH = Math.max(0.2, cFx * H0x + cFz * H0z);
+      R0x /= rLen;
+      R0z /= rLen;
+      const H0x = -R0z, H0z = R0x;
 
-      // Desplazamiento de cabeceo en píxeles de 320x240
-      const pitchPx240 = Math.max(-75, Math.min(75, -(uH / fH) * FOCAL_240));
-      const hCx320 = 160 - sinR * pitchPx240;
-      const hCy240 = 120 + cosR * pitchPx240;
-
-      // Dibujar los segmentos del Horizonte Artificial INAV (- - -   o   - - -)
-      for (let seg = -3; seg <= 3; seg++) {
-        if (seg === 0) continue;
-        const d0 = seg * 14 - 4, d1 = seg * 14 + 4;
-        const x0 = (hCx320 + cosR * d0) / SCALE_X;
-        const y0 = (hCy240 - sinR * d0) / SCALE_Y;
-        const x1 = (hCx320 + cosR * d1) / SCALE_X;
-        const y1 = (hCy240 - sinR * d1) / SCALE_Y;
-        if (y0 > 14 && y0 < 56 && y1 > 14 && y1 < 56) {
-          fbDrawLine(x0, y0, x1, y1, 0, 3);
+      for (let i = -4; i <= 4; i++) {
+        const span = i * 4.2;
+        const wx = camX + H0x * 42.0 + R0x * span;
+        const wz = camZ + H0z * 42.0 + R0z * span;
+        const pt = projPoint320(wx, camY, wz);
+        if (pt && pt.sx >= 48 && pt.sx <= 272 && pt.sy >= 24 && pt.sy <= 218) {
+          drawInavCircleDot320(pt.sx, pt.sy, 2, i === 0 ? GREEN_DOT : WHITE);
         }
       }
 
-      // Retícula central fija INAV (- + -)
-      fbDrawLine(58, 32, 61, 32, 0, 2);
-      fbDrawLine(67, 32, 70, 32, 0, 2);
-      fbDrawLine(64, 30, 64, 34, 0, 2);
+      // 2. RETÍCULA CENTRAL FIJA INAV (───┐_┌───) en (160, 120)
+      drawOutlinedLine320(134, 120, 151, 120, WHITE);
+      drawOutlinedLine320(151, 120, 151, 125, WHITE);
+      drawOutlinedLine320(151, 125, 169, 125, WHITE);
+      drawOutlinedLine320(169, 125, 169, 120, WHITE);
+      drawOutlinedLine320(169, 120, 186, 120, WHITE);
 
-      // 3. Esquina inferior discreta (Variómetro y Cronómetro de vuelo INAV)
+      // Flecha de dirección hacia el próximo Gate justo encima de la retícula central (160, 102)
+      const ax = 160, ay = 101;
+      const sB = Math.sin(gateBearingRad), cB = Math.cos(gateBearingRad);
+      const tipX = ax + sB * 7, tipY = ay - cB * 7;
+      const lWingX = ax - sB * 5 - cB * 5, lWingY = ay + cB * 5 - sB * 5;
+      const rWingX = ax - sB * 5 + cB * 5, rWingY = ay + cB * 5 + sB * 5;
+      drawOutlinedLine320(tipX, tipY, lWingX, lWingY, WHITE);
+      drawOutlinedLine320(tipX, tipY, rWingX, rWingY, WHITE);
+      drawOutlinedLine320(lWingX, lWingY, rWingX, rWingY, WHITE);
+
+      // 3. ESCALAS VERTICALES LATERALES DE PUNTOS (Izquierda x=78 y Derecha x=242) + cursores '>' y '<'
+      for (let i = -6; i <= 6; i++) {
+        const py = 120 + i * 9;
+        const rad = (i & 1) === 0 ? 2 : 1;
+        drawInavCircleDot320(78,  py, rad, WHITE);
+        drawInavCircleDot320(242, py, rad, WHITE);
+      }
+      // Indicador '>' a la izquierda (x=83, y=120)
+      drawOutlinedLine320(82, 116, 87, 120, WHITE);
+      drawOutlinedLine320(87, 120, 82, 124, WHITE);
+      // Indicador '<' a la derecha (x=237, y=120)
+      drawOutlinedLine320(238, 116, 233, 120, WHITE);
+      drawOutlinedLine320(233, 120, 238, 124, WHITE);
+
+      // 4. BRÚJULA SUPERIOR CENTRAL (W ' | ' N ' | ' E) + NOMBRE DEL MODELO
+      const headingDeg = ((Math.atan2(H0x, H0z) * RAD2DEG) % 360 + 360) % 360;
+      const cardinals = ['N', 'I', 'E', 'I', 'S', 'I', 'W', 'I'];
+      const stepDeg = 45;
+      const baseIdx = Math.floor(headingDeg / stepDeg);
+      let compassStr = '';
+      for (let k = -2; k <= 2; k++) {
+        const idx = (baseIdx + k + 8) % 8;
+        compassStr += cardinals[idx] + (k < 2 ? '\'' : '');
+      }
+      drawInavText320(compassStr, 124, 10, WHITE);
+      drawInavText320(callsign,   112, 24, WHITE);
+
+      // 5. ESQUINA SUPERIOR DERECHA (Satélites + HDOP)
+      drawInavText320('SAT 12',   262, 22, WHITE);
+      drawInavText320('HDOP 1.2', 246, 36, WHITE);
+
+      // 6. COLUMNA IZQUIERDA (Velocidad km/h, Throttle %, Amperios, mAh, Voltaje Total y Voltaje por Celda)
+      const kmh = Math.round(spdMs * 3.6);
+      drawInavText320(`${String(kmh).padStart(2, ' ')}KMH`, 22, 115, WHITE);
+      drawInavText320(`THR ${Math.round(thrPct)}%`,         14, 134, WHITE);
+
+      const amps = (2.2 + (thrPct / 100) * 14.5).toFixed(1);
+      const mah  = Math.round(120 + flightTimeSec * 4.2);
+      const packV = Math.max(14.2, 16.8 - flightTimeSec * 0.005);
+      const cellV = (packV / 4).toFixed(2);
+
+      drawInavText320(`A ${amps}`,     14, 156, WHITE);
+      drawInavText320(`MAH ${mah}`,    14, 174, WHITE);
+      drawBatteryIcon320(10, 191);
+      drawInavText320(`${packV.toFixed(2)}V`, 22, 192, WHITE);
+      drawBatteryIcon320(10, 209);
+      drawInavText320(`${cellV}V`,     22, 210, WHITE);
+
+      // 7. COLUMNA DERECHA (Altitud Alt m, Variómetro m/s, Rumbo a Gate, Tiempo de Vuelo, Distancia)
+      drawInavText320(`ALT ${Math.round(altM)}M`, 252, 104, WHITE);
+      drawInavText320(`${vario.toFixed(1)}M/S`,   252, 120, WHITE);
+
+      const brgDeg = Math.round(gateBearingRad * RAD2DEG);
+      drawHomeIcon320(246, 155);
+      drawInavText320(`G${activeGate + 1} ${brgDeg >= 0 ? '+' : ''}${brgDeg}`, 258, 156, WHITE);
+
       const mins = String(Math.floor(flightTimeSec / 60)).padStart(2, '0');
       const secs = String(Math.floor(flightTimeSec % 60)).padStart(2, '0');
-      const vsSign = vario >= 0 ? '+' : '';
-      fbDrawTextOsd(`V/S:${vsSign}${vario.toFixed(1)}`, 2, 58, vario >= 0 ? 3 : 9);
-      fbDrawTextOsd(`FLY ${mins}:${secs}`, 88, 58, 1);
+      drawInavText320(`FLY ${mins}:${secs}`,      246, 174, WHITE);
+      drawInavText320(`TD ${totalDistKm.toFixed(2)}`, 246, 192, WHITE);
+      drawHomeIcon320(246, 209);
+      drawInavText320(`DST ${Math.min(999, Math.round(gateDist))}M`, 258, 210, WHITE);
+
+      // 8. CENTRO INFERIOR (Modo de Vuelo: HOR / ACRO / STAB)
+      drawInavText320(modeLabel, 146, 214, WHITE);
     }
 
-    // Atajos en vuelo (SELECT cambia paleta de terreno, D-Pad cambia entre Dron y Ala Fija)
     function handleInFlightShortcuts(craft) {
       if (hwInput.justPressed('SELECT')) {
         generateGentleVoxelMap(currentThemeIdx + 1);
@@ -1594,7 +1808,7 @@
           generateGentleVoxelMap(currentThemeIdx + 1);
           showToast(TERRAIN_THEMES[currentThemeIdx].name);
         } else if (capTouch.lx128 < 85) {
-          craft.mode = craft.mode === 'ACRO' ? 'STAB' : 'ACRO';
+          craft.mode = craft.mode === 'ACRO' ? 'HOR' : 'ACRO';
           showToast(`MODE: ${craft.mode}`);
         } else {
           const nextId = activeRomId === 'fpv_drone' ? 'fpv_wing' : 'fpv_drone';
@@ -1607,7 +1821,6 @@
       return false;
     }
 
-    // Integración exacta de rotación SO(3) (la misma que funcionaba perfecto en fpvGame)
     function stepRotationSO3(craft, dt) {
       const p = craft.pitchRate * dt, r = craft.rollRate * dt, y = craft.yawRate * dt;
       const thSq = p*p + r*r + y*y;
@@ -1643,7 +1856,7 @@
     }
 
     /***************************************************************************
-     * 5. SIMULADOR 1: FPV DRONE (FISICAS Y CIRCUITO ORIGINALES + PISO VOXEL)
+     * 5. SIMULADOR 1: FPV DRONE (FISICAS Y CIRCUITO ORIGINALES + TERRENO Y NUBES VOXEL)
      ***************************************************************************/
     const fpvDroneSim = {
       px: 0, py: 2.2, pz: -10,
@@ -1657,6 +1870,7 @@
       activeGate: 0,
       thrCmd: 0.36,
       flightTime: 0,
+      totalDistKm: 0,
 
       reset() {
         this.px = 0; this.py = 2.2; this.pz = -10;
@@ -1667,6 +1881,7 @@
         this.fx = 0; this.fy = 0; this.fz = 1;
         this.activeGate = 0;
         this.flightTime = 0;
+        this.totalDistKm = 0;
         lastRollAngle = 0;
       },
 
@@ -1675,7 +1890,7 @@
         this.flightTime += dt;
 
         if (hwInput.justPressed('Y') || hwInput.justPressed('L3')) {
-          this.mode = this.mode === 'ACRO' ? 'STAB' : 'ACRO';
+          this.mode = this.mode === 'ACRO' ? 'HOR' : 'ACRO';
           showToast(`MODE: ${this.mode}`);
         }
         if (hwInput.justPressed('X')) { this.reset(); showToast('DRONE RESET'); }
@@ -1710,6 +1925,7 @@
 
         const thrust = thr * 26.0;
         const spd = Math.hypot(this.vx, this.vy, this.vz);
+        this.totalDistKm += (spd * dt) / 1000.0;
         const drag = 0.08 + 0.008 * spd;
         this.vx += (this.ux * thrust - this.vx * drag) * dt;
         this.vy += (this.uy * thrust - 9.81 - this.vy * drag) * dt;
@@ -1743,14 +1959,13 @@
         const minCamY = getTerrainHeightMeters(camX, camZ) + 0.35;
         const camY = Math.max(minCamY, this.chaseCam ? this.py - cFy * 3.5 + cUy * 1.0 : this.py);
 
-        // 1. Terreno Voxel Comanche a pantalla completa (reemplaza la cuadrícula)
-        renderVoxelTerrain(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz);
+        // 1. Terreno Voxel + Cielo Azul con Nubes Voxel a pantalla completa
+        renderVoxelTerrainAndSky(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz);
 
         // 2. Gates 3D
-        const projLine = createIsotropicProjector(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz);
+        const { projPoint320, projLine } = createProjector320(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz);
         renderCircuitGates(projLine, this.activeGate);
 
-        // Modelo simple del dron si está en cámara 3ra persona
         if (this.chaseCam) {
           const arm = 0.65;
           projLine(this.px - (this.fx + this.rx)*arm, this.py, this.pz - (this.fz + this.rz)*arm,
@@ -1759,32 +1974,34 @@
                    this.px + (this.fx - this.rx)*arm, this.py, this.pz + (this.fz - this.rz)*arm, 0, 2);
         }
 
-        // 3. OSD estilo INAV en la parte superior y centro (sin barras negras)
+        // 3. OSD estilo INAV con Horizonte Artificial proyectado directamente sobre el horizonte 3D
         const g = CIRCUIT_GATES[this.activeGate];
         const dxG = g.x - this.px, dzG = g.z - this.pz;
         const gateDist = Math.hypot(dxG, g.y - this.py, dzG);
-        const gateBearing = Math.atan2(dxG * this.rx + dzG * this.rz, dxG * this.fx + dzG * this.fz);
+        const gateBearingRad = Math.atan2(dxG * this.rx + dzG * this.rz, dxG * this.fx + dzG * this.fz);
         const spd = Math.hypot(this.vx, this.vy, this.vz);
 
-        renderInavOsd({
-          craftName: 'DRONE',
-          mode: this.mode,
+        renderInavOsd320({
+          callsign: 'Q-50 INAV-S3',
+          modeLabel: this.mode,
           spdMs: spd,
           thrPct: this.thrCmd * 100,
           altM: this.py,
           vario: this.vy,
           activeGate: this.activeGate,
-          totalGates: CIRCUIT_GATES.length,
           gateDist,
-          gateBearing,
-          cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz,
-          flightTimeSec: this.flightTime
+          gateBearingRad,
+          totalDistKm: this.totalDistKm,
+          flightTimeSec: this.flightTime,
+          camX, camY, camZ,
+          cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFz,
+          projPoint320
         });
       }
     };
 
     /***************************************************************************
-     * 6. SIMULADOR 2: FPV FIXED-WING / ALA FIJA (MISMO CONTROL INTUITIVO + VUELO AVION)
+     * 6. SIMULADOR 2: FPV FIXED-WING / ALA FIJA (Z-84 INAV)
      ***************************************************************************/
     const fpvWingSim = {
       px: 0, py: 2.8, pz: -14,
@@ -1794,11 +2011,12 @@
       rx: 1, ry: 0, rz: 0,
       ux: 0, uy: 1, uz: 0,
       fx: 0, fy: 0, fz: 1,
-      mode: 'STAB',
+      mode: 'HOR',
       chaseCam: false,
       activeGate: 0,
       thrCmd: 0.45,
       flightTime: 0,
+      totalDistKm: 0,
 
       reset() {
         this.px = 0; this.py = 2.8; this.pz = -14;
@@ -1810,6 +2028,7 @@
         this.fx = 0; this.fy = 0; this.fz = 1;
         this.activeGate = 0;
         this.flightTime = 0;
+        this.totalDistKm = 0;
         lastRollAngle = 0;
       },
 
@@ -1818,7 +2037,7 @@
         this.flightTime += dt;
 
         if (hwInput.justPressed('Y') || hwInput.justPressed('L3')) {
-          this.mode = this.mode === 'ACRO' ? 'STAB' : 'ACRO';
+          this.mode = this.mode === 'ACRO' ? 'HOR' : 'ACRO';
           showToast(`WING MODE: ${this.mode}`);
         }
         if (hwInput.justPressed('X')) { this.reset(); showToast('WING RESET'); }
@@ -1827,17 +2046,14 @@
           showToast(this.chaseCam ? 'CAM: 3RD PERSON' : 'CAM: FPV FULL');
         }
 
-        // Acelerador continuo: centro = 45% crucero, arriba = 100%, abajo = planeo 0%
         const baseThr = 0.45;
         let thr = hwInput.ly >= 0 ? baseThr + hwInput.ly * (1 - baseThr) : baseThr * (1 + hwInput.ly);
         if (hwInput.btn.A) thr = Math.min(1.0, thr + 0.35);
         this.thrCmd = thr;
 
-        // Misma convención exacta de ejes que el Dron (sin inversiones raras)
         const curPitch = Math.atan2(-this.fy, this.uy);
         const curRoll  = Math.atan2(-this.ry, this.uy);
 
-        // En un ala fija, al inclinar las alas (Roll) el avión gira coordinadamente hacia ese lado
         const bankTurnYaw = -this.ry * 1.15;
         let tPitch = 0, tRoll = 0, tYaw = (hwInput.lx * 120 * DEG2RAD) + bankTurnYaw;
 
@@ -1845,7 +2061,6 @@
           tPitch = hwInput.ry * 180 * DEG2RAD;
           tRoll  = hwInput.rx * 240 * DEG2RAD;
         } else {
-          // STAB (Autonivelado INAV): soltar el stick derecho nivela las alas y el morro
           tPitch = ((hwInput.ry * 40 * DEG2RAD) - curPitch) * 6.5;
           tRoll  = ((hwInput.rx * 55 * DEG2RAD) - curRoll)  * 6.5;
         }
@@ -1857,13 +2072,10 @@
 
         stepRotationSO3(this, dt);
 
-        // En un avión de ala fija el empuje va hacia adelante (vector proa F),
-        // picar hacia abajo (-fy) gana velocidad por gravedad y subir (+fy) consume velocidad
         const accel = thr * 18.0 - 9.81 * this.fy - 0.55 * this.spd;
         this.spd = Math.max(7.0, Math.min(34.0, this.spd + accel * dt));
+        this.totalDistKm += (this.spd * dt) / 1000.0;
 
-        // El ala avanza en la dirección hacia donde apunta el morro (fx, fy, fz)
-        // Si vuela muy lento (< 9 m/s), pierde sustentación y desciende suavemente
         const stallSink = this.spd < 9.5 ? (9.5 - this.spd) * 1.2 : 0;
         const targetVx = this.fx * this.spd;
         const targetVy = this.fy * this.spd - stallSink;
@@ -1899,14 +2111,13 @@
         const minCamY = getTerrainHeightMeters(camX, camZ) + 0.35;
         const camY = Math.max(minCamY, this.chaseCam ? this.py - cFy * 3.8 + cUy * 0.9 : this.py);
 
-        // 1. Terreno Voxel Comanche a pantalla completa
-        renderVoxelTerrain(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz);
+        // 1. Terreno Voxel + Cielo Azul con Nubes Voxel
+        renderVoxelTerrainAndSky(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz);
 
         // 2. Gates 3D
-        const projLine = createIsotropicProjector(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz);
+        const { projPoint320, projLine } = createProjector320(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz);
         renderCircuitGates(projLine, this.activeGate);
 
-        // Silueta 3D del Ala Fija cuando se activa la cámara en 3ra persona (botón B)
         if (this.chaseCam) {
           const nx = this.px + this.fx * 1.1, ny = this.py + this.fy * 1.1, nz = this.pz + this.fz * 1.1;
           const tx = this.px - this.fx * 0.6, ty = this.py - this.fy * 0.6, tz = this.pz - this.fz * 0.6;
@@ -1918,25 +2129,27 @@
           projLine(rx, ry, rz, tx, ty, tz, 0, 4);
         }
 
-        // 3. OSD estilo INAV a pantalla completa
+        // 3. OSD estilo INAV a pantalla completa (Z-84 INAV-S3)
         const g = CIRCUIT_GATES[this.activeGate];
         const dxG = g.x - this.px, dzG = g.z - this.pz;
         const gateDist = Math.hypot(dxG, g.y - this.py, dzG);
-        const gateBearing = Math.atan2(dxG * this.rx + dzG * this.rz, dxG * this.fx + dzG * this.fz);
+        const gateBearingRad = Math.atan2(dxG * this.rx + dzG * this.rz, dxG * this.fx + dzG * this.fz);
 
-        renderInavOsd({
-          craftName: 'WING',
-          mode: this.mode,
+        renderInavOsd320({
+          callsign: 'Z-84 INAV-S3',
+          modeLabel: this.mode,
           spdMs: this.spd,
           thrPct: this.thrCmd * 100,
           altM: this.py,
           vario: this.vy,
           activeGate: this.activeGate,
-          totalGates: CIRCUIT_GATES.length,
           gateDist,
-          gateBearing,
-          cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz,
-          flightTimeSec: this.flightTime
+          gateBearingRad,
+          totalDistKm: this.totalDistKm,
+          flightTimeSec: this.flightTime,
+          camX, camY, camZ,
+          cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFz,
+          projPoint320
         });
       }
     };
@@ -2075,8 +2288,8 @@
       fbDrawText('RETRO-GO S3 // INAV VOXEL', 10, 6, 2);
       fbDrawText('MCU : ESP32-S3 LX7 240MHZ', 8, 18, 1);
       fbDrawText('MEM : 16MB FLASH / 8MB PSRAM', 8, 26, 3);
-      fbDrawText('GND : VOXEL TERRAIN ENGINE', 8, 34, 5);
-      fbDrawText('OSD : INAV FULLSCREEN HUD', 8, 42, 2);
+      fbDrawText('GND : VOXEL TERRAIN + CLOUDS', 8, 34, 5);
+      fbDrawText('OSD : INAV MAX7456 HUD', 8, 42, 2);
 
       const pct = Math.min(1.0, (0.7 - bootTimer) / 0.6);
       fbRect(12, 51, 104, 6, false, 1);
@@ -2179,13 +2392,13 @@
       fbDrawText('INAV-OSD', 94, 2, 3);
 
       if (rgTabIdx === 2) {
-        fbDrawText('TERR: VOXEL SUAVE (0-3.2M)', 4, 13, 2);
+        fbDrawText('TERR: VOXEL + NUBES 3D', 4, 13, 2);
         fbDrawText('MAPA: CIRCUITO 6 GATES', 4, 21, 5);
-        fbDrawText('OSD : INAV FULLSCREEN HUD', 4, 29, 3);
-        fbDrawText('SIMS: DRONE 5" + ALA FIJA', 4, 37, 1);
+        fbDrawText('OSD : INAV WHITE OUTLINED', 4, 29, 3);
+        fbDrawText('SIMS: DRONE 5" + ALA Z-84', 4, 37, 1);
         fbDrawText('FPS : 45-60 FPS DMA ILI9341V', 4, 45, 9);
         fbDrawLine(0, 53, 127, 53, 0, 6);
-        fbDrawText('SELECT: CAMBIAR COLOR PISO', 4, 56, 2);
+        fbDrawText('SELECT: CAMBIAR TEMA VOXEL', 4, 56, 2);
         return;
       }
 
@@ -2317,7 +2530,7 @@
       fbDrawText(`SPI:${mode.spiMhz}MHZ (${dmaMs}MS)`, 40, 35, 3);
       fbDrawText(`TCH:${capTouch.x320},${capTouch.y240}`, 40, 43, capTouch.active ? 2 : 5);
       fbRect(0, 55, 128, 9, true, 8);
-      fbDrawText('VOXEL PSRAM: 768KB | 60FPS OK', 4, 57, 3);
+      fbDrawText('VOXEL PSRAM: 1.2MB | 60FPS OK', 4, 57, 3);
 
       if (capTouch.active) {
         fbCircle(capTouch.lx128, capTouch.ly64, 5, 4);
