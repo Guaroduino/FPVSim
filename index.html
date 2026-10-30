@@ -472,7 +472,7 @@
         <span>PWR</span>
         <span id="sdLed" class="led sd-act" title="Flash / SD Activity"></span>
         <span>SPI</span>
-        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + CHOROBOBO (v16)</span>
+        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + CHOROBOBO 6x4KM (v17)</span>
       </div>
       <div class="top-hw-pills">
         <button id="btnPalette" class="pill-btn">🎨 IPS 60MHz</button>
@@ -1176,23 +1176,42 @@
     const DEG2RAD = Math.PI / 180.0;
     const RAD2DEG = 180.0 / Math.PI;
 
-    // Mapa Voxel 512x512 en PSRAM (Terreno + Capa de Nubes 3D con la misma técnica)
-    const MAP_DIM   = 512;
-    const MAP_MASK  = 511;
-    const MAP_SHIFT = 9;
-    const MAP_SCALE = 2.5;      // 1 metro = 2.5 texels (205m x 205m alrededor de Pista Chorobobo)
-    const HEIGHT_SCALE = 0.025; // Elevaciones suaves de 0.0m a 4.0m (árboles y lomas)
+    // =========================================================================
+    // MAPA VOXEL EN PSRAM OCTAL (ESP32-S3 N16R8: 6.5 MB de 8.0 MB PSRAM)
+    // - Terreno Satelital 2048x1024 a escala real: 6,000m (6 km) x 4,000m (4 km)
+    //   * voxHeight: 2048 * 1024 * 1B = 2.0 MB PSRAM
+    //   * voxColor : 2048 * 1024 * 2B = 4.0 MB PSRAM
+    // - Domo de Cielo + Nubes Voxel 512x512:
+    //   * voxSkyMap:  512 *  512 * 2B = 0.5 MB PSRAM
+    // =========================================================================
+    const MAP_W        = 2048;
+    const MAP_H        = 1024;
+    const MAP_MASK_X   = 2047;
+    const MAP_MASK_Z   = 1023;
+    const MAP_SHIFT_X  = 11;           // mz << 11 == mz * 2048
+    const WORLD_W_M    = 6000.0;       // 6 km Este-Oeste (escala real Chorobobo)
+    const WORLD_H_M    = 4000.0;       // 4 km Norte-Sur  (escala real Chorobobo)
+    const MAP_SCALE_X  = MAP_W / WORLD_W_M; // 0.3413333 texels/m (1 texel = 2.93 m)
+    const MAP_SCALE_Z  = MAP_H / WORLD_H_M; // 0.2560000 texels/m (1 texel = 3.91 m)
+    const HEIGHT_SCALE = 0.125;        // 0.125 m por unidad uint8 (0.0m a 31.8m para árboles y lomas)
 
-    const voxHeight  = new Uint8Array(MAP_DIM * MAP_DIM);
-    const voxColor   = new Uint16Array(MAP_DIM * MAP_DIM);
-    const voxSkyMap  = new Uint16Array(MAP_DIM * MAP_DIM); // Textura Voxel 512x512 de cielo azul + nubes
+    // Coordenada exacta de la Pista Aeromodelismo A.I.A Chorobobo en el ortomosaico 6x4 km
+    const SPAWN_MX     = 1198;         // u = 0.585 * 2048
+    const SPAWN_MZ     = 650;          // v = (1 - 0.365) * 1024 (Norte hacia +wz)
 
-    // Cache PSRAM del mapa satelital real de Chorobobo (512x512 RGB565 + Alturas de árboles/río)
-    const choroHeightCache = new Uint8Array(MAP_DIM * MAP_DIM);
-    const choroColorCache  = new Uint16Array(MAP_DIM * MAP_DIM);
+    // Cielo Voxel 512x512 en PSRAM
+    const SKY_DIM      = 512;
+    const SKY_MASK     = 511;
+    const SKY_SHIFT    = 9;
+
+    const voxHeight    = new Uint8Array(MAP_W * MAP_H);
+    const voxColor     = new Uint16Array(MAP_W * MAP_H);
+    const voxSkyMap    = new Uint16Array(SKY_DIM * SKY_DIM);
+
+    let choroDecodedImg = null;
     let choroSatelliteReady = false;
 
-    // Buffer intermedio des-rotado 256x256 para permitir Roll de 360° sin huecos
+    // Buffer intermedio des-rotado 256x256 en SRAM Interna (128 KB) para permitir Roll de 360°
     const VOX_W = 256;
     const VOX_H = 256;
     const voxBuf = new Uint16Array(VOX_W * VOX_H);
@@ -1207,11 +1226,11 @@
       { x:  0, y: 2.5, z: -18, w: 5.0, h: 4.0 }
     ];
 
-    // 4 Mapas / Temas con Cielo Azul + Nubes Voxel (El #1 es el mapa satelital real de Chorobobo)
+    // 4 Mapas / Temas con Cielo Azul + Nubes Voxel (El #1 es el ortomosaico satelital 6x4 km de Chorobobo)
     const TERRAIN_THEMES = [
       {
         id: 'chorobobo',
-        name: 'AIA CHOROBOBO',
+        name: 'AIA CHOROBOBO 6X4KM',
         skyZenith:  [48, 94, 175],
         skyHorizon: [192, 188, 176],
         cloudCol:   [246, 245, 240],
@@ -1271,36 +1290,43 @@
       return n1 * 0.45 + n2 * 0.30 + n3 * 0.16 + n4 * 0.09;
     }
 
-    // Genera el Terreno Voxel suave (0..3.2m) Y el Domo de Cielo Azul con Nubes Voxel
+    // Estampa la Pista Aeromodelismo A.I.A Chorobobo alrededor del origen (0,0) para máximo detalle al despegar
+    function stampRunwayAndClearGates() {
+      // Pista de aeromodelismo de 90m x 12m junto al punto de despegue (wx = -6..+6m, wz = -28..+62m)
+      const mxMin = Math.max(0, Math.floor(SPAWN_MX - 18 * MAP_SCALE_X));
+      const mxMax = Math.min(MAP_W - 1, Math.ceil(SPAWN_MX + 18 * MAP_SCALE_X));
+      const mzMin = Math.max(0, Math.floor(SPAWN_MZ - 36 * MAP_SCALE_Z));
+      const mzMax = Math.min(MAP_H - 1, Math.ceil(SPAWN_MZ + 70 * MAP_SCALE_Z));
+
+      for (let mz = mzMin; mz <= mzMax; mz++) {
+        const wz = (mz - SPAWN_MZ) / MAP_SCALE_Z;
+        const zOff = mz << MAP_SHIFT_X;
+        for (let mx = mxMin; mx <= mxMax; mx++) {
+          const wx = (mx - SPAWN_MX) / MAP_SCALE_X;
+          if (Math.abs(wx) <= 7.5 && wz >= -26 && wz <= 58) {
+            voxHeight[zOff + mx] = 2; // Pista totalmente nivelada (0.25 m)
+            if (Math.abs(wx) <= 4.2) {
+              // Superficie compactada de la pista A.I.A Chorobobo + línea central
+              const isCenterLine = Math.abs(wx) < 1.3 && ((mz & 1) === 0);
+              voxColor[zOff + mx] = isCenterLine ? rgb565(216, 206, 184) : rgb565(138, 124, 104);
+            } else {
+              // Borde de grama corta junto a la pista
+              voxColor[zOff + mx] = rgb565(74, 102, 52);
+            }
+          }
+        }
+      }
+    }
+
+    // Genera el Domo de Cielo Azul con Nubes Voxel (512x512) y el Terreno Voxel 2048x1024 (6 km x 4 km)
     function generateGentleVoxelMap(themeIdx) {
       currentThemeIdx = ((themeIdx % TERRAIN_THEMES.length) + TERRAIN_THEMES.length) % TERRAIN_THEMES.length;
       const theme = TERRAIN_THEMES[currentThemeIdx];
-      const TWO_PI_512 = (2 * Math.PI) / 512;
 
-      for (let mz = 0; mz < MAP_DIM; mz++) {
-        const zOff = mz << MAP_SHIFT;
-        const wz = ((mz <= 256 ? mz : mz - 512)) / MAP_SCALE;
-
-        for (let mx = 0; mx < MAP_DIM; mx++) {
-          const wx = ((mx <= 256 ? mx : mx - 512)) / MAP_SCALE;
-
-          // 1. Alturas suaves del terreno (0.0m a 3.2m)
-          const wave1 = Math.sin(mx * TWO_PI_512 * 3) * Math.cos(mz * TWO_PI_512 * 3);
-          const wave2 = Math.sin((mx + mz) * TWO_PI_512 * 5) * 0.5;
-          const wave3 = Math.cos((mx - mz * 2) * TWO_PI_512 * 8) * 0.25;
-          let rawH = Math.max(0, (wave1 + wave2 + wave3 + 0.55) * 52);
-
-          const distSpawn = Math.hypot(wx, wz + 10);
-          if (distSpawn < 14) rawH *= Math.max(0, (distSpawn - 6) / 8);
-
-          for (let g = 0; g < CIRCUIT_GATES.length; g++) {
-            const gt = CIRCUIT_GATES[g];
-            const dg = Math.hypot(wx - gt.x, wz - gt.z);
-            if (dg < 9) rawH *= Math.max(0.1, (dg - 3) / 6);
-          }
-          voxHeight[zOff + mx] = Math.max(0, Math.min(130, Math.round(rawH)));
-
-          // 2. Mapa Voxel de Cielo Azul + Nubes suaves (con la misma técnica 512x512)
+      // 1. Generar siempre el Domo de Cielo Azul + Nubes 512x512 para el tema activo
+      for (let mz = 0; mz < SKY_DIM; mz++) {
+        const zOff = mz << SKY_SHIFT;
+        for (let mx = 0; mx < SKY_DIM; mx++) {
           const cn = fbmCloud(mx, mz);
           const cloudDensity = Math.max(0, Math.min(1, (cn - 0.08) * 1.85));
           const cSmooth = cloudDensity * cloudDensity * (3 - 2 * cloudDensity);
@@ -1311,130 +1337,157 @@
         }
       }
 
-      // 3. Colorear terreno con franjas de cultivo/pradera (como en la foto de INAV) + sombreado solar
-      for (let mz = 0; mz < MAP_DIM; mz++) {
-        const zOff = mz << MAP_SHIFT;
-        for (let mx = 0; mx < MAP_DIM; mx++) {
-          const h  = voxHeight[zOff + mx];
-          const hR = voxHeight[zOff + ((mx + 2) & MAP_MASK)];
-          const hD = voxHeight[((mz + 2) & MAP_MASK) << MAP_SHIFT | mx];
-          const slope = (h - hR) * 1.8 + (h - hD) * 1.4;
-          const shade = Math.max(0.68, Math.min(1.28, 1.0 + slope * 0.025));
+      // Si el tema es AIA CHOROBOBO y la foto satelital ya está disponible, decodificarla directamente en PSRAM
+      if (theme.id === 'chorobobo' && choroDecodedImg) {
+        bakeChoroboboToPsram(choroDecodedImg);
+        return;
+      }
 
-          // Franjas de campo agrícola / pradera + caminos rurales
-          const fieldStripe = ((mx >> 4) + ((mz >> 5) & 1)) & 1;
+      // 2. Generador procedural a escala 6 km x 4 km para los otros 3 mapas (CAMPO, PRADERA, ATARDECER)
+      const TWO_PI_W = (2 * Math.PI) / MAP_W;
+      const TWO_PI_H = (2 * Math.PI) / MAP_H;
+
+      for (let mz = 0; mz < MAP_H; mz++) {
+        const zOff = mz << MAP_SHIFT_X;
+        const wz = (mz - SPAWN_MZ) / MAP_SCALE_Z;
+        const cosZ3 = Math.cos(mz * TWO_PI_H * 6);
+
+        for (let mx = 0; mx < MAP_W; mx++) {
+          const wx = (mx - SPAWN_MX) / MAP_SCALE_X;
+          const wave1 = Math.sin(mx * TWO_PI_W * 9) * cosZ3;
+          const wave2 = Math.sin((mx + mz) * TWO_PI_W * 15) * 0.5;
+          let rawH = Math.max(2, (wave1 + wave2 + 0.65) * 14); // 0.25m a 4.0m (en unidades de 0.125m)
+
+          const distSpawn = Math.hypot(wx, wz);
+          if (distSpawn < 55) rawH = 2 + (rawH - 2) * Math.max(0, (distSpawn - 25) / 30);
+
+          voxHeight[zOff + mx] = Math.max(0, Math.min(90, Math.round(rawH)));
+        }
+      }
+
+      for (let mz = 0; mz < MAP_H; mz++) {
+        const zOff = mz << MAP_SHIFT_X;
+        const zNext = ((mz + 2) & MAP_MASK_Z) << MAP_SHIFT_X;
+        for (let mx = 0; mx < MAP_W; mx++) {
+          const h  = voxHeight[zOff + mx];
+          const hR = voxHeight[zOff + ((mx + 2) & MAP_MASK_X)];
+          const hD = voxHeight[zNext + mx];
+          const slope = (h - hR) * 1.8 + (h - hD) * 1.4;
+          const shade = Math.max(0.70, Math.min(1.26, 1.0 + slope * 0.04));
+
+          const fieldStripe = ((mx >> 5) + ((mz >> 5) & 1)) & 1;
           const isPath = ((mx & 63) === 0) || ((mz & 63) === 0);
           const base = fieldStripe ? theme.baseA : theme.baseB;
-          const tHill = Math.min(1.0, h / 95.0);
+          const tHill = Math.min(1.0, h / 32.0);
 
           let r = base[0] * (1 - tHill) + theme.hillCol[0] * tHill;
           let g = base[1] * (1 - tHill) + theme.hillCol[1] * tHill;
           let b = base[2] * (1 - tHill) + theme.hillCol[2] * tHill;
+          if (isPath) { r += 24; g += 18; b += 8; }
 
-          if (isPath) {
-            r += 24; g += 18; b += 8;
-          }
-
-          voxColor[zOff + mx] = rgb565(
-            clampByte(r * shade),
-            clampByte(g * shade),
-            clampByte(b * shade)
-          );
+          voxColor[zOff + mx] = rgb565(clampByte(r * shade), clampByte(g * shade), clampByte(b * shade));
         }
       }
-
-      // Si está seleccionado AIA CHOROBOBO y la foto satelital ya se decodificó en PSRAM, copiarla a voxColor/voxHeight
-      if (theme.id === 'chorobobo' && choroSatelliteReady) {
-        voxHeight.set(choroHeightCache);
-        voxColor.set(choroColorCache);
-      }
+      stampRunwayAndClearGates();
     }
 
-    // Decodificador 1 a 1 del mapa satelital de la Pista Aeromodelismo A.I.A Chorobobo (chorobobo.jpg -> 512x512 RGB565 + Heightmap)
+    // Decodifica la ortofoto satelital limpia de 6 km x 4 km (chorobobo.jpg) en el mapa PSRAM 2048x1024
+    function bakeChoroboboToPsram(img) {
+      const cnv = document.createElement('canvas');
+      cnv.width = MAP_W;
+      cnv.height = MAP_H;
+      const ctx = cnv.getContext('2d');
+      // Invertir eje vertical de la imagen para que +mz (+wz) apunte exactamente al NORTE (Río Turbio arriba)
+      ctx.save();
+      ctx.translate(0, MAP_H);
+      ctx.scale(1, -1);
+      ctx.drawImage(img, 0, 0, MAP_W, MAP_H);
+      ctx.restore();
+      const rgba = ctx.getImageData(0, 0, MAP_W, MAP_H).data;
+
+      for (let mz = 0; mz < MAP_H; mz++) {
+        const zOff = mz << MAP_SHIFT_X;
+        const wz = (mz - SPAWN_MZ) / MAP_SCALE_Z;
+        const edgeZ = mz < 48 ? mz / 48.0 : (mz > MAP_H - 49 ? (MAP_H - 1 - mz) / 48.0 : 1.0);
+
+        for (let mx = 0; mx < MAP_W; mx++) {
+          const wx = (mx - SPAWN_MX) / MAP_SCALE_X;
+          const pIdx = (zOff + mx) * 4;
+          let r = rgba[pIdx], g = rgba[pIdx + 1], b = rgba[pIdx + 2];
+
+          // Transición suave en los bordes exteriores (a 3 km de distancia) para evitar costuras
+          const edgeX = mx < 48 ? mx / 48.0 : (mx > MAP_W - 49 ? (MAP_W - 1 - mx) / 48.0 : 1.0);
+          const edgeW = Math.min(edgeX, edgeZ);
+          if (edgeW < 1.0) {
+            const oppIdx = ((((MAP_H - 1 - mz) << MAP_SHIFT_X) | (MAP_W - 1 - mx))) * 4;
+            r = r * edgeW + rgba[oppIdx]     * (1 - edgeW);
+            g = g * edgeW + rgba[oppIdx + 1] * (1 - edgeW);
+            b = b * edgeW + rgba[oppIdx + 2] * (1 - edgeW);
+          }
+
+          // Extraer relieve Voxel 3D a escala real (unidades de HEIGHT_SCALE = 0.125 m):
+          // - Bosques de galería del Río Turbio y arboleda central: 3.5m a 8.5m (h = 28..68)
+          // - Lomas del Noroeste (Rigoberto Quiroz) y Suroeste: hasta 22m (h = 40..176)
+          // - Tablones de cultivo de caña/maíz y caminos: planos (0.25m a 0.75m, h = 2..6)
+          const luma = (r * 77 + g * 150 + b * 29) >> 8;
+          const greenExcess = g - Math.max(r, b);
+          let h = 2;
+
+          if (greenExcess > 6 && luma < 96) {
+            // Dosel de árboles densos (bosque junto a la pista y riberas del Río Turbio)
+            h = 24 + Math.min(48, (greenExcess * 2) + ((96 - luma) >> 1));
+          } else if (luma < 44 && b >= r - 6) {
+            // Cauce del Río Turbio y lagunas de riego
+            h = 0;
+          } else {
+            // Parcelas agrícolas planas en el valle central y colinas suaves en los extremos NW / SW
+            h = 2 + ((luma >> 6) & 3);
+            if (wx < -900 && (wz > 450 || wz < -550)) {
+              const hillDist = Math.min(1.0, (-900 - wx) / 1400.0);
+              h += Math.round(hillDist * hillDist * (95 + ((luma >> 2) & 31)));
+            } else if (wz > 950) {
+              const northHill = Math.min(1.0, (wz - 950) / 900.0);
+              h += Math.round(northHill * northHill * (70 + ((luma >> 2) & 25)));
+            }
+          }
+
+          // Mantener completamente despejada y plana la zona de la Pista A.I.A Chorobobo y los 6 Gates
+          const distSpawn = Math.hypot(wx, wz);
+          if (distSpawn < 65) {
+            h = Math.round(2 + (h - 2) * Math.max(0, (distSpawn - 38) / 27));
+          }
+
+          voxHeight[zOff + mx] = Math.max(0, Math.min(240, h));
+          voxColor[zOff + mx]  = rgb565(clampByte(r), clampByte(g), clampByte(b));
+        }
+      }
+      stampRunwayAndClearGates();
+    }
+
     function initChoroboboSatelliteMap() {
       if (typeof Image === 'undefined') return;
       const img = new Image();
       img.onload = () => {
         try {
-          const cnv = document.createElement('canvas');
-          cnv.width = MAP_DIM;
-          cnv.height = MAP_DIM;
-          const ctx = cnv.getContext('2d');
-          // Centrar la imagen satelital en la Pista A.I.A Chorobobo
-          ctx.drawImage(img, 0, 0, MAP_DIM, MAP_DIM);
-          const rgba = ctx.getImageData(0, 0, MAP_DIM, MAP_DIM).data;
-
-          // Paso 1: Suavizar bordes (24px) para que el mapa 512x512 sea 100% continuo sin costuras
-          // y extraer relieve Voxel 3D a partir de la vegetación (árboles junto al Río Turbio y cercas)
-          for (let mz = 0; mz < MAP_DIM; mz++) {
-            const zOff = mz << MAP_SHIFT;
-            const wz = (mz - 256) / MAP_SCALE;
-
-            for (let mx = 0; mx < MAP_DIM; mx++) {
-              const wx = (mx - 256) / MAP_SCALE;
-              const pIdx = ((mz << MAP_SHIFT) | mx) * 4;
-              let r = rgba[pIdx], g = rgba[pIdx + 1], b = rgba[pIdx + 2];
-
-              // Cross-fade suave en los bordes para evitar corte al repetir el mapa
-              const edgeX = mx < 24 ? mx / 24.0 : (mx > 487 ? (511 - mx) / 24.0 : 1.0);
-              const edgeZ = mz < 24 ? mz / 24.0 : (mz > 487 ? (511 - mz) / 24.0 : 1.0);
-              const edgeW = Math.min(edgeX, edgeZ);
-              if (edgeW < 1.0) {
-                const oppIdx = (((511 - mz) << MAP_SHIFT) | (511 - mx)) * 4;
-                r = r * edgeW + rgba[oppIdx]     * (1 - edgeW);
-                g = g * edgeW + rgba[oppIdx + 1] * (1 - edgeW);
-                b = b * edgeW + rgba[oppIdx + 2] * (1 - edgeW);
-              }
-
-              // Detectar follaje de árboles (verde oscuro en las riberas del Río Turbio y arboledas)
-              const luma = (r * 77 + g * 150 + b * 29) >> 8;
-              const greenExcess = g - Math.max(r, b);
-              let h = 6; // Parcelas agrícolas y caminos casi planos (~15 cm)
-
-              if (greenExcess > 6 && luma < 95) {
-                // Árboles y matorrales densos: elevación Voxel de 1.5m a 3.8m
-                h = 45 + Math.min(105, greenExcess * 4 + (95 - luma));
-              } else if (luma < 45 && b >= r) {
-                // Cauce del Río Turbio: bajo y con brillo de agua
-                h = 0;
-              } else {
-                // Pequeñas ondulaciones de los tablones de cultivo y lomas norte
-                h = 4 + ((luma >> 4) & 7);
-              }
-
-              // Mantener plana la pista de despegue y el entorno inmediato de los 6 Gates
-              const distSpawn = Math.hypot(wx, wz + 10);
-              if (distSpawn < 12) h *= Math.max(0, (distSpawn - 5) / 7);
-              for (let k = 0; k < CIRCUIT_GATES.length; k++) {
-                const gt = CIRCUIT_GATES[k];
-                const dg = Math.hypot(wx - gt.x, wz - gt.z);
-                if (dg < 7) h *= Math.max(0, (dg - 3) / 4);
-              }
-
-              choroHeightCache[zOff + mx] = Math.max(0, Math.min(150, Math.round(h)));
-              choroColorCache[zOff + mx]  = rgb565(clampByte(r), clampByte(g), clampByte(b));
-            }
-          }
-
+          choroDecodedImg = img;
           choroSatelliteReady = true;
           if (TERRAIN_THEMES[currentThemeIdx].id === 'chorobobo') {
-            voxHeight.set(choroHeightCache);
-            voxColor.set(choroColorCache);
+            bakeChoroboboToPsram(img);
           }
         } catch (err) {
           console.warn('No se pudo decodificar chorobobo.jpg:', err);
         }
       };
-      img.src = 'chorobobo.jpg';
+      img.src = 'chorobobo.jpg?v=17';
     }
 
     generateGentleVoxelMap(0);
     initChoroboboSatelliteMap();
 
     function getTerrainHeightMeters(wx, wz) {
-      const mx = Math.floor(wx * MAP_SCALE + 256) & MAP_MASK;
-      const mz = Math.floor(wz * MAP_SCALE + 256) & MAP_MASK;
-      return voxHeight[(mz << MAP_SHIFT) | mx] * HEIGHT_SCALE;
+      const mx = Math.floor(SPAWN_MX + wx * MAP_SCALE_X) & MAP_MASK_X;
+      const mz = Math.floor(SPAWN_MZ + wz * MAP_SCALE_Z) & MAP_MASK_Z;
+      return voxHeight[(mz << MAP_SHIFT_X) | mx] * HEIGHT_SCALE;
     }
 
     function blend565Half(c1, c2) {
@@ -1451,26 +1504,36 @@
 
     // =========================================================================
     // TABLAS LUT EN PUNTO FIJO INT32 PARA ESP32-S3 (CERO DIVISIONES EN BUCLE)
-    // En ESP32-S3 viven en SRAM Interna (< 2 KB):
-    // - RAY_S_Q8[k]: distancia horizontal s * 256 para cada paso k (0..95)
-    // - RAY_INV_S_Q12[k]: (1 / s) * 4096 precalculado (cambia '/' por '*' + '>>')
+    // En ESP32-S3 viven en SRAM Interna (< 2.5 KB):
+    // - RAY_S_Q8[k]: distancia horizontal s * 256 para cada paso k (0..127, de 0.6m a 1,650m)
+    // - RAY_INV_S_Q14[k]: (1 / s) * 16384 precalculado (cambia '/' por '*' + '>> 16')
     // - CLOUD_DIST_Q8[dy]: distancia al plano de nubes * 256 para dyHoriz (0..511)
+    // - MICRO_TEX_LUT[256]: micro-textura sub-texel (~18 cm) para nitidez a baja altura
     // =========================================================================
-    const NUM_RAY_STEPS = 112;
+    const NUM_RAY_STEPS = 128;
     const RAY_S_Q8      = new Int32Array(NUM_RAY_STEPS);
-    const RAY_INV_S_Q12 = new Int32Array(NUM_RAY_STEPS);
+    const RAY_INV_S_Q14 = new Int32Array(NUM_RAY_STEPS);
     const CLOUD_DIST_Q8 = new Int32Array(512);
+    const MICRO_TEX_LUT = new Uint8Array(256);
 
     (function initS3FixedPointLuts() {
-      let s = 0.6, ds = 0.28;
+      let s = 0.6, ds = 0.22;
       for (let k = 0; k < NUM_RAY_STEPS; k++) {
         RAY_S_Q8[k]      = Math.round(s * 256);
-        RAY_INV_S_Q12[k] = Math.round((1.0 / s) * 4096);
-        s  += ds;
-        ds += 0.015;
+        RAY_INV_S_Q14[k] = Math.round((1.0 / s) * 16384);
+        if (k < 48) {
+          s  += ds;
+          ds += 0.012;
+        } else {
+          // Progresión geométrica de 24m hasta ~1,650m para cubrir el valle de 6 km x 4 km
+          s *= 1.054;
+        }
       }
       for (let dy = 0; dy < 512; dy++) {
         CLOUD_DIST_Q8[dy] = Math.round((2400.0 / (dy + 10)) * 256);
+      }
+      for (let i = 0; i < 256; i++) {
+        MICRO_TEX_LUT[i] = ((i * 73 + (i >> 4) * 37) ^ (i * 19)) & 1;
       }
     })();
 
@@ -1516,13 +1579,13 @@
       const invFocalVox = 1.0 / FOCAL_VOX;
       const hProjScale  = (U0y * FOCAL_VOX) / fHClamped;
       const camY_Tex    = Math.round(camY / HEIGHT_SCALE);
-      // Altura proyectada por unidad de voxHeight (en Q4 para multiplicar por RAY_INV_S_Q12 y hacer >> 16)
-      const heightFactorQ4 = Math.round(HEIGHT_SCALE * hProjScale * 16);
+      // Altura proyectada por unidad de voxHeight (en Q2 para multiplicar por RAY_INV_S_Q14 y hacer >> 16)
+      const heightFactorQ2 = Math.round(HEIGHT_SCALE * hProjScale * 4);
 
-      const startX_Q16    = Math.round((camX * MAP_SCALE + 256) * 65536);
-      const startZ_Q16    = Math.round((camZ * MAP_SCALE + 256) * 65536);
-      const skyStartX_Q16 = Math.round((camX * 1.2 + cloudDriftX) * 65536);
-      const skyStartZ_Q16 = Math.round((camZ * 1.2) * 65536);
+      const startX_Q16    = Math.round((SPAWN_MX + camX * MAP_SCALE_X) * 65536);
+      const startZ_Q16    = Math.round((SPAWN_MZ + camZ * MAP_SCALE_Z) * 65536);
+      const skyStartX_Q16 = Math.round((camX * 0.45 + cloudDriftX) * 65536);
+      const skyStartZ_Q16 = Math.round((camZ * 0.45) * 65536);
 
       // 2. Raycasting por columna u (0..255) usando SOLO enteros de 32 bits y LUTs
       for (let u = 0; u < VOX_W; u++) {
@@ -1531,29 +1594,37 @@
         const dirW_Z = H0z + xi * R0z;
 
         // Direcciones en Q8 (al multiplicar por RAY_S_Q8 o CLOUD_DIST_Q8 dan Q16; luego >> 16 da el texel)
-        const dirX_Q8  = Math.round(dirW_X * MAP_SCALE * 256);
-        const dirZ_Q8  = Math.round(dirW_Z * MAP_SCALE * 256);
+        const dirX_Q8  = Math.round(dirW_X * MAP_SCALE_X * 256);
+        const dirZ_Q8  = Math.round(dirW_Z * MAP_SCALE_Z * 256);
         const dirWX_Q8 = Math.round(dirW_X * 256);
         const dirWZ_Q8 = Math.round(dirW_Z * 256);
 
         let yMax = VOX_H;
 
         for (let k = 0; k < NUM_RAY_STEPS && yMax > 0; k++) {
-          const sQ8 = RAY_S_Q8[k];
-          const mx = ((startX_Q16 + dirX_Q8 * sQ8) >> 16) & MAP_MASK;
-          const mz = ((startZ_Q16 + dirZ_Q8 * sQ8) >> 16) & MAP_MASK;
-          const mIdx = (mz << MAP_SHIFT) | mx;
+          const sQ8  = RAY_S_Q8[k];
+          const xQ16 = startX_Q16 + dirX_Q8 * sQ8;
+          const zQ16 = startZ_Q16 + dirZ_Q8 * sQ8;
+          const mx   = (xQ16 >> 16) & MAP_MASK_X;
+          const mz   = (zQ16 >> 16) & MAP_MASK_Z;
+          const mIdx = (mz << MAP_SHIFT_X) | mx;
 
           const dhTex = voxHeight[mIdx] - camY_Tex;
           // Proyección perspectiva sin divisiones: multiplicación entera + shift >> 16
-          const v = horizonV - ((dhTex * heightFactorQ4 * RAY_INV_S_Q12[k]) >> 16);
+          const v = horizonV - ((dhTex * heightFactorQ2 * RAY_INV_S_Q14[k]) >> 16);
 
           if (v < yMax) {
             const vTop = v < 0 ? 0 : v;
             let col = voxColor[mIdx];
-            if (k > 75) {
+            if (k < 38) {
+              // Micro-detalle sub-texel (~18 cm) en corto alcance para que el suelo se vea nítido al despegar
+              const subIdx = ((xQ16 >> 12) & 15) | (((zQ16 >> 12) & 15) << 4);
+              if (MICRO_TEX_LUT[subIdx]) {
+                col = (col & 0xF7DE) - ((col & 0x0821) ? 0x0821 : 0);
+              }
+            } else if (k > 98) {
               col = blend565Half(col, fogCol);
-              if (k > 95) col = blend565Half(col, fogCol);
+              if (k > 114) col = blend565Half(col, fogCol);
             }
             let ptr = (vTop << 8) | u;
             for (let y = vTop; y < yMax; y++, ptr += VOX_W) {
@@ -1573,9 +1644,9 @@
             } else {
               const lutIdx = dyHoriz < 511 ? dyHoriz : 511;
               const sCloudQ8 = CLOUD_DIST_Q8[lutIdx];
-              const cmx = ((skyStartX_Q16 + dirWX_Q8 * sCloudQ8) >> 16) & MAP_MASK;
-              const cmz = ((skyStartZ_Q16 + dirWZ_Q8 * sCloudQ8) >> 16) & MAP_MASK;
-              let skyCol = voxSkyMap[(cmz << MAP_SHIFT) | cmx];
+              const cmx = ((skyStartX_Q16 + dirWX_Q8 * sCloudQ8) >> 16) & SKY_MASK;
+              const cmz = ((skyStartZ_Q16 + dirWZ_Q8 * sCloudQ8) >> 16) & SKY_MASK;
+              let skyCol = voxSkyMap[(cmz << SKY_SHIFT) | cmx];
               if (dyHoriz < 36) {
                 skyCol = blend565Half(skyCol, fogCol);
                 if (dyHoriz < 16) skyCol = blend565Half(skyCol, fogCol);
