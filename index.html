@@ -472,7 +472,7 @@
         <span>PWR</span>
         <span id="sdLed" class="led sd-act" title="Flash / SD Activity"></span>
         <span>SPI</span>
-        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + 3 CIRCUITOS (v21)</span>
+        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + 3 CIRCUITOS (v22)</span>
       </div>
       <div class="top-hw-pills">
         <button id="btnRates" class="pill-btn active" title="Configurar Rates, PID y Físicas">⚙️ RATES</button>
@@ -2088,8 +2088,30 @@
       drawHomeIcon320(246, 209);
       drawInavText320(`DST ${Math.min(999, Math.round(gateDist))}M`, 258, 210, WHITE);
 
-      // 8. CENTRO INFERIOR (Modo de Vuelo: MANU / ACRO / HOR)
-      drawInavText320(modeLabel, 144, 214, WHITE);
+      // 8. CENTRO INFERIOR (Modo de Vuelo + Telemetría 4 Motores Quad-X o Elevones/AoA en Ala)
+      drawInavText320(modeLabel, 128, 214, WHITE);
+
+      if (activeRomId === 'fpv_drone' && fpvDroneSim.mRpm) {
+        // 4 Barras de RPM reales (M1..M4) del mezclador Betaflight Quad-X + AirMode
+        const bx = 92, by = 212;
+        for (let m = 0; m < 4; m++) {
+          const mx = bx + m * 7;
+          const h = Math.max(1, Math.min(12, Math.round(fpvDroneSim.mRpm[m] * 12)));
+          for (let py = by; py <= by + 12; py++) {
+            setPx320(mx, py, 0x0000);
+            setPx320(mx + 4, py, 0x0000);
+          }
+          for (let py = by + 12 - h; py <= by + 12; py++) {
+            const mCol = fpvDroneSim.mRpm[m] > 0.88 ? C565.ORANGE : GREEN_DOT;
+            setPx320(mx + 1, py, mCol);
+            setPx320(mx + 2, py, mCol);
+            setPx320(mx + 3, py, mCol);
+          }
+        }
+      } else if (activeRomId === 'fpv_wing') {
+        const aoaDeg = Math.round((fpvWingSim.lastAlpha || 0) * RAD2DEG);
+        drawInavText320(`AOA ${aoaDeg >= 0 ? '+' : ''}${aoaDeg}`, 72, 214, aeroEnv.stallWarn ? C565.RED : WHITE);
+      }
     }
 
     function cycleCraftFlightMode(craft) {
@@ -2105,6 +2127,7 @@
       playTone(760, 0.04);
     }
 
+    // Se ejecuta 1 sola vez por frame (60 Hz) antes de los 4 sub-steps físicos (240 Hz)
     function handleInFlightShortcuts(craft) {
       if (hwInput.justPressed('SELECT')) {
         generateGentleVoxelMap(currentThemeIdx + 1);
@@ -2127,12 +2150,28 @@
         showToast(nextId === 'fpv_drone' ? 'MODO: FPV DRONE' : 'MODO: ALA FIJA FPV');
         return true;
       }
+      if (hwInput.justPressed('Y') || hwInput.justPressed('L3')) {
+        cycleCraftFlightMode(craft);
+      }
+      if (hwInput.justPressed('X')) {
+        craft.reset();
+        showToast(craft === fpvWingSim ? 'WING RESET' : 'DRONE RESET');
+        return true;
+      }
+      if (hwInput.justPressed('B') || hwInput.justPressed('R3')) {
+        craft.chaseCam = !craft.chaseCam;
+        showToast(craft.chaseCam ? 'CAM: 3RD PERSON' : 'CAM: FPV FULL');
+      }
       if (capTouch.justTapped && capTouch.ly64 <= 12) {
-        if (capTouch.lx128 < 45) {
+        if (capTouch.lx128 < 42) {
           selectChoroboboCircuit(currentCircuitIdx + 1, craft);
           craft.reset();
-        } else if (capTouch.lx128 < 85) {
-          cycleCraftFlightMode(craft);
+        } else if (capTouch.lx128 < 86) {
+          // Tocar el centro superior abre directamente el configurador de Rates/Físicas
+          rgOverlayOpen = true;
+          rgTuningOpen = true;
+          rgTuningTab = activeRomId === 'fpv_wing' ? 1 : 0;
+          playTone(680, 0.04);
         } else {
           const nextId = activeRomId === 'fpv_drone' ? 'fpv_wing' : 'fpv_drone';
           launchRom(nextId);
@@ -2142,6 +2181,76 @@
         capTouch.justTapped = false;
       }
       return false;
+    }
+
+    // =========================================================================
+    // PERFILES BETAFLIGHT / INAV + PROPIEDADES FÍSICAS (100% C-STRUCT ESTÁTICO)
+    // Basado en WebFPVSimulator + okalachev/flix (ESP32) + dRehmFlight + JSBSim
+    // =========================================================================
+    const DRONE_PRESETS = [
+      { name: 'FREESTYLE', rcRate: 520, yawRate: 260, centerSens: 150, expo: 0.48, massKg: 0.62, maxThrustAcc: 31.5, camTilt: 18, airMode: 1, propwash: 1.0 },
+      { name: 'RACING',    rcRate: 640, yawRate: 340, centerSens: 190, expo: 0.35, massKg: 0.48, maxThrustAcc: 39.0, camTilt: 28, airMode: 1, propwash: 0.7 },
+      { name: 'CINEMATIC', rcRate: 320, yawRate: 170, centerSens: 100, expo: 0.60, massKg: 0.78, maxThrustAcc: 25.5, camTilt: 12, airMode: 1, propwash: 0.6 },
+      { name: 'BANDO 6S',  rcRate: 780, yawRate: 400, centerSens: 180, expo: 0.52, massKg: 0.56, maxThrustAcc: 44.0, camTilt: 24, airMode: 1, propwash: 1.2 }
+    ];
+
+    const WING_PRESETS = [
+      { name: 'SPORT Z84', pitchRate: 210, rollRate: 290, yawRate: 115, expo: 0.38, wingLoad: 1.00, maxThrustAcc: 18.0, cgOffset:  0.00, tipStall: 1.0 },
+      { name: 'ACRO 3D',   pitchRate: 310, rollRate: 420, yawRate: 165, expo: 0.45, wingLoad: 0.82, maxThrustAcc: 24.5, cgOffset: -0.03, tipStall: 1.3 },
+      { name: 'CRUISER',   pitchRate: 145, rollRate: 200, yawRate:  85, expo: 0.50, wingLoad: 0.90, maxThrustAcc: 15.0, cgOffset:  0.03, tipStall: 0.5 },
+      { name: 'HEAVY LR',  pitchRate: 175, rollRate: 240, yawRate:  95, expo: 0.42, wingLoad: 1.32, maxThrustAcc: 20.5, cgOffset:  0.01, tipStall: 1.4 }
+    ];
+
+    const fcProfile = {
+      windScale: 1.0,
+      dronePresetIdx: 0,
+      wingPresetIdx: 0,
+      drone: { ...DRONE_PRESETS[0] },
+      wing:  { ...WING_PRESETS[0] }
+    };
+
+    function applyDronePreset(idx) {
+      fcProfile.dronePresetIdx = ((idx % DRONE_PRESETS.length) + DRONE_PRESETS.length) % DRONE_PRESETS.length;
+      const p = DRONE_PRESETS[fcProfile.dronePresetIdx];
+      fcProfile.drone.name         = p.name;
+      fcProfile.drone.rcRate       = p.rcRate;
+      fcProfile.drone.yawRate      = p.yawRate;
+      fcProfile.drone.centerSens   = p.centerSens;
+      fcProfile.drone.expo         = p.expo;
+      fcProfile.drone.massKg       = p.massKg;
+      fcProfile.drone.maxThrustAcc = p.maxThrustAcc;
+      fcProfile.drone.camTilt      = p.camTilt;
+      fcProfile.drone.airMode      = p.airMode;
+      fcProfile.drone.propwash     = p.propwash;
+    }
+
+    function applyWingPreset(idx) {
+      fcProfile.wingPresetIdx = ((idx % WING_PRESETS.length) + WING_PRESETS.length) % WING_PRESETS.length;
+      const p = WING_PRESETS[fcProfile.wingPresetIdx];
+      fcProfile.wing.name         = p.name;
+      fcProfile.wing.pitchRate    = p.pitchRate;
+      fcProfile.wing.rollRate     = p.rollRate;
+      fcProfile.wing.yawRate      = p.yawRate;
+      fcProfile.wing.expo         = p.expo;
+      fcProfile.wing.wingLoad     = p.wingLoad;
+      fcProfile.wing.maxThrustAcc = p.maxThrustAcc;
+      fcProfile.wing.cgOffset     = p.cgOffset;
+      fcProfile.wing.tipStall     = p.tipStall;
+    }
+
+    // Curva Actual Rates de Betaflight: combina sensibilidad central lineal + SuperExpo hacia Max Rate (en rad/s)
+    function evalActualRateRad(rc, centerDegS, maxDegS, expo) {
+      const absRc = Math.abs(rc);
+      const expoFactor = absRc * (Math.pow(absRc, 3) * expo + absRc * (1.0 - expo));
+      const degPerSec = rc * centerDegS + (rc >= 0 ? 1 : -1) * Math.max(0, maxDegS - centerDegS) * expoFactor;
+      return degPerSec * DEG2RAD;
+    }
+
+    // Curva SuperExpo normalizada [-1..+1]
+    function applySuperExpo(rc, rate = 1.0, expo = 0.45) {
+      const absRc = Math.abs(rc);
+      const cubic = rc * (absRc * absRc * expo + (1.0 - expo));
+      return cubic * rate;
     }
 
     // =========================================================================
@@ -2159,40 +2268,34 @@
       stallWarn: false
     };
 
-    // Curva SuperExpo estilo Betaflight / INAV para tacto orgánico de sticks
-    function applySuperExpo(rc, rate = 1.0, expo = 0.45) {
-      const absRc = Math.abs(rc);
-      const cubic = rc * (absRc * absRc * expo + (1.0 - expo));
-      return cubic * rate;
-    }
-
     function updateAeroEnvironment(px, py, pz, groundH, dt) {
       aeroEnv.time += dt;
       const t = aeroEnv.time;
       const agl = Math.max(0.2, py - groundH);
+      const wScale = fcProfile.windScale;
 
       // 1. Brisa del valle de Chorobobo (ENE -> WSW con deriva lenta de dirección + cizalladura por altura)
       const windDir = 1.12 + 0.28 * Math.sin(t * 0.09) + 0.12 * Math.cos(t * 0.23);
       const shear   = Math.min(1.85, 0.72 + 0.28 * Math.log(1.0 + agl * 0.35));
-      const baseSpd = (3.8 + 0.9 * Math.sin(t * 0.17)) * shear;
+      const baseSpd = (3.8 + 0.9 * Math.sin(t * 0.17)) * shear * wScale;
 
       // 2. Ráfagas espectrales multi-frecuencia (Dryden ligero) + térmicas verticales sobre parcelas
       const sPhaseX = px * 0.035 + t * 1.9;
       const sPhaseZ = pz * 0.035 + t * 1.5;
-      const gustX = 1.35 * Math.sin(sPhaseX) + 0.75 * Math.cos(sPhaseZ * 1.7 + t * 3.4) + 0.42 * Math.sin(t * 6.8);
-      const gustZ = 1.25 * Math.cos(sPhaseZ) + 0.70 * Math.sin(sPhaseX * 1.6 - t * 3.1) + 0.38 * Math.cos(t * 7.3);
+      const gustX = (1.35 * Math.sin(sPhaseX) + 0.75 * Math.cos(sPhaseZ * 1.7 + t * 3.4) + 0.42 * Math.sin(t * 6.8)) * wScale;
+      const gustZ = (1.25 * Math.cos(sPhaseZ) + 0.70 * Math.sin(sPhaseX * 1.6 - t * 3.1) + 0.38 * Math.cos(t * 7.3)) * wScale;
 
       // Térmicas ascendentes / descendentes y rotor mecánico cerca de árboles (groundH > 2.2m)
       const treeWake = (groundH > 2.2 && agl < 12.0) ? (1.0 - agl / 12.0) * 1.85 : 0.35;
-      const thermalY = 0.85 * Math.sin(px * 0.025 + pz * 0.028 + t * 0.6)
-                     + 0.45 * Math.cos(px * 0.08 - t * 2.8) * treeWake;
+      const thermalY = (0.85 * Math.sin(px * 0.025 + pz * 0.028 + t * 0.6)
+                     + 0.45 * Math.cos(px * 0.08 - t * 2.8) * treeWake) * wScale;
 
       aeroEnv.windX = Math.cos(windDir) * baseSpd + gustX;
       aeroEnv.windZ = Math.sin(windDir) * baseSpd + gustZ;
       aeroEnv.windY = thermalY;
 
       // 3. Gradientes rotacionales de turbulencia (hacen que las alas y rotores sientan el aire vivo)
-      const turbAmp = 1.0 + treeWake * 1.2;
+      const turbAmp = (1.0 + treeWake * 1.2) * wScale;
       aeroEnv.turbRoll  = (0.48 * Math.sin(t * 5.3 + px * 0.07) + 0.32 * Math.cos(t * 11.7 + pz * 0.09)) * turbAmp;
       aeroEnv.turbPitch = (0.36 * Math.cos(t * 4.7 + pz * 0.06) + 0.24 * Math.sin(t * 9.8  - px * 0.08)) * turbAmp;
       aeroEnv.turbYaw   = (0.28 * Math.sin(t * 3.9 - px * 0.05) + 0.18 * Math.cos(t * 8.4  + pz * 0.06)) * turbAmp;
@@ -2233,7 +2336,10 @@
     }
 
     /***************************************************************************
-     * 5. SIMULADOR 1: FPV DRONE 6-DOF (VIENTO, PROPWASH, INERCIA DE ROTORES)
+     * 5. SIMULADOR 1: FPV DRONE 6-DOF (WebFPVSimulator + okalachev/flix + BEM)
+     *    - 4 Motores independientes (M1: Rear-R, M2: Front-R, M3: Rear-L, M4: Front-L)
+     *    - Mezclador Betaflight Quad-X con AirMode + PID Cascada + I-term Relax
+     *    - Ecuaciones de Euler 3D con Tensor de Inercia + Precesión Giroscópica
      ***************************************************************************/
     const fpvDroneSim = {
       px: 0, py: 2.2, pz: -10,
@@ -2247,6 +2353,10 @@
       activeGate: 0,
       thrCmd: 0.35,
       motorRpm: 0.35,
+      // 4 rotores independientes en SRAM estática (0=M1 RR, 1=M2 FR, 2=M3 RL, 3=M4 FL)
+      mRpm: new Float32Array([0.36, 0.36, 0.36, 0.36]),
+      mCmd: new Float32Array([0.36, 0.36, 0.36, 0.36]),
+      iPitch: 0, iRoll: 0, iYaw: 0,
       flightTime: 0,
       totalDistKm: 0,
 
@@ -2261,6 +2371,9 @@
         this.ux = 0;     this.uy = 1; this.uz = 0;
         this.rx = g0.nx; this.ry = 0; this.rz = g0.nz;
         this.motorRpm = 0.36;
+        this.mRpm[0] = 0.36; this.mRpm[1] = 0.36; this.mRpm[2] = 0.36; this.mRpm[3] = 0.36;
+        this.mCmd[0] = 0.36; this.mCmd[1] = 0.36; this.mCmd[2] = 0.36; this.mCmd[3] = 0.36;
+        this.iPitch = 0; this.iRoll = 0; this.iYaw = 0;
         this.activeGate = 0;
         this.flightTime = 0;
         this.totalDistKm = 0;
@@ -2269,32 +2382,19 @@
       },
 
       step(dt) {
-        if (handleInFlightShortcuts(this)) return;
         this.flightTime += dt;
-
-        if (hwInput.justPressed('Y') || hwInput.justPressed('L3')) {
-          cycleCraftFlightMode(this);
-        }
-        if (hwInput.justPressed('X')) { this.reset(); showToast('DRONE RESET'); }
-        if (hwInput.justPressed('B') || hwInput.justPressed('R3')) {
-          this.chaseCam = !this.chaseCam;
-          showToast(this.chaseCam ? 'CAM: 3RD PERSON' : 'CAM: FPV FULL');
-        }
+        const cfg = fcProfile.drone;
 
         const groundH = getTerrainHeightMeters(this.px, this.pz);
         updateAeroEnvironment(this.px, this.py, this.pz, groundH, dt);
 
-        // 1. Respuesta de acelerador con curva de potencia y spool-up real de los 4 motores brushless
-        const baseThr = 0.35;
-        let thr = hwInput.ly >= 0 ? baseThr + hwInput.ly * (1 - baseThr) : baseThr * (1 + hwInput.ly);
+        // 1. Comando de acelerador + Anti-Gravity boost en cambios bruscos de gas
+        const baseThr = 0.34;
+        let thr = hwInput.ly >= 0 ? baseThr + hwInput.ly * (1.0 - baseThr) : baseThr * (1.0 + hwInput.ly);
         if (hwInput.btn.A) thr = Math.min(1.0, thr + 0.28);
         this.thrCmd = thr;
 
-        const prevRpm = this.motorRpm;
-        this.motorRpm += (thr - this.motorRpm) * Math.min(1.0, 22.0 * dt);
-        const rpmPunch = (this.motorRpm - prevRpm) / Math.max(0.004, dt);
-
-        // 2. Velocidad relativa al aire (V_air = V_ground - V_wind) proyectada en ejes del chasis (R, U, F)
+        // 2. Velocidad relativa al aire proyectada en el chasis (R=derecha, U=arriba, F=frente)
         const vAirX = this.vx - aeroEnv.windX;
         const vAirY = this.vy - aeroEnv.windY;
         const vAirZ = this.vz - aeroEnv.windZ;
@@ -2307,57 +2407,141 @@
         const vBodyF = vAirX * this.fx + vAirY * this.fy + vAirZ * this.fz;
         const horizAirSpd = Math.hypot(vBodyR, vBodyF);
 
-        // 3. Oscilación de Propwash cuando el quad desciende sobre su propia estela de vórtices
-        let propwashRoll = 0, propwashPitch = 0;
-        if (vBodyU < -1.8 && horizAirSpd < 5.5) {
-          const pwIntensity = Math.min(1.8, (-1.8 - vBodyU) * 0.45 * (1.0 - horizAirSpd / 5.5));
-          propwashRoll  = Math.sin(this.flightTime * 68.0) * 1.45 * pwIntensity;
-          propwashPitch = Math.cos(this.flightTime * 54.0) * 1.15 * pwIntensity;
-        }
-
-        // 4. Controlador de Actitud / Tasas con SuperExpo + Turbulencia + Par de Reacción de Hélices
+        // 3. Tasas objetivo con curva Betaflight Actual Rates (sensibilidad central + SuperExpo)
         const curPitch = Math.atan2(-this.fy, this.uy);
         const curRoll  = Math.atan2(-this.ry, this.uy);
 
-        const rcPitch = applySuperExpo(hwInput.ry, 1.0, 0.45);
-        const rcRoll  = applySuperExpo(hwInput.rx, 1.0, 0.45);
-        const rcYaw   = applySuperExpo(hwInput.lx, 1.0, 0.30);
+        const ratePitchCmd = evalActualRateRad(hwInput.ry, cfg.centerSens, cfg.rcRate, cfg.expo);
+        const rateRollCmd  = evalActualRateRad(hwInput.rx, cfg.centerSens, cfg.rcRate, cfg.expo);
+        const tYaw         = evalActualRateRad(hwInput.lx, Math.min(140, cfg.yawRate * 0.55), cfg.yawRate, cfg.expo * 0.75);
 
-        let tPitch = 0, tRoll = 0, tYaw = rcYaw * 240 * DEG2RAD;
-        if (this.mode === 'ACRO') {
-          tPitch = rcPitch * 420 * DEG2RAD;
-          tRoll  = rcRoll  * 460 * DEG2RAD;
-        } else {
-          // Modo HORIZON: auto-nivela en el centro, pero permite giros rápidos en los extremos
+        let tPitch = ratePitchCmd, tRoll = rateRollCmd;
+        if (this.mode !== 'ACRO') {
+          // Modo HORIZON estilo Betaflight: transición progresiva entre ángulo y tasa acrobática
           const stickMag = Math.max(Math.abs(hwInput.rx), Math.abs(hwInput.ry));
           const acroBlend = Math.max(0, (stickMag - 0.65) / 0.35);
-          const lvlPitch = ((hwInput.ry * 52 * DEG2RAD) - curPitch) * 7.2;
-          const lvlRoll  = ((hwInput.rx * 55 * DEG2RAD) - curRoll)  * 7.5;
-          tPitch = lvlPitch * (1 - acroBlend) + (rcPitch * 340 * DEG2RAD) * acroBlend;
-          tRoll  = lvlRoll  * (1 - acroBlend) + (rcRoll  * 360 * DEG2RAD) * acroBlend;
+          const lvlPitch = ((hwInput.ry * 52 * DEG2RAD) - curPitch) * 7.5;
+          const lvlRoll  = ((hwInput.rx * 55 * DEG2RAD) - curRoll)  * 7.8;
+          tPitch = lvlPitch * (1.0 - acroBlend) + ratePitchCmd * 0.82 * acroBlend;
+          tRoll  = lvlRoll  * (1.0 - acroBlend) + rateRollCmd  * 0.82 * acroBlend;
         }
 
-        // Perturbaciones físicas sobre los giros: ráfagas de viento, propwash y par de aceleración de motores
-        const windDihedralRoll  = -vBodyR * 0.055;
-        const windPitchUp       =  vBodyF * 0.035;
-        const gyroAlpha = Math.min(1.0, 18.0 * dt);
+        // 4. Controlador PID en cascada con I-Term Relax (evita rebote al terminar flips rápidos)
+        const errPitch = tPitch - this.pitchRate;
+        const errRoll  = tRoll  - this.rollRate;
+        const errYaw   = tYaw   - this.yawRate;
 
-        this.pitchRate += (tPitch - this.pitchRate) * gyroAlpha + (aeroEnv.turbPitch * 0.85 + propwashPitch + windPitchUp) * dt;
-        this.rollRate  += (tRoll  - this.rollRate)  * gyroAlpha + (aeroEnv.turbRoll  * 1.05 + propwashRoll  + windDihedralRoll) * dt;
-        this.yawRate   += (tYaw   - this.yawRate)   * gyroAlpha + (aeroEnv.turbYaw   * 0.70 + rpmPunch * 0.14) * dt;
+        const relaxPR = Math.max(0.1, 1.0 - Math.hypot(hwInput.rx, hwInput.ry) * 0.85);
+        this.iPitch = Math.max(-0.22, Math.min(0.22, this.iPitch + errPitch * 0.14 * relaxPR * dt));
+        this.iRoll  = Math.max(-0.22, Math.min(0.22, this.iRoll  + errRoll  * 0.14 * relaxPR * dt));
+        this.iYaw   = Math.max(-0.18, Math.min(0.18, this.iYaw   + errYaw   * 0.10 * dt));
+
+        const uPitch = Math.max(-0.65, Math.min(0.65, errPitch * 0.115 + this.iPitch));
+        const uRoll  = Math.max(-0.65, Math.min(0.65, errRoll  * 0.115 + this.iRoll));
+        const uYaw   = Math.max(-0.45, Math.min(0.45, errYaw   * 0.105 + this.iYaw));
+
+        // 5. Mezclador Betaflight Quad-X (M1=RR, M2=FR, M3=RL, M4=FL) + AirMode real
+        // Convención: Roll+ inclina a la derecha (sube M3,M4 izq); Pitch+ sube el morro (sube M2,M4 frontales)
+        const d1 = -uRoll - uPitch - uYaw; // M1: Rear-Right  (CCW)
+        const d2 = -uRoll + uPitch + uYaw; // M2: Front-Right (CW)
+        const d3 =  uRoll - uPitch + uYaw; // M3: Rear-Left   (CW)
+        const d4 =  uRoll + uPitch - uYaw; // M4: Front-Left  (CCW)
+
+        let dMin = Math.min(d1, d2, d3, d4);
+        let dMax = Math.max(d1, d2, d3, d4);
+        const span = dMax - dMin;
+        let mixScale = 1.0;
+        let thrMix = thr;
+
+        if (cfg.airMode) {
+          // AirMode: garantiza autoridad de giro completa incluso con acelerador al 0% en caída libre
+          if (span > 0.95) mixScale = 0.95 / span;
+          dMin *= mixScale; dMax *= mixScale;
+          if (thrMix + dMin < 0.05) thrMix = 0.05 - dMin;
+          if (thrMix + dMax > 1.00) thrMix = 1.00 - dMax;
+        } else {
+          // Sin AirMode: a bajo gas se recorta la autoridad diferencial de los motores
+          const authAtLowThr = Math.min(1.0, thr / 0.22);
+          mixScale = authAtLowThr;
+        }
+
+        // Sag dinámico de batería LiPo 4S (reduce el techo real de RPM al final del vuelo o en full-punch)
+        const sagFactor = Math.max(0.84, 1.0 - (thr * thr * 0.06) - Math.min(0.08, this.flightTime * 0.00025));
+
+        this.mCmd[0] = Math.max(0.04, Math.min(1.0, thrMix + d1 * mixScale)) * sagFactor;
+        this.mCmd[1] = Math.max(0.04, Math.min(1.0, thrMix + d2 * mixScale)) * sagFactor;
+        this.mCmd[2] = Math.max(0.04, Math.min(1.0, thrMix + d3 * mixScale)) * sagFactor;
+        this.mCmd[3] = Math.max(0.04, Math.min(1.0, thrMix + d4 * mixScale)) * sagFactor;
+
+        // 6. Dinámica de 4 Motores Brushless (spool-up más rápido que frenado DShot Dampened Light)
+        let rpmSum = 0;
+        let yawAccelReaction = 0;
+        for (let i = 0; i < 4; i++) {
+          const prev = this.mRpm[i];
+          const cmd  = this.mCmd[i];
+          const tauRate = cmd >= prev ? 32.0 : 21.0; // Aceleración activa vs frenado regenerativo ESC
+          this.mRpm[i] += (cmd - prev) * Math.min(1.0, tauRate * dt);
+          const dRpm = (this.mRpm[i] - prev) / Math.max(0.002, dt);
+          // M2(1) y M3(2) giran en sentido opuesto a M1(0) y M4(3) -> par de reacción inercial J_prop * dOmega/dt
+          const dirSign = (i === 1 || i === 2) ? 1.0 : -1.0;
+          yawAccelReaction += dirSign * dRpm;
+          rpmSum += this.mRpm[i];
+        }
+        this.motorRpm = rpmSum * 0.25;
+
+        // 7. Pares Físicos 3D de los 4 Rotores + Tensor de Inercia (Ixx, Iyy, Izz) + Precesión Giroscópica
+        // Escala de inercia respecto al chasis de referencia de 0.62 kg
+        const invInertia = 0.62 / Math.max(0.30, cfg.massKg);
+        const tauRoll  = ((this.mRpm[2] + this.mRpm[3]) - (this.mRpm[0] + this.mRpm[1])) * 42.0 * invInertia;
+        const tauPitch = ((this.mRpm[1] + this.mRpm[3]) - (this.mRpm[0] + this.mRpm[2])) * 40.0 * invInertia;
+        const tauYaw   = ((this.mRpm[1] + this.mRpm[2]) - (this.mRpm[0] + this.mRpm[3])) * 26.0 * invInertia
+                       + yawAccelReaction * 0.16 * invInertia;
+
+        // Acoplamiento giroscópico de las 4 hélices (netOmega = suma con signo de rotores CW y CCW)
+        const netPropOmega = (this.mRpm[1] + this.mRpm[2] - this.mRpm[0] - this.mRpm[3]) * 8.5;
+        const gyroPitch =  this.rollRate  * netPropOmega * 0.08;
+        const gyroRoll  = -this.pitchRate * netPropOmega * 0.08;
+
+        // Acoplamiento de Euler de cuerpo rígido: (Iyy - Izz)*q*r / Ixx (el eje Z tiene ~1.8x más inercia que X/Y)
+        const eulerPitch = -0.42 * this.rollRate * this.yawRate;
+        const eulerRoll  =  0.42 * this.pitchRate * this.yawRate;
+
+        // Oscilación de Propwash (Estado de Anillo de Vórtices) al descender sobre la propia estela
+        let propwashRoll = 0, propwashPitch = 0;
+        if (vBodyU < -1.6 && horizAirSpd < 6.0) {
+          const pwIntensity = Math.min(2.0, (-1.6 - vBodyU) * 0.48 * (1.0 - horizAirSpd / 6.0)) * cfg.propwash;
+          propwashRoll  = (Math.sin(this.flightTime * 68.0) * 1.55 + Math.cos(this.flightTime * 113.0) * 0.65) * pwIntensity;
+          propwashPitch = (Math.cos(this.flightTime * 54.0) * 1.25 + Math.sin(this.flightTime * 97.0)  * 0.55) * pwIntensity;
+        }
+
+        // Momento aerodinámico de cabeceo/alabeo por traslación horizontal del disco (Blade Flapping)
+        const windDihedralRoll = -vBodyR * 0.065;
+        const windPitchUp      =  vBodyF * 0.042;
+
+        this.pitchRate += (tauPitch + gyroPitch + eulerPitch + aeroEnv.turbPitch * 0.85 + propwashPitch + windPitchUp) * dt;
+        this.rollRate  += (tauRoll  + gyroRoll  + eulerRoll  + aeroEnv.turbRoll  * 1.05 + propwashRoll  + windDihedralRoll) * dt;
+        this.yawRate   += (tauYaw   + aeroEnv.turbYaw * 0.70) * dt;
 
         stepRotationSO3(this, dt);
 
-        // 5. Empuje de rotores (con efecto suelo, sustentación traslacional y pérdida por flujo axial)
+        // 8. Aerodinámica de Elemento de Pala (BEM): Empuje no lineal + Efecto Suelo + Blade Drag Lateral
+        // Curva cuadrática/lineal de empuje de hélice 5" + pérdida por ratio de avance (J = V_axial / nD)
+        let thrustNorm = 0;
+        for (let i = 0; i < 4; i++) {
+          const r = this.mRpm[i];
+          thrustNorm += (0.35 * r + 0.65 * r * r) * 0.25;
+        }
         const agl = Math.max(0.1, this.py - groundH);
-        const groundEffect = agl < 1.5 ? 1.0 + (1.5 - agl) * 0.09 : 1.0;
-        const transLift    = horizAirSpd > 2.0 ? 1.0 + Math.min(0.14, horizAirSpd * 0.012) : 1.0;
-        const inflowLoss   = Math.max(0.65, 1.0 - Math.max(0, vBodyU) * 0.018);
-        const thrustAcc    = (this.motorRpm * 28.5) * groundEffect * transLift * inflowLoss;
+        const groundEffect = agl < 1.6 ? 1.0 + (1.6 - agl) * 0.095 : 1.0;
+        const transLift    = horizAirSpd > 2.0 ? 1.0 + Math.min(0.15, horizAirSpd * 0.013) : 1.0;
+        const inflowLoss   = Math.max(0.58, 1.0 - Math.max(0, vBodyU) * 0.022);
+        const massScale    = 0.62 / Math.max(0.30, cfg.massKg);
+        const thrustAcc    = thrustNorm * cfg.maxThrustAcc * massScale * groundEffect * transLift * inflowLoss;
 
-        // 6. Arrastre aerodinámico anisotrópico sobre V_air (el disco de rotores frena mucho más en su eje U)
-        const dragFR = 0.12 + 0.011 * airSpd;
-        const dragU  = 0.28 + 0.024 * Math.abs(vBodyU);
+        // Arrastre de pala inducido por los rotores (H-force de Flightmare: da agarre en curvas al acelerar)
+        const bladeDragCoeff = 0.095 * this.motorRpm;
+        const dragFR = (0.11 + 0.0105 * airSpd + bladeDragCoeff) * massScale;
+        const dragU  = (0.28 + 0.024  * Math.abs(vBodyU)) * massScale;
         const fDragR = -vBodyR * dragFR;
         const fDragU = -vBodyU * dragU;
         const fDragF = -vBodyF * dragFR;
@@ -2391,7 +2575,7 @@
       },
 
       render() {
-        const tilt = 15 * DEG2RAD;
+        const tilt = fcProfile.drone.camTilt * DEG2RAD;
         const cT = Math.cos(tilt), sT = Math.sin(tilt);
         const cRx = this.rx, cRy = this.ry, cRz = this.rz;
         const cUx = cT*this.ux - sT*this.fx, cUy = cT*this.uy - sT*this.fy, cUz = cT*this.uz - sT*this.fz;
@@ -2425,8 +2609,8 @@
         const spd = Math.hypot(this.vx, this.vy, this.vz);
 
         renderInavOsd320({
-          callsign: 'Q-50 INAV-S3',
-          modeLabel: this.mode,
+          callsign: `Q5 ${fcProfile.drone.name.slice(0, 7)}`,
+          modeLabel: `${this.mode}${fcProfile.drone.airMode ? '+AIR' : ''}`,
           spdMs: spd,
           thrPct: this.thrCmd * 100,
           altM: this.py,
@@ -2444,8 +2628,23 @@
     };
 
     /***************************************************************************
-     * 6. SIMULADOR 2: FPV FIXED-WING 6-DOF (Z-84: MANU, ACRO, HOR + AoA/STALL/VIENTO)
+     * 6. SIMULADOR 2: FPV FIXED-WING 6-DOF (dRehmFlight + JSBSim Post-Stall)
+     *    - Semialas Izquierda/Derecha (alpha_L, alpha_R) con Tip-Stall real
+     *    - Curva Hoerner de Placa Plana +/-180 deg + Mezcla de Elevones (elevL, elevR)
+     *    - Offset de Centro de Gravedad (CG) configurable en tiempo real
      ***************************************************************************/
+    // Evalúa C_L(alpha) combinando perfil sustentador lineal + placa plana post-pérdida de JSBSim/Hoerner
+    function evalWingLiftCoeff(alphaEff, stallAngle, elevDeflect) {
+      const absA = Math.abs(alphaEff);
+      const flatPlate = 2.0 * Math.sin(alphaEff) * Math.cos(alphaEff);
+      if (absA <= stallAngle) {
+        return 4.65 * alphaEff + 0.36 * elevDeflect;
+      }
+      const blend = Math.min(1.0, (absA - stallAngle) / 0.22);
+      const preStall = (alphaEff >= 0 ? 1 : -1) * (4.65 * stallAngle) + 0.20 * elevDeflect;
+      return preStall * (1.0 - blend) + flatPlate * blend;
+    }
+
     const fpvWingSim = {
       px: 0, py: 4.0, pz: -14,
       vx: 0, vy: 0, vz: 15.5,
@@ -2459,6 +2658,9 @@
       activeGate: 0,
       thrCmd: 0.46,
       motorRpm: 0.46,
+      elevL: 0,
+      elevR: 0,
+      lastAlpha: 0,
       flightTime: 0,
       totalDistKm: 0,
 
@@ -2474,6 +2676,7 @@
         this.ux = 0;     this.uy = 1; this.uz = 0;
         this.rx = g0.nx; this.ry = 0; this.rz = g0.nz;
         this.motorRpm = 0.46;
+        this.elevL = 0; this.elevR = 0; this.lastAlpha = 0;
         this.activeGate = 0;
         this.flightTime = 0;
         this.totalDistKm = 0;
@@ -2482,17 +2685,8 @@
       },
 
       step(dt) {
-        if (handleInFlightShortcuts(this)) return;
         this.flightTime += dt;
-
-        if (hwInput.justPressed('Y') || hwInput.justPressed('L3')) {
-          cycleCraftFlightMode(this);
-        }
-        if (hwInput.justPressed('X')) { this.reset(); showToast('WING RESET'); }
-        if (hwInput.justPressed('B') || hwInput.justPressed('R3')) {
-          this.chaseCam = !this.chaseCam;
-          showToast(this.chaseCam ? 'CAM: 3RD PERSON' : 'CAM: FPV FULL');
-        }
+        const cfg = fcProfile.wing;
 
         const groundH = getTerrainHeightMeters(this.px, this.pz);
         updateAeroEnvironment(this.px, this.py, this.pz, groundH, dt);
@@ -2516,95 +2710,102 @@
         const vBody = vAirX * this.rx + vAirY * this.ry + vAirZ * this.rz;
         const wBody = vAirX * this.ux + vAirY * this.uy + vAirZ * this.uz;
 
-        // Ángulo de Ataque (alpha) y Ángulo de Resbalamiento (beta) reales
-        const alpha = Math.atan2(-wBody, Math.max(2.0, uBody));
-        const beta  = Math.atan2( vBody, Math.max(2.0, Math.hypot(uBody, wBody)));
+        // Ángulo de Ataque central (alpha) y Ángulo de Resbalamiento (beta)
+        const alpha = Math.atan2(-wBody, Math.max(1.8, uBody));
+        const beta  = Math.atan2( vBody, Math.max(1.8, Math.hypot(uBody, wBody)));
+        this.lastAlpha = alpha;
 
-        // 3. Curva de Sustentación C_L(alpha) con pérdida aerodinámica (Stall) a ~15.5° (0.27 rad) o Va < 8.8 m/s
-        const alpha0 = -0.042; // Ángulo de sustentación nula (-2.4° para mantener vuelo nivelado a ~15 m/s)
-        const alphaEff = alpha - alpha0;
-        const stallAngle = 0.27;
-        const isStalled = (Math.abs(alphaEff) > stallAngle) || (Va < 8.8);
+        // 3. Mezcla de Elevones estilo dRehmFlight con saturación mecánica [-1, +1]
+        const rcPitch = applySuperExpo(hwInput.ry, 1.0, cfg.expo);
+        const rcRoll  = applySuperExpo(hwInput.rx, 1.0, cfg.expo);
+        const rcYaw   = applySuperExpo(hwInput.lx, 1.0, cfg.expo * 0.75);
+        this.elevL = Math.max(-1.0, Math.min(1.0, rcPitch + rcRoll * 0.85));
+        this.elevR = Math.max(-1.0, Math.min(1.0, rcPitch - rcRoll * 0.85));
+
+        // 4. Aerodinámica de Semiala Izquierda y Derecha (alpha_L, alpha_R) + Pérdida de Punta (Tip-Stall)
+        // Al alabear con tasa rollRate (p), la semiala que baja ve mayor ángulo de ataque local: deltaAlpha = p * b_half / Va
+        const halfSpan = 0.44;
+        const dAlphaRoll = (this.rollRate * halfSpan) / Math.max(4.5, Va);
+        const alpha0 = -0.042;
+        const alphaEff  = alpha - alpha0;
+        const alphaEffL = alphaEff - dAlphaRoll; // Roll+ baja semiala derecha (+dAlpha) y sube izquierda (-dAlpha)
+        const alphaEffR = alphaEff + dAlphaRoll;
+
+        const stallAngle = 0.27 / Math.sqrt(Math.max(0.6, cfg.wingLoad));
+        const stallSpeed = 8.8 * Math.sqrt(Math.max(0.6, cfg.wingLoad));
+        const isStalled  = (Math.abs(alphaEff) > stallAngle) || (Va < stallSpeed);
         aeroEnv.stallWarn = isStalled;
 
-        let CL = 0;
-        if (Math.abs(alphaEff) <= stallAngle) {
-          CL = 4.6 * alphaEff + 0.32 * hwInput.ry;
-        } else {
-          const signA = alphaEff >= 0 ? 1 : -1;
-          const excess = Math.abs(alphaEff) - stallAngle;
-          CL = signA * Math.max(0.25, (4.6 * stallAngle) - excess * 3.4);
-        }
+        const CL_L = evalWingLiftCoeff(alphaEffL, stallAngle, this.elevL);
+        const CL_R = evalWingLiftCoeff(alphaEffR, stallAngle, this.elevR);
+        const CL   = 0.5 * (CL_L + CL_R);
 
-        // Autoridad de los elevones proporcional a la velocidad del aire + flujo de la hélice
-        const ctrlAuth = Math.min(1.65, 0.28 + (Va / 15.0) * 0.85 + this.motorRpm * 0.22);
-        const rcPitch = applySuperExpo(hwInput.ry, 1.0, 0.35);
-        const rcRoll  = applySuperExpo(hwInput.rx, 1.0, 0.35);
-        const rcYaw   = applySuperExpo(hwInput.lx, 1.0, 0.25);
+        // Diferencial de sustentación entre semialas: genera amortiguamiento natural pre-stall y autorrotación (wing drop) en pérdida
+        const wingAsymTorque = (CL_L - CL_R) * 2.15 * cfg.tipStall;
 
-        // Buffet y caída de ala (Wing Drop) durante entrada en pérdida
-        let stallPitchTorque = 0, stallRollTorque = 0;
+        // Autoridad de los elevones proporcional a la presión dinámica + prop-wash de la hélice pusher
+        const ctrlAuth = Math.min(1.70, 0.25 + (Va / 15.0) * 0.88 + this.motorRpm * 0.24);
+
+        let stallPitchTorque = 0, stallRollTorque = wingAsymTorque;
         if (isStalled) {
-          const stallSev = Math.min(1.5, Math.max(0.3, (9.2 - Va) * 0.25 + Math.max(0, Math.abs(alphaEff) - stallAngle) * 3.0));
-          stallPitchTorque = -2.6 * stallSev + Math.sin(this.flightTime * 42.0) * 1.8 * stallSev;
-          stallRollTorque  =  Math.cos(this.flightTime * 27.0 + this.px * 0.2) * 3.4 * stallSev;
+          const stallSev = Math.min(1.6, Math.max(0.3, (stallSpeed + 0.5 - Va) * 0.25 + Math.max(0, Math.abs(alphaEff) - stallAngle) * 3.2)) * cfg.tipStall;
+          stallPitchTorque = -2.8 * stallSev + Math.sin(this.flightTime * 42.0) * 1.8 * stallSev;
+          stallRollTorque += Math.cos(this.flightTime * 27.0 + this.px * 0.2) * 2.9 * stallSev;
         }
 
-        // 4. Dinámica Rotacional según el modo de vuelo (MANU vs ACRO vs HOR)
+        // 5. Dinámica Rotacional según el modo de vuelo (MANU vs ACRO vs HOR) + Offset de CG (C_m_alpha)
         const curPitch = Math.atan2(-this.fy, this.uy);
         const curRoll  = Math.atan2(-this.ry, this.uy);
         const bankTurnYaw = -this.ry * (9.81 / Math.max(9.0, Va)) * 0.92;
+        // CG positivo = morro pesado (más estable en pitch); CG negativo = cola pesada (más ágil/inestable)
+        const cmAlphaStab = 4.8 + cfg.cgOffset * 48.0;
 
         if (this.mode === 'MANU') {
-          // MODO MANUAL (PASSTHROUGH): Sin estabilización de giroscopio.
-          // Los elevones generan pares aerodinámicos directos + estabilidad longitudinal/direccional natural (veleta y fugoide)
-          const alphaTrim = 0.045;
-          const staticPitchStab = -4.8 * (alpha - alphaTrim) * (Va / 15.0);
-          const dihedralRollStab = -beta * 3.6 - this.ry * 0.55;
-          const weathercockYaw   =  beta * 5.8 - rcRoll * 0.65; // Efecto veleta en winglets + guiñada adversa
+          const alphaTrim = 0.045 - cfg.cgOffset * 0.35;
+          const staticPitchStab  = -cmAlphaStab * (alpha - alphaTrim) * (Va / 15.0);
+          const dihedralRollStab = -beta * 3.6 - this.ry * 0.55 + stallRollTorque;
+          const weathercockYaw   =  beta * 5.8 - rcRoll * 0.65;
 
-          const pitchAcc = rcPitch * 11.5 * ctrlAuth + staticPitchStab - this.pitchRate * 3.8 + aeroEnv.turbPitch * 1.45 + stallPitchTorque;
-          const rollAcc  = rcRoll  * 16.5 * ctrlAuth + dihedralRollStab - this.rollRate  * 4.4 + aeroEnv.turbRoll  * 1.65 + stallRollTorque;
-          const yawAcc   = rcYaw   *  6.5 * ctrlAuth + weathercockYaw   + (bankTurnYaw - this.yawRate) * 3.2 + aeroEnv.turbYaw * 1.25;
+          const pitchAcc = rcPitch * (cfg.pitchRate / 210.0) * 11.8 * ctrlAuth + staticPitchStab - this.pitchRate * 3.8 + aeroEnv.turbPitch * 1.45 + stallPitchTorque;
+          const rollAcc  = rcRoll  * (cfg.rollRate  / 290.0) * 16.8 * ctrlAuth + dihedralRollStab - this.rollRate * 4.2 + aeroEnv.turbRoll * 1.65;
+          const yawAcc   = rcYaw   * (cfg.yawRate   / 115.0) *  6.5 * ctrlAuth + weathercockYaw   + (bankTurnYaw - this.yawRate) * 3.2 + aeroEnv.turbYaw * 1.25;
 
           this.pitchRate += pitchAcc * dt;
           this.rollRate  += rollAcc  * dt;
           this.yawRate   += yawAcc   * dt;
         } else if (this.mode === 'ACRO') {
-          // MODO ACRO (RATE GYRO): Bloquea tasas de cabeceo y alabeo, permite acrobacia 3D completa + siente ráfagas y pérdida
-          const tPitch = rcPitch * 210 * DEG2RAD * ctrlAuth;
-          const tRoll  = rcRoll  * 290 * DEG2RAD * ctrlAuth;
-          const tYaw   = rcYaw   * 115 * DEG2RAD * ctrlAuth + bankTurnYaw + beta * 2.4;
-          const rateGain = Math.min(1.0, 14.0 * dt);
+          const tPitch = rcPitch * cfg.pitchRate * DEG2RAD * ctrlAuth;
+          const tRoll  = rcRoll  * cfg.rollRate  * DEG2RAD * ctrlAuth;
+          const tYaw   = rcYaw   * cfg.yawRate   * DEG2RAD * ctrlAuth + bankTurnYaw + beta * 2.4;
+          const rateGain = Math.min(1.0, 14.5 * dt);
 
-          this.pitchRate += (tPitch - this.pitchRate) * rateGain + (aeroEnv.turbPitch * 0.75 + stallPitchTorque) * dt;
-          this.rollRate  += (tRoll  - this.rollRate)  * rateGain + (aeroEnv.turbRoll  * 0.90 + stallRollTorque)  * dt;
+          this.pitchRate += (tPitch - this.pitchRate) * rateGain + (aeroEnv.turbPitch * 0.75 + stallPitchTorque - cfg.cgOffset * 4.5) * dt;
+          this.rollRate  += (tRoll  - this.rollRate)  * rateGain + (aeroEnv.turbRoll  * 0.90 + stallRollTorque * 0.75) * dt;
           this.yawRate   += (tYaw   - this.yawRate)   * rateGain + (aeroEnv.turbYaw   * 0.65) * dt;
         } else {
-          // MODO HORIZON (AUTOLEVEL): Auto-nivela con suavidad pero reacciona a la turbulencia y térmicas
           const tPitch = ((hwInput.ry * 42 * DEG2RAD) - curPitch) * 5.8 * ctrlAuth;
           const tRoll  = ((hwInput.rx * 58 * DEG2RAD) - curRoll)  * 6.2 * ctrlAuth;
-          const tYaw   = rcYaw * 100 * DEG2RAD + bankTurnYaw + beta * 2.8;
+          const tYaw   = rcYaw * cfg.yawRate * 0.88 * DEG2RAD + bankTurnYaw + beta * 2.8;
           const rateGain = Math.min(1.0, 15.0 * dt);
 
           this.pitchRate += (tPitch - this.pitchRate) * rateGain + (aeroEnv.turbPitch * 0.85 + stallPitchTorque * 0.6) * dt;
-          this.rollRate  += (tRoll  - this.rollRate)  * rateGain + (aeroEnv.turbRoll  * 1.00 + stallRollTorque  * 0.6) * dt;
+          this.rollRate  += (tRoll  - this.rollRate)  * rateGain + (aeroEnv.turbRoll  * 1.00 + stallRollTorque  * 0.5) * dt;
           this.yawRate   += (tYaw   - this.yawRate)   * rateGain + (aeroEnv.turbYaw   * 0.70) * dt;
         }
 
         stepRotationSO3(this, dt);
 
-        // 5. Fuerzas Aerodinámicas 3D Reales (Empuje + Sustentación + Arrastre Inducido/Parásito + Fuerza Lateral + Gravedad)
-        const qDyn = 0.044 * Va * Va; // Factor de presión dinámica
-        const CD   = 0.062 + 0.095 * CL * CL + 0.55 * beta * beta + (isStalled ? 0.18 : 0);
+        // 6. Fuerzas Aerodinámicas 3D Reales (Empuje + Sustentación + Arrastre Inducido/Parásito + Fuerza Lateral + Gravedad)
+        const invWingLoad = 1.0 / Math.max(0.55, cfg.wingLoad);
+        const qDyn = 0.044 * Va * Va * invWingLoad;
+        const CD   = 0.060 + 0.095 * CL * CL + 0.55 * beta * beta + (isStalled ? 0.22 * Math.sin(Math.abs(alphaEff)) : 0);
         const CY   = -1.65 * beta;
 
-        const liftAcc = Math.max(-24.0, Math.min(34.0, qDyn * CL));
-        const dragAcc = Math.min(28.0, qDyn * CD);
-        const sideAcc = Math.max(-15.0, Math.min(15.0, qDyn * CY));
-        const thrustAcc = this.motorRpm * 17.5;
+        const liftAcc   = Math.max(-26.0, Math.min(36.0, qDyn * CL));
+        const dragAcc   = Math.min(30.0, qDyn * CD);
+        const sideAcc   = Math.max(-15.0, Math.min(15.0, qDyn * CY));
+        const thrustAcc = this.motorRpm * cfg.maxThrustAcc * invWingLoad;
 
-        // Dirección unitaria del viento relativo para aplicar el arrastre exactamente opuesto a V_air
         const invVa = 1.0 / Va;
         const airDirX = vAirX * invVa, airDirY = vAirY * invVa, airDirZ = vAirZ * invVa;
 
@@ -2676,7 +2877,7 @@
         const gateBearingRad = Math.atan2(dxG * this.rx + dzG * this.rz, dxG * this.fx + dzG * this.fz);
 
         renderInavOsd320({
-          callsign: 'Z-84 INAV-S3',
+          callsign: `Z84 ${fcProfile.wing.name.slice(0, 7)}`,
           modeLabel: this.mode,
           spdMs: this.spd,
           thrPct: this.thrCmd * 100,
@@ -2697,11 +2898,12 @@
     fpvWingSim.reset();
 
     /***************************************************************************
-     * 7. SISTEMA OPERATIVO RETRO-GO (SOLO SIMULADORES FPV + DIAG HARDWARE)
+     * 7. SISTEMA OPERATIVO RETRO-GO + CONFIGURADOR DE RATES / FÍSICAS EN VRAM
      ***************************************************************************/
     const ROM_LIST = [
       { id: 'fpv_drone', sys: 'S3-FPV', name: 'FPV DRONE SIM',    size: '128KB', fav: true  },
       { id: 'fpv_wing',  sys: 'S3-FPV', name: 'FPV FIXED-WING',   size: '128KB', fav: true  },
+      { id: 'fc_tuning', sys: 'BF-CFG', name: 'RATES & PID SETUP',size: '64KB',  fav: true  },
       { id: 'hwtest',    sys: 'TOOLS',  name: 'SPI & TOUCH DIAG', size: '32KB',  fav: false }
     ];
 
@@ -2757,9 +2959,13 @@
     window.addEventListener('mouseup', () => { capTouch.active = false; });
 
     let rgOverlayOpen = false;
+    let rgTuningOpen  = false;
+    let rgTuningTab   = 0; // 0 = FPV DRONE 5", 1 = FPV WING Z-84
+    let rgTuningCursor = 0;
     let rgOverlayCursor = 0;
     const RG_OVERLAY_ITEMS = [
       'CONTINUE FLIGHT',
+      'RATES & PHYSICS CFG',
       'CIRCUITO: ROJO/MOR/NAR',
       'SWITCH: DRONE <-> WING',
       'TERRAIN THEME (1-4)',
@@ -2776,16 +2982,27 @@
 
     function launchRom(romId) {
       blinkSdLed();
+      if (romId === 'fc_tuning') {
+        if (activeRomId !== 'fpv_drone' && activeRomId !== 'fpv_wing') activeRomId = 'fpv_drone';
+        osState = 'ingame';
+        rgOverlayOpen = true;
+        rgTuningOpen = true;
+        rgTuningTab = activeRomId === 'fpv_wing' ? 1 : 0;
+        setFaceLabels('MODEL', 'DEF', 'FLY', 'STEP+', 'UP/DN:PARAM | L/R:AJUSTAR | B:VOLAR');
+        playTone(820, 0.08);
+        return;
+      }
       activeRomId = romId;
       osState = 'ingame';
       rgOverlayOpen = false;
+      rgTuningOpen = false;
       playTone(820, 0.08);
 
       if (romId === 'fpv_drone') {
-        setFaceLabels('MODO', 'RST', 'CAM', 'BOOST', 'L:THR/YAW R:PIT/ROL | DPAD:WING');
+        setFaceLabels('MODO', 'RST', 'CAM', 'BOOST', 'L:THR/YAW R:PIT/ROL | MENU:RATES');
         fpvDroneSim.reset();
       } else if (romId === 'fpv_wing') {
-        setFaceLabels('MODO', 'RST', 'CAM', 'BOOST', 'L:THR/YAW R:ELV/AIL | DPAD:DRONE');
+        setFaceLabels('MODO', 'RST', 'CAM', 'BOOST', 'L:THR/YAW R:ELV/AIL | MENU:RATES');
         fpvWingSim.reset();
       } else if (romId === 'hwtest') {
         setFaceLabels('Y', 'X', 'B', 'A', 'TOCA LA PANTALLA IPS O PULSA ★ MENU');
@@ -2814,6 +3031,12 @@
         fbDrawLine(cx - 13, cy + 6 + bank, cx, cy + 2, 0, 4);
         fbDrawLine(cx + 13, cy + 6 - bank, cx, cy + 2, 0, 4);
         fbDrawText('WING', bx + 11, by + 29, 3);
+      } else if (romId === 'fc_tuning') {
+        fbDrawLine(bx + 6, by + 24, bx + 33, by + 24, 0, 6);
+        fbDrawLine(bx + 19, by + 6, bx + 19, by + 26, 0, 6);
+        fbDrawLine(bx + 7, by + 24, bx + 19, by + 18, 0, 3);
+        fbDrawLine(bx + 19, by + 18, bx + 31, by + 7, 0, 2);
+        fbDrawText('RATE', bx + 11, by + 29, 5);
       } else {
         fbRect(bx + 9, by + 6, 20, 18, false, 3);
         fbDrawLine(bx + 12, by + 15, bx + 26, by + 15, 0, 2);
@@ -2830,8 +3053,8 @@
       fbDrawText('RETRO-GO S3 // INAV VOXEL', 10, 6, 2);
       fbDrawText('MCU : ESP32-S3 LX7 240MHZ', 8, 18, 1);
       fbDrawText('MEM : 16MB FLASH / 8MB PSRAM', 8, 26, 3);
-      fbDrawText('GND : VOXEL TERRAIN + CLOUDS', 8, 34, 5);
-      fbDrawText('OSD : INAV MAX7456 HUD', 8, 42, 2);
+      fbDrawText('PHY : 4-ROTOR AIRMODE + BEM', 8, 34, 5);
+      fbDrawText('OSD : INAV MAX7456 + RATES', 8, 42, 2);
 
       const pct = Math.min(1.0, (0.7 - bootTimer) / 0.6);
       fbRect(12, 51, 104, 6, false, 1);
@@ -2839,7 +3062,7 @@
 
       if (bootTimer <= 0 || hwInput.justPressed('A') || hwInput.justPressed('MENU') || capTouch.justTapped) {
         osState = 'launcher';
-        setFaceLabels('TEMA', 'INFO', 'WING', 'RUN', 'TOUCH/DPAD/STICK:NAV | A:RUN');
+        setFaceLabels('TEMA', 'RATES', 'WING', 'RUN', 'TOUCH/DPAD/STICK:NAV | A:RUN');
       }
     }
 
@@ -2857,7 +3080,7 @@
           else rgTabIdx = 2;
           playTone(620, 0.03);
         } else if (rgTabIdx !== 2 && capTouch.ly64 >= 12 && capTouch.ly64 <= 52) {
-          const idx = Math.floor((capTouch.ly64 - 12) / 10);
+          const idx = Math.floor((capTouch.ly64 - 12) / 9);
           if (idx >= 0 && idx < filteredRoms.length) {
             if (rgCursor === idx || capTouch.lx128 > 82) {
               launchRom(filteredRoms[idx].id);
@@ -2901,8 +3124,8 @@
       }
 
       if (hwInput.justPressed('X')) {
-        rgTabIdx = rgTabIdx === 2 ? 0 : 2;
-        playTone(580, 0.03);
+        launchRom('fc_tuning');
+        return;
       }
 
       if (hwInput.justPressed('B')) {
@@ -2931,14 +3154,14 @@
         }
         tx += tabs[i].length * 4 + 4;
       }
-      fbDrawText('INAV-OSD', 94, 2, 3);
+      fbDrawText('BF/INAV', 96, 2, 3);
 
       if (rgTabIdx === 2) {
-        fbDrawText('TERR: VOXEL + NUBES 3D', 4, 13, 2);
-        fbDrawText('MAPA: CIRCUITO 6 GATES', 4, 21, 5);
-        fbDrawText('OSD : INAV WHITE OUTLINED', 4, 29, 3);
-        fbDrawText('SIMS: DRONE 5" + ALA Z-84', 4, 37, 1);
-        fbDrawText('FPS : 45-60 FPS DMA ILI9341V', 4, 45, 9);
+        fbDrawText('QUAD: 4-MOTOR PID + AIRMODE', 4, 13, 2);
+        fbDrawText('WING: SEMIALAS + TIP-STALL', 4, 21, 5);
+        fbDrawText('OSD : MAX7456 + MOTOR BARS', 4, 29, 3);
+        fbDrawText('CFG : PULSA X O ⚙️ RATES', 4, 37, 1);
+        fbDrawText('FPS : 240HZ PHY / 60FPS DMA', 4, 45, 9);
         fbDrawLine(0, 53, 127, 53, 0, 6);
         fbDrawText('SELECT: CAMBIAR TEMA VOXEL', 4, 56, 2);
         return;
@@ -2946,11 +3169,11 @@
 
       for (let i = 0; i < filteredRoms.length; i++) {
         const rom = filteredRoms[i];
-        const y = 15 + i * 11;
+        const y = 14 + i * 9;
         const sel = (i === rgCursor);
         const label = (rom.fav ? '*' : ' ') + rom.name.slice(0, 18);
         if (sel) {
-          fbRect(1, y - 1, 82, 9, true, 4);
+          fbRect(1, y - 1, 82, 8, true, 4);
           fbDrawText('>' + label, 2, y, 1);
         } else {
           fbDrawText(' ' + label, 2, y, rom.fav ? 2 : 1);
@@ -2961,15 +3184,258 @@
       if (currentRom) {
         drawRomBoxArt(currentRom.id, previewAnimT);
         fbRect(0, 53, 128, 11, true, 8);
-        fbDrawText(`${TERRAIN_THEMES[currentThemeIdx].name} | A:FLY`, 2, 56, 3);
+        fbDrawText(`${TERRAIN_THEMES[currentThemeIdx].name} | X:RATES`, 2, 56, 3);
       }
     }
 
+    // =========================================================================
+    // CONFIGURADOR INTERACTIVO BETAFLIGHT / INAV DE RATES, PID Y FÍSICAS (VRAM)
+    // =========================================================================
+    function adjustTuningParameter(tab, row, dir) {
+      playTone(dir > 0 ? 690 : 540, 0.025);
+      if (tab === 0) {
+        const d = fcProfile.drone;
+        if (row === 0) {
+          applyDronePreset(fcProfile.dronePresetIdx + dir);
+          showToast(`PRESET: ${d.name}`);
+        } else if (row === 1) {
+          d.rcRate = Math.max(200, Math.min(960, d.rcRate + dir * 20));
+          d.centerSens = Math.min(d.rcRate - 40, Math.max(70, Math.round(d.rcRate * 0.30)));
+        } else if (row === 2) {
+          d.yawRate = Math.max(100, Math.min(600, d.yawRate + dir * 20));
+        } else if (row === 3) {
+          d.expo = Math.max(0.0, Math.min(0.85, Math.round((d.expo + dir * 0.04) * 100) / 100));
+        } else if (row === 4) {
+          d.massKg = Math.max(0.35, Math.min(0.95, Math.round((d.massKg + dir * 0.04) * 100) / 100));
+        } else if (row === 5) {
+          d.maxThrustAcc = Math.max(20.0, Math.min(48.0, Math.round((d.maxThrustAcc + dir * 2.0) * 10) / 10));
+        } else if (row === 6) {
+          d.camTilt = Math.max(5, Math.min(45, d.camTilt + dir * 3));
+        } else if (row === 7) {
+          d.airMode = d.airMode ? 0 : 1;
+        } else if (row === 8) {
+          fcProfile.windScale = Math.max(0.0, Math.min(2.0, Math.round((fcProfile.windScale + dir * 0.2) * 10) / 10));
+          d.propwash = fcProfile.windScale;
+        }
+      } else {
+        const w = fcProfile.wing;
+        if (row === 0) {
+          applyWingPreset(fcProfile.wingPresetIdx + dir);
+          showToast(`WING: ${w.name}`);
+        } else if (row === 1) {
+          w.pitchRate = Math.max(90, Math.min(420, w.pitchRate + dir * 15));
+        } else if (row === 2) {
+          w.rollRate = Math.max(120, Math.min(540, w.rollRate + dir * 20));
+        } else if (row === 3) {
+          w.expo = Math.max(0.0, Math.min(0.80, Math.round((w.expo + dir * 0.04) * 100) / 100));
+        } else if (row === 4) {
+          w.wingLoad = Math.max(0.65, Math.min(1.50, Math.round((w.wingLoad + dir * 0.05) * 100) / 100));
+        } else if (row === 5) {
+          w.maxThrustAcc = Math.max(11.0, Math.min(30.0, Math.round((w.maxThrustAcc + dir * 1.5) * 10) / 10));
+        } else if (row === 6) {
+          w.cgOffset = Math.max(-0.06, Math.min(0.06, Math.round((w.cgOffset + dir * 0.01) * 100) / 100));
+        } else if (row === 7) {
+          w.tipStall = Math.max(0.0, Math.min(2.0, Math.round((w.tipStall + dir * 0.2) * 10) / 10));
+        } else if (row === 8) {
+          fcProfile.windScale = Math.max(0.0, Math.min(2.0, Math.round((fcProfile.windScale + dir * 0.2) * 10) / 10));
+        }
+      }
+    }
+
+    function updateAndRenderTuningMenu(dt) {
+      if (navCooldown > 0) navCooldown -= dt;
+      const numRows = 9;
+
+      // Interacción táctil directa sobre la pantalla IPS 320x240 (128x64 lógicos)
+      if (capTouch.justTapped) {
+        if (capTouch.ly64 <= 10) {
+          if (capTouch.lx128 < 52) { rgTuningTab = 0; playTone(640, 0.03); }
+          else if (capTouch.lx128 < 102) { rgTuningTab = 1; playTone(640, 0.03); }
+          else { rgTuningOpen = false; rgOverlayOpen = false; playTone(520, 0.03); return; }
+        } else if (capTouch.ly64 >= 11 && capTouch.ly64 <= 53 && capTouch.lx128 <= 82) {
+          const clickedRow = Math.floor((capTouch.ly64 - 11) / 4.7);
+          if (clickedRow >= 0 && clickedRow < numRows) {
+            if (rgTuningCursor === clickedRow) {
+              adjustTuningParameter(rgTuningTab, rgTuningCursor, capTouch.lx128 > 45 ? 1 : -1);
+            } else {
+              rgTuningCursor = clickedRow;
+              playTone(480, 0.02);
+            }
+          }
+        } else if (capTouch.ly64 > 53) {
+          if (capTouch.lx128 < 34) adjustTuningParameter(rgTuningTab, rgTuningCursor, -1);
+          else if (capTouch.lx128 < 68) adjustTuningParameter(rgTuningTab, rgTuningCursor, 1);
+          else if (capTouch.lx128 < 98) {
+            if (rgTuningTab === 0) applyDronePreset(fcProfile.dronePresetIdx);
+            else applyWingPreset(fcProfile.wingPresetIdx);
+            showToast('DEFAULTS RESTORED');
+          } else {
+            rgTuningOpen = false;
+            rgOverlayOpen = false;
+            playTone(760, 0.04);
+            return;
+          }
+        }
+        capTouch.justTapped = false;
+      }
+
+      const navY = hwInput.ly;
+      const navX = hwInput.lx;
+
+      if (navCooldown <= 0) {
+        if (navY < -0.45 || hwInput.justPressed('DOWN')) {
+          rgTuningCursor = (rgTuningCursor + 1) % numRows;
+          navCooldown = 0.16;
+          playTone(480, 0.02);
+        } else if (navY > 0.45 || hwInput.justPressed('UP')) {
+          rgTuningCursor = (rgTuningCursor - 1 + numRows) % numRows;
+          navCooldown = 0.16;
+          playTone(480, 0.02);
+        } else if (navX > 0.50 || hwInput.justPressed('RIGHT') || hwInput.justPressed('A')) {
+          adjustTuningParameter(rgTuningTab, rgTuningCursor, 1);
+          navCooldown = 0.16;
+        } else if (navX < -0.50 || hwInput.justPressed('LEFT')) {
+          adjustTuningParameter(rgTuningTab, rgTuningCursor, -1);
+          navCooldown = 0.16;
+        }
+      }
+
+      if (hwInput.justPressed('Y') || hwInput.justPressed('SELECT')) {
+        rgTuningTab = rgTuningTab === 0 ? 1 : 0;
+        playTone(640, 0.03);
+      }
+      if (hwInput.justPressed('X')) {
+        if (rgTuningTab === 0) applyDronePreset(fcProfile.dronePresetIdx);
+        else applyWingPreset(fcProfile.wingPresetIdx);
+        showToast('PRESET RESET');
+        playTone(580, 0.04);
+      }
+      if (hwInput.justPressed('B')) {
+        rgTuningOpen = false;
+        rgOverlayOpen = false;
+        playTone(740, 0.04);
+        return;
+      }
+
+      // Fondo semitransparente oscuro sobre el framebuffer 320x240
+      fbRect(2, 2, 124, 60, true, 0);
+      fbRect(2, 2, 124, 60, false, 5);
+      fbRect(2, 2, 124, 8, true, 8);
+
+      // Pestañas superiores: [DRONE 5"] | [WING Z84] | [FLY]
+      fbRect(4, 3, 44, 6, true, rgTuningTab === 0 ? 2 : 8);
+      fbDrawText('DRONE 5"', 8, 4, rgTuningTab === 0 ? 0 : 1);
+
+      fbRect(50, 3, 44, 6, true, rgTuningTab === 1 ? 3 : 8);
+      fbDrawText('WING Z84', 54, 4, rgTuningTab === 1 ? 0 : 1);
+
+      fbRect(102, 3, 22, 6, true, 4);
+      fbDrawText('FLY', 107, 4, 1);
+
+      // Lista de 9 parámetros configurables en columna izquierda (nativa en 320x240 usando OSD ROM / fbDrawText)
+      const d = fcProfile.drone;
+      const w = fcProfile.wing;
+      const labels = rgTuningTab === 0 ? [
+        `PSET:${d.name}`,
+        `P/R :${d.rcRate} D/S`,
+        `YAW :${d.yawRate} D/S`,
+        `EXPO:${Math.round(d.expo * 100)}%`,
+        `MASS:${Math.round(d.massKg * 1000)}G`,
+        `PWR :${Math.round(d.maxThrustAcc)}M/S2`,
+        `TILT:${d.camTilt} DEG`,
+        `AIRM:${d.airMode ? 'ON (BF)' : 'OFF'}`,
+        `WIND:${Math.round(fcProfile.windScale * 100)}%`
+      ] : [
+        `PSET:${w.name}`,
+        `PIT :${w.pitchRate} D/S`,
+        `ROL :${w.rollRate} D/S`,
+        `EXPO:${Math.round(w.expo * 100)}%`,
+        `LOAD:${Math.round(w.wingLoad * 100)}%`,
+        `PWR :${Math.round(w.maxThrustAcc)}M/S2`,
+        `CG  :${w.cgOffset >= 0 ? '+' : ''}${Math.round(w.cgOffset * 100)}%`,
+        `STAL:${Math.round(w.tipStall * 100)}%`,
+        `WIND:${Math.round(fcProfile.windScale * 100)}%`
+      ];
+
+      for (let i = 0; i < numRows; i++) {
+        const py320 = 42 + i * 17;
+        const isSel = (i === rgTuningCursor);
+        if (isSel) {
+          for (let y = py320 - 1; y < py320 + 13; y++) {
+            vram565.fill(C565.NAVY, y * DISP_W + 10, y * DISP_W + 204);
+          }
+        }
+        drawInavText320((isSel ? '>' : ' ') + labels[i], 12, py320, isSel ? C565.GOLD : C565.WHITE);
+      }
+
+      // Panel Derecho en 320x240: Gráfica en vivo de la Curva SuperExpo / Actual Rates (x: 210..308, y: 44..144)
+      const gx0 = 210, gy0 = 44, gw = 98, gh = 96;
+      const gcx = gx0 + (gw >> 1), gcy = gy0 + (gh >> 1);
+      for (let y = gy0; y <= gy0 + gh; y++) {
+        vram565.fill(rgb565(12, 18, 32), y * DISP_W + gx0, y * DISP_W + gx0 + gw);
+        setPx320(gx0, y, C565.CYAN);
+        setPx320(gx0 + gw, y, C565.CYAN);
+        setPx320(gcx, y, C565.GREY);
+      }
+      for (let x = gx0; x <= gx0 + gw; x++) {
+        setPx320(x, gy0, C565.CYAN);
+        setPx320(x, gy0 + gh, C565.CYAN);
+        setPx320(x, gcy, C565.GREY);
+      }
+
+      // Trazar curva de Rates de -1.0 a +1.0 en píxeles nativos 320x240
+      const maxRateRef = rgTuningTab === 0 ? 960.0 : 540.0;
+      const curMaxRate = rgTuningTab === 0 ? d.rcRate : w.rollRate;
+      const curCenter  = rgTuningTab === 0 ? d.centerSens : w.rollRate * (1.0 - w.expo);
+      const curExpo    = rgTuningTab === 0 ? d.expo : w.expo;
+
+      let prevPy = gcy;
+      for (let px = 0; px <= gw; px++) {
+        const rcVal = (px / (gw * 0.5)) - 1.0;
+        const rateDeg = evalActualRateRad(rcVal, curCenter, curMaxRate, curExpo) * RAD2DEG;
+        const normY = Math.max(-1.0, Math.min(1.0, rateDeg / maxRateRef));
+        const py = Math.round(gcy - normY * (gh * 0.46));
+        const sx = gx0 + px;
+        const yMin = Math.min(prevPy, py), yMax = Math.max(prevPy, py);
+        for (let y = yMin; y <= yMax; y++) {
+          setPx320(sx, y, C565.GREEN);
+          setPx320(sx, Math.min(gy0 + gh - 1, y + 1), C565.GREEN);
+        }
+        prevPy = py;
+      }
+
+      // Punto en vivo del Joystick Derecho (Roll/Pitch) sobre la curva para probar el tacto en directo
+      const liveStick = Math.abs(hwInput.rx) >= Math.abs(hwInput.ry) ? hwInput.rx : hwInput.ry;
+      const liveRateDeg = Math.round(evalActualRateRad(liveStick, curCenter, curMaxRate, curExpo) * RAD2DEG);
+      const dotX = Math.round(gcx + liveStick * (gw * 0.48));
+      const dotY = Math.round(gcy - Math.max(-1.0, Math.min(1.0, liveRateDeg / maxRateRef)) * (gh * 0.46));
+      drawInavCircleDot320(dotX, dotY, 3, C565.GOLD);
+
+      drawInavText320('EXPO CURVE', 218, 47, C565.CYAN);
+      drawInavText320(`${Math.abs(liveRateDeg)}D/S`, 216, 148, C565.GOLD);
+      drawInavText320(rgTuningTab === 0 ? `TWR:${(d.maxThrustAcc / 9.81).toFixed(1)}:1` : `VS:${(8.8 * Math.sqrt(w.wingLoad)).toFixed(1)}M/S`, 216, 166, C565.WHITE);
+      drawInavText320('MOVE R-STICK!', 208, 184, C565.GREEN);
+
+      // Barra inferior de botones táctiles / atajos
+      fbRect(4, 54, 30, 7, true, 8);
+      fbDrawText('[-DEC]', 7, 56, 5);
+      fbRect(36, 54, 30, 7, true, 8);
+      fbDrawText('[+INC]', 39, 56, 3);
+      fbRect(68, 54, 26, 7, true, 8);
+      fbDrawText('[DEF]', 71, 56, 2);
+      fbRect(96, 54, 28, 7, true, 4);
+      fbDrawText('B:FLY', 100, 56, 1);
+    }
+
     function updateAndRenderRetroGoOverlay(dt) {
+      if (rgTuningOpen) {
+        updateAndRenderTuningMenu(dt);
+        return;
+      }
       if (navCooldown > 0) navCooldown -= dt;
 
-      if (capTouch.justTapped && capTouch.ly64 >= 16 && capTouch.ly64 <= 54) {
-        const idx = Math.floor((capTouch.ly64 - 17) / 7);
+      if (capTouch.justTapped && capTouch.ly64 >= 14 && capTouch.ly64 <= 56) {
+        const idx = Math.floor((capTouch.ly64 - 15) / 6.5);
         if (idx >= 0 && idx < RG_OVERLAY_ITEMS.length) {
           rgOverlayCursor = idx;
           hwInput.btn.A = true;
@@ -3000,38 +3466,41 @@
         if (rgOverlayCursor === 0) {
           rgOverlayOpen = false;
         } else if (rgOverlayCursor === 1) {
+          rgTuningOpen = true;
+          rgTuningTab = activeRomId === 'fpv_wing' ? 1 : 0;
+        } else if (rgOverlayCursor === 2) {
           const activeSim = activeRomId === 'fpv_wing' ? fpvWingSim : fpvDroneSim;
           selectChoroboboCircuit(currentCircuitIdx + 1, activeSim);
           activeSim.reset();
           rgOverlayOpen = false;
-        } else if (rgOverlayCursor === 2) {
+        } else if (rgOverlayCursor === 3) {
           const nextId = activeRomId === 'fpv_drone' ? 'fpv_wing' : 'fpv_drone';
           launchRom(nextId);
           showToast(nextId === 'fpv_drone' ? 'SIM: FPV DRONE' : 'SIM: FIXED-WING');
-        } else if (rgOverlayCursor === 3) {
+        } else if (rgOverlayCursor === 4) {
           generateGentleVoxelMap(currentThemeIdx + 1);
           showToast(TERRAIN_THEMES[currentThemeIdx].name);
           rgOverlayOpen = false;
-        } else if (rgOverlayCursor === 4) {
+        } else if (rgOverlayCursor === 5) {
           rgOverlayOpen = false;
           osState = 'launcher';
-          setFaceLabels('TEMA', 'INFO', 'WING', 'RUN', 'TOUCH/DPAD/STICK:NAV | A:RUN');
+          setFaceLabels('TEMA', 'RATES', 'WING', 'RUN', 'TOUCH/DPAD/STICK:NAV | A:RUN');
         }
         return;
       }
 
-      fbRect(14, 6, 100, 50, true, 0);
-      fbRect(14, 6, 100, 50, false, 2);
-      fbRect(14, 6, 100, 9, true, 4);
-      fbDrawText('INAV FPV MENU', 36, 8, 1);
+      fbRect(14, 5, 100, 54, true, 0);
+      fbRect(14, 5, 100, 54, false, 2);
+      fbRect(14, 5, 100, 9, true, 4);
+      fbDrawText('INAV FPV MENU', 36, 7, 1);
 
       for (let i = 0; i < RG_OVERLAY_ITEMS.length; i++) {
-        const y = 18 + i * 7;
+        const y = 16 + i * 6.5;
         if (i === rgOverlayCursor) {
-          fbRect(17, y - 1, 94, 7, true, 2);
-          fbDrawText('>' + RG_OVERLAY_ITEMS[i], 19, y, 0);
+          fbRect(17, Math.round(y - 1), 94, 6, true, 2);
+          fbDrawText('>' + RG_OVERLAY_ITEMS[i], 19, Math.round(y), 0);
         } else {
-          fbDrawText(' ' + RG_OVERLAY_ITEMS[i], 19, y, 1);
+          fbDrawText(' ' + RG_OVERLAY_ITEMS[i], 19, Math.round(y), i === 1 ? 3 : 1);
         }
       }
     }
@@ -3086,6 +3555,22 @@
     /***************************************************************************
      * 8. BUCLE PRINCIPAL DE SISTEMA RETRO-GO (CON SIMULADOR SPI DMA ILI9341V)
      ***************************************************************************/
+    document.getElementById('btnRates').addEventListener('click', () => {
+      if (osState !== 'ingame') {
+        osState = 'ingame';
+        if (activeRomId !== 'fpv_drone' && activeRomId !== 'fpv_wing') activeRomId = 'fpv_drone';
+      }
+      if (rgOverlayOpen && rgTuningOpen) {
+        rgTuningOpen = false;
+        rgOverlayOpen = false;
+      } else {
+        rgOverlayOpen = true;
+        rgTuningOpen = true;
+        rgTuningTab = activeRomId === 'fpv_wing' ? 1 : 0;
+      }
+      playTone(680, 0.04);
+    });
+
     document.getElementById('btnPalette').addEventListener('click', (e) => {
       paletteIdx = (paletteIdx + 1) % SPI_MODES.length;
       const m = SPI_MODES[paletteIdx];
@@ -3131,17 +3616,27 @@
           updateAndRenderRetroGoLauncher(dt);
         } else if (osState === 'ingame') {
           if (hwInput.justPressed('MENU')) {
-            rgOverlayOpen = !rgOverlayOpen;
-            rgOverlayCursor = 0;
+            if (rgOverlayOpen) {
+              rgOverlayOpen = false;
+              rgTuningOpen = false;
+            } else {
+              rgOverlayOpen = true;
+              rgTuningOpen = false;
+              rgOverlayCursor = 0;
+            }
             playTone(600, 0.04);
           }
 
           if (!rgOverlayOpen) {
             if (activeRomId === 'fpv_drone') {
-              for (let s = 0; s < 4; s++) fpvDroneSim.step(dt / 4);
+              if (!handleInFlightShortcuts(fpvDroneSim)) {
+                for (let s = 0; s < 4; s++) fpvDroneSim.step(dt * 0.25);
+              }
               fpvDroneSim.render();
             } else if (activeRomId === 'fpv_wing') {
-              for (let s = 0; s < 4; s++) fpvWingSim.step(dt / 4);
+              if (!handleInFlightShortcuts(fpvWingSim)) {
+                for (let s = 0; s < 4; s++) fpvWingSim.step(dt * 0.25);
+              }
               fpvWingSim.render();
             } else if (activeRomId === 'hwtest') {
               renderHwDiagnostic();
