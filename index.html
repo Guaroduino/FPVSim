@@ -472,9 +472,10 @@
         <span>PWR</span>
         <span id="sdLed" class="led sd-act" title="Flash / SD Activity"></span>
         <span>SPI</span>
-        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + RSSI/LINK (v34)</span>
+        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + COMANCHE 3D (v35)</span>
       </div>
       <div class="top-hw-pills">
+        <button id="btnFollowCam" class="pill-btn" title="Alternar Vista Externa 3D Follow Cam (SELECT)">🎥 FOLLOW</button>
         <button id="btnRcPad" class="pill-btn" title="Configurar Emisora TX16S USB/BT y Gamepad Bluetooth">🎮 RC/PAD</button>
         <button id="btnRates" class="pill-btn active" title="Configurar Rates, PID y Físicas">⚙️ RATES</button>
         <button id="btnPalette" class="pill-btn">🎨 IPS 60MHz</button>
@@ -1577,7 +1578,24 @@
           nz: -tx
         });
       }
-      return { id, name, shortCode, lineCol565, palIdx, uvList, gates };
+
+      // Precalcular 120 puntos (8 por tramo x 15 puertas) sobre una Spline Catmull-Rom cerrada en el suelo
+      const splinePts = [];
+      const stepsPerSeg = 8;
+      for (let i = 0; i < n; i++) {
+        const p0 = pts[(i - 1 + n) % n];
+        const p1 = pts[i];
+        const p2 = pts[(i + 1) % n];
+        const p3 = pts[(i + 2) % n];
+        for (let s = 1; s <= stepsPerSeg; s++) {
+          const t = s / (stepsPerSeg + 1);
+          const t2 = t * t, t3 = t2 * t;
+          const x = 0.5 * ((2 * p1.x) + (-p0.x + p2.x) * t + (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 + (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3);
+          const z = 0.5 * ((2 * p1.z) + (-p0.z + p2.z) * t + (2 * p0.z - 5 * p1.z + 4 * p2.z - p3.z) * t2 + (-p0.z + 3 * p1.z - 3 * p2.z + p3.z) * t3);
+          splinePts.push({ x, z, segIdx: i, stepIdx: s });
+        }
+      }
+      return { id, name, shortCode, lineCol565, palIdx, uvList, gates, splinePts };
     }
 
     // Coordenadas normalizadas (u, v) de los 3 Circuitos de 15 Gates sobre el valle de Chorobobo
@@ -1627,6 +1645,9 @@
       }
       const safeIdx = isFreeFlightNoGates() ? 0 : currentCircuitIdx;
       CIRCUIT_GATES = CHOROBOBO_CIRCUITS[safeIdx].gates;
+      if (typeof rebuildWorldObjectsForScale === 'function') {
+        rebuildWorldObjectsForScale();
+      }
     }
 
     function isFreeFlightNoGates() {
@@ -1885,9 +1906,9 @@
           let h = 2; // Suelo agrícola base: 0.25 m
 
           if (greenExcess > 11 && luma < 78) {
-            // Dosel de árboles densos (1.25 m a 5.5 m máx, evitando picos altos en pasto o cultivos verdes)
-            const treeFactor = Math.min(34, ((greenExcess - 11) * 1.2) + ((78 - luma) * 0.35));
-            h = Math.round(10 + treeFactor); // 10..44 unidades = 1.25m a 5.50m
+            // Base suave bajo las arboledas (0.35 m a 1.25 m máx) ya que los árboles ahora son Sprites Comanche 3D
+            const treeFactor = Math.min(8, ((greenExcess - 11) * 0.25) + ((78 - luma) * 0.08));
+            h = Math.round(3 + treeFactor); // 3..11 unidades = 0.37m a 1.37m
           } else if (luma < 44 && b >= r - 6) {
             // Cauce del Río Turbio y lagunas de riego
             h = 0;
@@ -2201,14 +2222,45 @@
       return { projPoint320, projLine };
     }
 
-    // Renderiza únicamente el circuito activo seleccionado (Rojo, Morado o Naranja) o ninguno en modo Vuelo Libre (SIN GATES)
-    function renderCircuitGates(projLine, activeGate) {
+    // Renderiza el camino de puntos Spline en el suelo + las puertas 3D del circuito activo
+    function renderCircuitGates(projLine, activeGate, projPoint320 = null) {
       if (isFreeFlightNoGates()) return;
 
       const circuit = CHOROBOBO_CIRCUITS[currentCircuitIdx];
       const gates = circuit.gates;
       const baseCol = circuit.palIdx; // 4 = Rojo, 10 = Morado, 9 = Naranja
 
+      // 1. Camino de Puntos en el Piso (Spline Catmull-Rom entre las Gates, estilo luces guía)
+      if (projPoint320 && circuit.splinePts) {
+        const sPts = circuit.splinePts;
+        const nGates = gates.length;
+        const prevGate = (activeGate - 1 + nGates) % nGates;
+        const pulseStep = (Math.floor(aeroEnv.time * 12.0) % 8) + 1;
+        const CYAN_DOT  = rgb565(60, 245, 255);
+        const GOLD_DOT  = rgb565(255, 230, 60);
+
+        for (let i = 0; i < sPts.length; i++) {
+          const sp = sPts[i];
+          const yFloor = getTerrainHeightMeters(sp.x, sp.z) + 0.35;
+          const pt = projPoint320(sp.x, yFloor, sp.z);
+          if (!pt || pt.cz > 420 || pt.sx < 2 || pt.sx >= DISP_W - 2 || pt.sy < 2 || pt.sy >= DISP_H - 2) continue;
+
+          const isApproachSeg = (sp.segIdx === prevGate);
+          const isNextSeg     = (sp.segIdx === activeGate);
+          let dotCol = circuit.lineCol565;
+          let dotRad = pt.cz < 75 ? 2 : 1;
+
+          if (isApproachSeg) {
+            dotCol = (sp.stepIdx === pulseStep || sp.stepIdx === pulseStep - 1) ? 0xFFFF : CYAN_DOT;
+            if (pt.cz < 140) dotRad = 2;
+          } else if (isNextSeg) {
+            dotCol = GOLD_DOT;
+          }
+          drawInavCircleDot320(pt.sx, pt.sy, dotRad, dotCol);
+        }
+      }
+
+      // 2. Puertas 3D (Gates)
       for (let i = 0; i < gates.length; i++) {
         const g = gates[i];
         const isAct = (i === activeGate);
@@ -2235,6 +2287,650 @@
           projLine(g.x, yTop + 2.0, g.z, g.x - g.nx * 3.5, yTop + 5.0, g.z - g.nz * 3.5, 0, 2);
           projLine(g.x, yTop + 2.0, g.z, g.x + g.nx * 3.5, yTop + 5.0, g.z + g.nz * 3.5, 0, 2);
         }
+      }
+    }
+
+    /***************************************************************************
+     * MOTOR DE OBJETOS 3D ESTILO COMANCHE 3 (ESP32-S3 SRAM + PUNTO FIJO 16.16)
+     *  1. Rasterizador Flat-Shaded de Triángulos/Quads en vram565 (scanline fill)
+     *  2. Sprites de Árboles 24x28 RGB565 pre-compilados (rotados y escalados Q16)
+     *  3. Edificios simples Low-Poly (Galpones, Hangar, Casa de Hacienda, Silos)
+     *  4. Modelos 3D sólidos de Aeronaves en vista Follow (Ala, Avión con Cola, Dron)
+     ***************************************************************************/
+    function fillTri320(x0, y0, x1, y1, x2, y2, col565) {
+      let ax = Math.round(x0), ay = Math.round(y0);
+      let bx = Math.round(x1), by = Math.round(y1);
+      let cx = Math.round(x2), cy = Math.round(y2);
+
+      if (ay > by) { let t = ax; ax = bx; bx = t; t = ay; ay = by; by = t; }
+      if (ay > cy) { let t = ax; ax = cx; cx = t; t = ay; ay = cy; cy = t; }
+      if (by > cy) { let t = bx; bx = cx; cx = t; t = by; by = cy; cy = t; }
+
+      const totalH = cy - ay;
+      if (totalH <= 0 || cy < 0 || ay >= DISP_H) return;
+      if (Math.max(ax, bx, cx) < 0 || Math.min(ax, bx, cx) >= DISP_W) return;
+
+      const yStart = Math.max(0, ay);
+      const yEnd   = Math.min(DISP_H - 1, cy);
+
+      // Paso en punto fijo 16.16 por línea horizontal (1 división por arista fuera del bucle de píxeles)
+      const stepAC = Math.round(((cx - ax) * 65536) / totalH);
+      const hAB    = by - ay;
+      const stepAB = hAB > 0 ? Math.round(((bx - ax) * 65536) / hAB) : 0;
+      const hBC    = cy - by;
+      const stepBC = hBC > 0 ? Math.round(((cx - bx) * 65536) / hBC) : 0;
+
+      for (let y = yStart; y <= yEnd; y++) {
+        const xA = (ax * 65536 + (y - ay) * stepAC) >> 16;
+        const xB = y < by
+          ? ((ax * 65536 + (y - ay) * stepAB) >> 16)
+          : (hBC > 0 ? ((bx * 65536 + (y - by) * stepBC) >> 16) : bx);
+        let xl = xA < xB ? xA : xB;
+        let xr = xA < xB ? xB : xA;
+        if (xr < 0 || xl >= DISP_W) continue;
+        if (xl < 0) xl = 0;
+        if (xr >= DISP_W) xr = DISP_W - 1;
+        vram565.fill(col565, y * DISP_W + xl, y * DISP_W + xr + 1);
+      }
+    }
+
+    function fillQuad320(p0, p1, p2, p3, col565) {
+      if (!p0 || !p1 || !p2 || !p3) return;
+      fillTri320(p0.sx, p0.sy, p1.sx, p1.sy, p2.sx, p2.sy, col565);
+      fillTri320(p0.sx, p0.sy, p2.sx, p2.sy, p3.sx, p3.sy, col565);
+    }
+
+    // 2 Sprites de Árboles estilo Comanche 3 (24x28 RGB565 = 2,688 bytes en SRAM Interna)
+    const TREE_SP_W = 24;
+    const TREE_SP_H = 28;
+    const TREE_SPRITE_ROM = new Uint16Array(2 * TREE_SP_W * TREE_SP_H);
+
+    (function buildComancheTreeSprites() {
+      const C_TRUNK_D = rgb565(68, 44, 24);
+      const C_TRUNK_L = rgb565(98, 66, 36);
+      const C_LEAF_0  = rgb565(22, 54, 20);
+      const C_LEAF_1  = rgb565(34, 82, 28);
+      const C_LEAF_2  = rgb565(52, 114, 38);
+      const C_LEAF_3  = rgb565(76, 146, 48);
+
+      // Tipo 0: Samán / Caro-Caro de copa ancha tropical
+      const blobs0 = [
+        { cx: 11.5, cy: 11.0, rx: 9.8, ry: 7.2 },
+        { cx:  7.2, cy: 13.5, rx: 6.2, ry: 5.2 },
+        { cx: 16.2, cy: 13.8, rx: 6.2, ry: 5.0 },
+        { cx: 11.8, cy:  7.5, rx: 6.8, ry: 5.2 }
+      ];
+      for (let y = 0; y < TREE_SP_H; y++) {
+        for (let x = 0; x < TREE_SP_W; x++) {
+          let col = 0;
+          // Tronco y ramas inferiores
+          if (y >= 16 && y < 27 && Math.abs(x - 11.5) <= (y > 22 ? 2.1 : 1.5)) {
+            col = x < 12 ? C_TRUNK_L : C_TRUNK_D;
+          }
+          // Copa frondosa con iluminación solar superior-izquierda
+          for (let b = 0; b < blobs0.length; b++) {
+            const bl = blobs0[b];
+            const dx = (x - bl.cx) / bl.rx;
+            const dy = (y - bl.cy) / bl.ry;
+            const d2 = dx * dx + dy * dy;
+            const n  = (((x * 37 + y * 59 + b * 17) & 7) - 3) * 0.06;
+            if (d2 + n <= 1.0) {
+              const shade = -dx * 0.45 - dy * 0.55 + (((x * 19 ^ y * 31) & 3) * 0.08);
+              col = shade > 0.32 ? C_LEAF_3 : (shade > 0.0 ? C_LEAF_2 : (shade > -0.32 ? C_LEAF_1 : C_LEAF_0));
+              break;
+            }
+          }
+          TREE_SPRITE_ROM[y * TREE_SP_W + x] = col;
+        }
+      }
+
+      // Tipo 1: Árbol alto piramidal / Chaguaramo-Ciprés de lindero
+      const off1 = TREE_SP_W * TREE_SP_H;
+      for (let y = 0; y < TREE_SP_H; y++) {
+        for (let x = 0; x < TREE_SP_W; x++) {
+          let col = 0;
+          if (y >= 18 && y < 27 && Math.abs(x - 11.5) <= 1.4) {
+            col = x < 12 ? C_TRUNK_L : C_TRUNK_D;
+          }
+          if (y >= 2 && y <= 21) {
+            const halfW = 1.8 + ((y - 2) / 19.0) * 6.8 + ((y & 3) === 0 ? 1.1 : 0.0);
+            const dx = x - 11.5;
+            const n = (((x * 43 + y * 29) & 7) - 3) * 0.25;
+            if (Math.abs(dx) + n <= halfW) {
+              const shade = (-dx / Math.max(2.0, halfW)) * 0.50 + ((20 - y) / 20.0) * 0.35 + (((x ^ y) & 1) * 0.12);
+              col = shade > 0.38 ? C_LEAF_3 : (shade > 0.05 ? C_LEAF_2 : (shade > -0.25 ? C_LEAF_1 : C_LEAF_0));
+            }
+          }
+          TREE_SPRITE_ROM[off1 + y * TREE_SP_W + x] = col;
+        }
+      }
+    })();
+
+    // Definición de Edificios Low-Poly en coordenadas UV de Chorobobo y Árboles en linderos
+    const BUILDING_UV_DEFS = [
+      // Hangar y Caseta de la Pista A.I.A Chorobobo
+      { u: 0.562, v: 0.388, w: 14, d:  9, h: 4.8, roofH: 2.0, yaw:  0.26, wallL: rgb565(220, 218, 210), wallD: rgb565(155, 154, 148), roofCol: rgb565(185, 62, 44) },
+      { u: 0.542, v: 0.380, w:  8, d:  6, h: 3.6, roofH: 1.4, yaw:  0.26, wallL: rgb565(214, 206, 188), wallD: rgb565(148, 140, 126), roofCol: rgb565(70, 115, 155) },
+      // Galpones agrícolas centrales y Casa de Hacienda
+      { u: 0.468, v: 0.382, w: 16, d: 10, h: 5.0, roofH: 2.2, yaw: -0.15, wallL: rgb565(225, 212, 186), wallD: rgb565(162, 148, 126), roofCol: rgb565(172, 68, 42) },
+      { u: 0.478, v: 0.398, w: 10, d:  8, h: 3.8, roofH: 1.8, yaw: -0.15, wallL: rgb565(232, 226, 212), wallD: rgb565(168, 160, 148), roofCol: rgb565(188, 74, 46) },
+      // Galpones sector oeste / Planta Etanol
+      { u: 0.305, v: 0.415, w: 18, d: 11, h: 5.5, roofH: 2.2, yaw:  0.05, wallL: rgb565(204, 210, 216), wallD: rgb565(142, 148, 156), roofCol: rgb565(125, 136, 148) },
+      { u: 0.285, v: 0.432, w: 12, d:  9, h: 4.5, roofH: 1.8, yaw:  0.05, wallL: rgb565(212, 208, 198), wallD: rgb565(148, 144, 136), roofCol: rgb565(168, 64, 42) },
+      // Fincas del norte y este
+      { u: 0.615, v: 0.455, w: 13, d:  8, h: 4.2, roofH: 1.8, yaw:  0.40, wallL: rgb565(224, 216, 196), wallD: rgb565(158, 150, 134), roofCol: rgb565(178, 66, 44) },
+      { u: 0.515, v: 0.542, w: 14, d:  9, h: 4.6, roofH: 2.0, yaw:  0.00, wallL: rgb565(216, 216, 212), wallD: rgb565(152, 152, 148), roofCol: rgb565(82, 126, 92) },
+      { u: 0.395, v: 0.495, w: 11, d:  8, h: 4.0, roofH: 1.7, yaw: -0.30, wallL: rgb565(228, 214, 188), wallD: rgb565(160, 148, 128), roofCol: rgb565(182, 70, 44) },
+      { u: 0.445, v: 0.275, w: 12, d:  8, h: 4.2, roofH: 1.8, yaw:  0.12, wallL: rgb565(218, 212, 200), wallD: rgb565(152, 146, 136), roofCol: rgb565(170, 62, 42) }
+    ];
+
+    const NUM_WORLD_TREES = 180;
+    const WORLD_TREES     = [];
+    const WORLD_BUILDINGS = [];
+    // Buffers estáticos en SRAM para ordenar objetos de atrás hacia adelante sin 'new' por frame
+    const MAX_VIS_OBJS  = 72;
+    const VIS_OBJ_TYPE  = new Uint8Array(MAX_VIS_OBJS); // 0 = árbol, 1 = edificio
+    const VIS_OBJ_IDX   = new Uint16Array(MAX_VIS_OBJS);
+    const VIS_OBJ_CZ    = new Float32Array(MAX_VIS_OBJS);
+    const VIS_SORT_ORD  = new Uint8Array(MAX_VIS_OBJS);
+
+    function rebuildWorldObjectsForScale() {
+      WORLD_BUILDINGS.length = 0;
+      const bScale = WORLD_W_M <= 2000.0 ? 0.78 : 1.15;
+      for (let i = 0; i < BUILDING_UV_DEFS.length; i++) {
+        const b = BUILDING_UV_DEFS[i];
+        const pos = uvToWorld(b.u, b.v);
+        WORLD_BUILDINGS.push({
+          x: pos.x,
+          z: pos.z,
+          w: b.w * bScale,
+          d: b.d * bScale,
+          h: Math.min(7.2, b.h),
+          roofH: Math.min(2.2, b.roofH),
+          cosY: Math.cos(b.yaw),
+          sinY: Math.sin(b.yaw),
+          wallL: b.wallL,
+          wallD: b.wallD,
+          roofCol: b.roofCol
+        });
+      }
+
+      WORLD_TREES.length = 0;
+      let seed = 0x13579BDF;
+      const c0 = CHOROBOBO_CIRCUITS[0].gates;
+      for (let i = 0; i < NUM_WORLD_TREES; i++) {
+        seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5;
+        const r1 = ((seed >>> 0) & 0xFFFF) / 65536.0;
+        seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5;
+        const r2 = ((seed >>> 0) & 0xFFFF) / 65536.0;
+        seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5;
+        const r3 = ((seed >>> 0) & 0xFFFF) / 65536.0;
+
+        // Distribuir árboles en linderos de parcelas y riberas (u: 0.14..0.82, v: 0.12..0.78)
+        const u = 0.14 + r1 * 0.68;
+        const v = 0.12 + r2 * 0.66;
+        const pos = uvToWorld(u, v);
+
+        // Evitar colocar árboles justo en medio de las puertas del circuito principal
+        let tooClose = false;
+        for (let g = 0; g < c0.length; g++) {
+          if (Math.hypot(pos.x - c0[g].x, pos.z - c0[g].z) < 16.0) {
+            tooClose = true;
+            break;
+          }
+        }
+        if (tooClose) {
+          pos.x += 22.0;
+          pos.z += 18.0;
+        }
+
+        const spriteType = (i % 3 === 0) ? 1 : 0;
+        const heightM = 4.8 + r3 * 3.0; // Entre 4.8 m y 7.8 m (siempre <= 8.0 m máximo)
+        const widthM  = spriteType === 0 ? heightM * 0.92 : heightM * 0.62;
+        WORLD_TREES.push({
+          x: pos.x,
+          z: pos.z,
+          h: heightM,
+          w: widthM,
+          type: spriteType
+        });
+      }
+    }
+    rebuildWorldObjectsForScale();
+
+    // Dibuja un sprite de árbol 24x28 rotado con el horizonte (cosR, sinR) y escalado en punto fijo 16.16
+    function drawTreeBillboard320(sxBase, syBase, wPx, hPx, type, cosR, sinR) {
+      if (hPx < 3.0 || wPx < 2.5) return;
+      // Centro del sprite a mitad de altura sobre la base (sxBase, syBase) en la dirección perpendicular al horizonte
+      const halfH = hPx * 0.48;
+      const cx = sxBase + sinR * halfH;
+      const cy = syBase - cosR * halfH;
+
+      const rad = Math.ceil(Math.max(wPx, hPx) * 0.68);
+      const x0 = Math.max(0, Math.floor(cx - rad));
+      const x1 = Math.min(DISP_W - 1, Math.ceil(cx + rad));
+      const y0 = Math.max(0, Math.floor(cy - rad));
+      const y1 = Math.min(DISP_H - 1, Math.ceil(cy + rad));
+      if (x0 > x1 || y0 > y1) return;
+
+      const scaleU = TREE_SP_W / Math.max(2.0, wPx);
+      const scaleV = TREE_SP_H / Math.max(2.0, hPx);
+
+      const du_dx = Math.round( cosR * scaleU * 65536);
+      const dv_dx = Math.round( sinR * scaleV * 65536);
+      const du_dy = Math.round(-sinR * scaleU * 65536);
+      const dv_dy = Math.round( cosR * scaleV * 65536);
+
+      const centerU_Q16 = (TREE_SP_W >> 1) << 16;
+      const centerV_Q16 = (TREE_SP_H >> 1) << 16;
+      const dx0 = x0 - cx, dy0 = y0 - cy;
+      let rowU = centerU_Q16 + Math.round(dx0 * du_dx + dy0 * du_dy);
+      let rowV = centerV_Q16 + Math.round(dx0 * dv_dx + dy0 * dv_dy);
+
+      const romOff = type * (TREE_SP_W * TREE_SP_H);
+      for (let sy = y0; sy <= y1; sy++) {
+        let uFP = rowU;
+        let vFP = rowV;
+        const dstRow = sy * DISP_W;
+        for (let sx = x0; sx <= x1; sx++) {
+          const tu = uFP >> 16;
+          const tv = vFP >> 16;
+          if ((tu >>> 0) < TREE_SP_W && (tv >>> 0) < TREE_SP_H) {
+            const col = TREE_SPRITE_ROM[romOff + tv * TREE_SP_W + tu];
+            if (col !== 0) {
+              vram565[dstRow + sx] = col;
+            }
+          }
+          uFP += du_dx;
+          vFP += dv_dx;
+        }
+        rowU += du_dy;
+        rowV += dv_dy;
+      }
+    }
+
+    function renderBuildingLowPoly320(b, camX, camZ, projPoint320) {
+      const y0 = getTerrainHeightMeters(b.x, b.z);
+      const y1 = y0 + b.h;
+      const y2 = y1 + b.roofH;
+      const hw = b.w * 0.5, hd = b.d * 0.5;
+      const rx = b.cosY, rz = b.sinY;
+      const fx = -b.sinY, fz = b.cosY;
+
+      // 4 esquinas inferiores, 4 superiores de pared y 2 cumbreras del techo a dos aguas
+      const b00 = projPoint320(b.x - rx*hw - fx*hd, y0, b.z - rz*hw - fz*hd);
+      const b10 = projPoint320(b.x + rx*hw - fx*hd, y0, b.z + rz*hw - fz*hd);
+      const b11 = projPoint320(b.x + rx*hw + fx*hd, y0, b.z + rz*hw + fz*hd);
+      const b01 = projPoint320(b.x - rx*hw + fx*hd, y0, b.z - rz*hw + fz*hd);
+
+      const t00 = projPoint320(b.x - rx*hw - fx*hd, y1, b.z - rz*hw - fz*hd);
+      const t10 = projPoint320(b.x + rx*hw - fx*hd, y1, b.z + rz*hw - fz*hd);
+      const t11 = projPoint320(b.x + rx*hw + fx*hd, y1, b.z + rz*hw + fz*hd);
+      const t01 = projPoint320(b.x - rx*hw + fx*hd, y1, b.z - rz*hw + fz*hd);
+
+      const r0  = projPoint320(b.x - rx*hw, y2, b.z - rz*hw);
+      const r1  = projPoint320(b.x + rx*hw, y2, b.z + rz*hw);
+
+      if (!b00 || !b10 || !b11 || !b01 || !t00 || !t10 || !t11 || !t01 || !r0 || !r1) return;
+
+      // Dibujar primero las paredes traseras y luego las visibles hacia la cámara (Painter's simple por signo del producto punto)
+      const vx = camX - b.x, vz = camZ - b.z;
+      const dotF = vx * fx + vz * fz;
+      const dotR = vx * rx + vz * rz;
+
+      if (dotF >= 0) {
+        fillQuad320(b00, b10, t10, t00, b.wallD);
+        fillQuad320(b01, b11, t11, t01, b.wallL);
+      } else {
+        fillQuad320(b01, b11, t11, t01, b.wallL);
+        fillQuad320(b00, b10, t10, t00, b.wallD);
+      }
+
+      if (dotR >= 0) {
+        fillQuad320(b00, b01, t01, t00, b.wallD);
+        fillTri320(t00.sx, t00.sy, t01.sx, t01.sy, r0.sx, r0.sy, b.wallD);
+        fillQuad320(b10, b11, t11, t10, b.wallL);
+        fillTri320(t10.sx, t10.sy, t11.sx, t11.sy, r1.sx, r1.sy, b.wallL);
+      } else {
+        fillQuad320(b10, b11, t11, t10, b.wallL);
+        fillTri320(t10.sx, t10.sy, t11.sx, t11.sy, r1.sx, r1.sy, b.wallL);
+        fillQuad320(b00, b01, t01, t00, b.wallD);
+        fillTri320(t00.sx, t00.sy, t01.sx, t01.sy, r0.sx, r0.sy, b.wallD);
+      }
+
+      // Dos aguas del techo (una iluminada y otra con ligero sombreado)
+      const roofDark = b.roofCol - ((b.roofCol >> 3) & 0x18E3);
+      if (dotF >= 0) {
+        fillQuad320(t00, t10, r1, r0, roofDark);
+        fillQuad320(t01, t11, r1, r0, b.roofCol);
+      } else {
+        fillQuad320(t01, t11, r1, r0, b.roofCol);
+        fillQuad320(t00, t10, r1, r0, roofDark);
+      }
+    }
+
+    // Renderiza todos los Árboles Sprite y Edificios Low-Poly visibles ordenados de atrás hacia adelante
+    function renderComancheWorldObjects(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz, projPoint320) {
+      let count = 0;
+      const maxDistTree = 340.0;
+      const maxDistBldg = 520.0;
+
+      // 1. Recolectar edificios dentro del frustum
+      for (let i = 0; i < WORLD_BUILDINGS.length && count < MAX_VIS_OBJS; i++) {
+        const b = WORLD_BUILDINGS[i];
+        const dx = b.x - camX, dz = b.z - camZ;
+        const cz = dx * cFx + dz * cFz;
+        if (cz < 3.0 || cz > maxDistBldg) continue;
+        const cx = dx * cRx + dz * cRz;
+        if (Math.abs(cx) > cz * 1.15 + 18.0) continue;
+        VIS_OBJ_TYPE[count] = 1;
+        VIS_OBJ_IDX[count]  = i;
+        VIS_OBJ_CZ[count]   = cz;
+        VIS_SORT_ORD[count] = count;
+        count++;
+      }
+
+      // 2. Recolectar árboles cercanos dentro del frustum
+      for (let i = 0; i < WORLD_TREES.length && count < MAX_VIS_OBJS; i++) {
+        const tr = WORLD_TREES[i];
+        const dx = tr.x - camX, dz = tr.z - camZ;
+        const cz = dx * cFx + dz * cFz;
+        if (cz < 2.2 || cz > maxDistTree) continue;
+        const cx = dx * cRx + dz * cRz;
+        if (Math.abs(cx) > cz * 0.95 + 8.0) continue;
+        VIS_OBJ_TYPE[count] = 0;
+        VIS_OBJ_IDX[count]  = i;
+        VIS_OBJ_CZ[count]   = cz;
+        VIS_SORT_ORD[count] = count;
+        count++;
+      }
+
+      // Ordenamiento por inserción en buffer estático (de mayor cz a menor cz = Painter's Algorithm)
+      for (let i = 1; i < count; i++) {
+        const keyOrd = VIS_SORT_ORD[i];
+        const keyCz  = VIS_OBJ_CZ[keyOrd];
+        let j = i - 1;
+        while (j >= 0 && VIS_OBJ_CZ[VIS_SORT_ORD[j]] < keyCz) {
+          VIS_SORT_ORD[j + 1] = VIS_SORT_ORD[j];
+          j--;
+        }
+        VIS_SORT_ORD[j + 1] = keyOrd;
+      }
+
+      const phi  = Math.atan2(cRy, cUy);
+      const cosR = Math.cos(phi), sinR = Math.sin(phi);
+
+      for (let k = 0; k < count; k++) {
+        const ord  = VIS_SORT_ORD[k];
+        const type = VIS_OBJ_TYPE[ord];
+        const idx  = VIS_OBJ_IDX[ord];
+        if (type === 1) {
+          renderBuildingLowPoly320(WORLD_BUILDINGS[idx], camX, camZ, projPoint320);
+        } else {
+          const tr = WORLD_TREES[idx];
+          const yFloor = getTerrainHeightMeters(tr.x, tr.z);
+          const pt = projPoint320(tr.x, yFloor, tr.z);
+          if (pt) {
+            const hPx = (tr.h * FOCAL_240) / pt.cz;
+            const wPx = (tr.w * FOCAL_240) / pt.cz;
+            drawTreeBillboard320(pt.sx, pt.sy, wPx, hPx, tr.type, cosR, sinR);
+          }
+        }
+      }
+    }
+
+    // =========================================================================
+    // MODELOS 3D SÓLIDOS LOW-POLY PARA VISTA FOLLOW (ALA, AVIÓN CON COLA Y DRON)
+    // =========================================================================
+    const MAX_CRAFT_FACES = 32;
+    const CRAFT_FACES = Array.from({ length: MAX_CRAFT_FACES }, () => ({
+      p0: null, p1: null, p2: null, col: 0, cz: 0
+    }));
+    const CRAFT_FACE_ORD = new Uint8Array(MAX_CRAFT_FACES);
+
+    function renderSortedCraftFaces(faceCount) {
+      for (let i = 0; i < faceCount; i++) CRAFT_FACE_ORD[i] = i;
+      for (let i = 1; i < faceCount; i++) {
+        const kOrd = CRAFT_FACE_ORD[i];
+        const kCz  = CRAFT_FACES[kOrd].cz;
+        let j = i - 1;
+        while (j >= 0 && CRAFT_FACES[CRAFT_FACE_ORD[j]].cz < kCz) {
+          CRAFT_FACE_ORD[j + 1] = CRAFT_FACE_ORD[j];
+          j--;
+        }
+        CRAFT_FACE_ORD[j + 1] = kOrd;
+      }
+      for (let i = 0; i < faceCount; i++) {
+        const f = CRAFT_FACES[CRAFT_FACE_ORD[i]];
+        fillTri320(f.p0.sx, f.p0.sy, f.p1.sx, f.p1.sy, f.p2.sx, f.p2.sy, f.col);
+      }
+    }
+
+    function addCraftTri(fc, p0, p1, p2, col) {
+      if (!p0 || !p1 || !p2 || fc >= MAX_CRAFT_FACES) return fc;
+      const slot = CRAFT_FACES[fc];
+      slot.p0  = p0;
+      slot.p1  = p1;
+      slot.p2  = p2;
+      slot.col = col;
+      slot.cz  = (p0.cz + p1.cz + p2.cz) * 0.3333;
+      return fc + 1;
+    }
+
+    function addCraftQuad(fc, p0, p1, p2, p3, col) {
+      fc = addCraftTri(fc, p0, p1, p2, col);
+      fc = addCraftTri(fc, p0, p2, p3, col);
+      return fc;
+    }
+
+    // Dibuja el Modelo 3D Sólido del Ala Volante (Z-84 / AR Wing) o Avión con Cola (Bixler / Talon / Edge 540)
+    function renderSolidWingModel320(sim, projPoint320, projLine) {
+      const px = sim.px, py = sim.py, pz = sim.pz;
+      const rx = sim.rx, ry = sim.ry, rz = sim.rz;
+      const ux = sim.ux, uy = sim.uy, uz = sim.uz;
+      const fx = sim.fx, fy = sim.fy, fz = sim.fz;
+
+      function wp(r, u, f) {
+        return projPoint320(
+          px + rx * r + ux * u + fx * f,
+          py + ry * r + uy * u + fy * f,
+          pz + rz * r + uz * u + fz * f
+        );
+      }
+
+      const hasRudder = !!(fcProfile.wing.hasRudder && fcProfile.wing.yawRate > 0);
+      let fc = 0;
+
+      if (!hasRudder) {
+        // 1. ALA VOLANTE SÓLIDA (Z-84 / AR WING LR): fuselaje central + alas delta en flecha + winglets + elevones móviles
+        const C_BODY_TOP = rgb565(56, 62, 72);
+        const C_BODY_BOT = rgb565(34, 38, 46);
+        const C_WING_L   = rgb565(238, 72, 38);  // Franja naranja/roja de alta visibilidad
+        const C_WING_R   = rgb565(218, 58, 30);
+        const C_CANOPY   = rgb565(30, 165, 235);
+        const C_WLET     = rgb565(245, 190, 32);
+        const C_ELEV     = rgb565(240, 244, 248);
+
+        const nose   = wp( 0.00,  0.00,  0.95);
+        const canopy = wp( 0.00,  0.16,  0.22);
+        const belly  = wp( 0.00, -0.11,  0.15);
+        const rootL  = wp(-0.28,  0.03,  0.38);
+        const rootR  = wp( 0.28,  0.03,  0.38);
+        const tailC  = wp( 0.00,  0.04, -0.52);
+        const tailB  = wp( 0.00, -0.06, -0.52);
+        const rearL  = wp(-0.34,  0.02, -0.48);
+        const rearR  = wp( 0.34,  0.02, -0.48);
+
+        const tipLF  = wp(-1.48,  0.05, -0.22);
+        const tipLR  = wp(-1.48,  0.04, -0.62);
+        const tipLT  = wp(-1.54,  0.34, -0.66); // Winglet izquierdo
+
+        const tipRF  = wp( 1.48,  0.05, -0.22);
+        const tipRR  = wp( 1.48,  0.04, -0.62);
+        const tipRT  = wp( 1.54,  0.34, -0.66); // Winglet derecho
+
+        // Elevones móviles (deflexión física real en vista Follow)
+        const elDefL = Math.max(-0.22, Math.min(0.22, sim.elevL * 0.16));
+        const elDefR = Math.max(-0.22, Math.min(0.22, sim.elevR * 0.16));
+        const elL1   = wp(-0.36,  0.02 + elDefL, -0.68);
+        const elL2   = wp(-1.38,  0.04 + elDefL, -0.78);
+        const elR1   = wp( 0.36,  0.02 + elDefR, -0.68);
+        const elR2   = wp( 1.38,  0.04 + elDefR, -0.78);
+
+        // Fuselaje central y panza
+        fc = addCraftTri(fc, nose, rootL, canopy, C_CANOPY);
+        fc = addCraftTri(fc, nose, canopy, rootR, C_CANOPY);
+        fc = addCraftTri(fc, canopy, rootL, tailC, C_BODY_TOP);
+        fc = addCraftTri(fc, canopy, tailC, rootR, C_BODY_TOP);
+        fc = addCraftTri(fc, rootL, rearL, tailC, C_BODY_TOP);
+        fc = addCraftTri(fc, rootR, tailC, rearR, C_BODY_TOP);
+        fc = addCraftTri(fc, nose, belly, rootL, C_BODY_BOT);
+        fc = addCraftTri(fc, nose, rootR, belly, C_BODY_BOT);
+        fc = addCraftTri(fc, belly, tailB, rearL, C_BODY_BOT);
+        fc = addCraftTri(fc, belly, rearR, tailB, C_BODY_BOT);
+
+        // Semialas izquierda y derecha + Winglets + Elevones móviles
+        fc = addCraftQuad(fc, rootL, tipLF, tipLR, rearL, C_WING_L);
+        fc = addCraftQuad(fc, rootR, rearR, tipRR, tipRF, C_WING_R);
+        fc = addCraftTri(fc, tipLF, tipLR, tipLT, C_WLET);
+        fc = addCraftTri(fc, tipRF, tipRR, tipRT, C_WLET);
+        fc = addCraftQuad(fc, rearL, tipLR, elL2, elL1, C_ELEV);
+        fc = addCraftQuad(fc, rearR, elR1, elR2, tipRR, C_ELEV);
+
+        renderSortedCraftFaces(fc);
+
+        // Disco de hélice trasera Pusher girando
+        const propAng = sim.flightTime * (18.0 + sim.motorRpm * 45.0);
+        const pCos = Math.cos(propAng) * 0.26, pSin = Math.sin(propAng) * 0.26;
+        projLine(
+          px - fx * 0.58 + rx * pCos + ux * pSin, py - fy * 0.58 + ry * pCos + uy * pSin, pz - fz * 0.58 + rz * pCos + uz * pSin,
+          px - fx * 0.58 - rx * pCos - ux * pSin, py - fy * 0.58 - ry * pCos - uy * pSin, pz - fz * 0.58 - rz * pCos - uz * pSin,
+          0, 1
+        );
+      } else {
+        // 2. AVIÓN CON FUSELAJE, CABINA, ALAS Y COLA CON TIMÓN MÓVIL (BIXLER / TALON VTAIL / EDGE 540)
+        const is3D   = fcProfile.wing.pitchRate >= 280;
+        const C_FUS_L = is3D ? rgb565(235, 48, 42)  : rgb565(236, 240, 245);
+        const C_FUS_D = is3D ? rgb565(165, 28, 24)  : rgb565(172, 182, 196);
+        const C_WING  = is3D ? rgb565(250, 195, 28) : rgb565(225, 232, 240);
+        const C_TIPS  = rgb565(235, 64, 36);
+        const C_CAN   = rgb565(36, 175, 245);
+        const C_RUD   = rgb565(250, 200, 36);
+
+        const nose  = wp( 0.00,  0.00,  1.12);
+        const canF  = wp( 0.00,  0.18,  0.45);
+        const canR  = wp( 0.00,  0.22, -0.05);
+        const fusL  = wp(-0.14,  0.02,  0.20);
+        const fusR  = wp( 0.14,  0.02,  0.20);
+        const fusB  = wp( 0.00, -0.15,  0.15);
+        const tail  = wp( 0.00,  0.04, -1.22);
+
+        // Alas principales con ligero diedro
+        const wRootLF = wp(-0.14, 0.08,  0.26), wRootLR = wp(-0.14, 0.06, -0.18);
+        const wRootRF = wp( 0.14, 0.08,  0.26), wRootRR = wp( 0.14, 0.06, -0.18);
+        const wTipLF  = wp(-1.58, 0.18,  0.16), wTipLR  = wp(-1.58, 0.16, -0.18);
+        const wTipRF  = wp( 1.58, 0.18,  0.16), wTipRR  = wp( 1.58, 0.16, -0.18);
+
+        // Estabilizador horizontal + Timón vertical con deflexión viva de Rudder (hwInput.lx)
+        const rudDef  = Math.max(-0.26, Math.min(0.26, -hwInput.lx * 0.24));
+        const hStabL  = wp(-0.56, 0.08, -1.18), hStabR = wp(0.56, 0.08, -1.18);
+        const hStabF  = wp( 0.00, 0.08, -0.92);
+        const finTop  = wp( 0.00, 0.52, -1.16);
+        const rudRear = wp( rudDef, 0.44, -1.36);
+
+        // Fuselaje y cabina
+        fc = addCraftTri(fc, nose, fusL, canF, C_CAN);
+        fc = addCraftTri(fc, nose, canF, fusR, C_CAN);
+        fc = addCraftTri(fc, canF, fusL, canR, C_CAN);
+        fc = addCraftTri(fc, canF, canR, fusR, C_CAN);
+        fc = addCraftTri(fc, fusL, tail, canR, C_FUS_D);
+        fc = addCraftTri(fc, fusR, canR, tail, C_FUS_L);
+        fc = addCraftTri(fc, fusL, fusB, tail, C_FUS_D);
+        fc = addCraftTri(fc, fusR, tail, fusB, C_FUS_L);
+
+        // Alas principales + puntas rojas
+        fc = addCraftQuad(fc, wRootLF, wTipLF, wTipLR, wRootLR, C_WING);
+        fc = addCraftQuad(fc, wRootRF, wRootRR, wTipRR, wTipRF, C_WING);
+        fc = addCraftTri(fc, wTipLF, wp(-1.72, 0.22, -0.02), wTipLR, C_TIPS);
+        fc = addCraftTri(fc, wTipRF, wTipRR, wp( 1.72, 0.22, -0.02), C_TIPS);
+
+        // Cola horizontal y Timón vertical móvil
+        fc = addCraftTri(fc, hStabF, hStabL, tail, C_WING);
+        fc = addCraftTri(fc, hStabF, tail, hStabR, C_WING);
+        fc = addCraftTri(fc, wp(0, 0.06, -0.90), tail, finTop, C_FUS_L);
+        fc = addCraftTri(fc, tail, finTop, rudRear, C_RUD);
+
+        renderSortedCraftFaces(fc);
+      }
+    }
+
+    // Dibuja el Modelo 3D Sólido del Dron FPV Quad-X 5" (Chasis carbono, Batería LiPo 4S, 4 Brazos y 4 Rotores)
+    function renderSolidDroneModel320(sim, projPoint320, projLine) {
+      const px = sim.px, py = sim.py, pz = sim.pz;
+      const rx = sim.rx, ry = sim.ry, rz = sim.rz;
+      const ux = sim.ux, uy = sim.uy, uz = sim.uz;
+      const fx = sim.fx, fy = sim.fy, fz = sim.fz;
+
+      function wp(r, u, f) {
+        return projPoint320(
+          px + rx * r + ux * u + fx * f,
+          py + ry * r + uy * u + fy * f,
+          pz + rz * r + uz * u + fz * f
+        );
+      }
+
+      const C_CARBON = rgb565(46, 52, 60);
+      const C_ARMS   = rgb565(68, 76, 88);
+      const C_LIPO   = rgb565(32, 148, 235);
+      const C_STRAP  = rgb565(245, 180, 28);
+      const C_CAM    = rgb565(235, 58, 38);
+
+      let fc = 0;
+      // Placa central de carbono + Cámara FPV frontal + Batería LiPo 4S superior
+      const bFL = wp(-0.14, 0.02,  0.26), bFR = wp( 0.14, 0.02,  0.26);
+      const bRL = wp(-0.14, 0.02, -0.26), bRR = wp( 0.14, 0.02, -0.26);
+      fc = addCraftQuad(fc, bFL, bFR, bRR, bRL, C_CARBON);
+
+      const lFL = wp(-0.09, 0.12,  0.14), lFR = wp( 0.09, 0.12,  0.14);
+      const lRL = wp(-0.09, 0.12, -0.16), lRR = wp( 0.09, 0.12, -0.16);
+      fc = addCraftQuad(fc, lFL, lFR, lRR, lRL, C_LIPO);
+      fc = addCraftQuad(fc, bRL, bRR, lRR, lRL, C_STRAP);
+      fc = addCraftTri(fc, bFL, bFR, wp(0.0, 0.09, 0.34), C_CAM);
+
+      // 4 Brazos de fibra de carbono en X
+      const armCoords = [
+        [ 0.48, -0.44], // M1 RR
+        [ 0.48,  0.44], // M2 FR
+        [-0.48, -0.44], // M3 RL
+        [-0.48,  0.44]  // M4 FL
+      ];
+      for (let m = 0; m < 4; m++) {
+        const ar = armCoords[m][0], af = armCoords[m][1];
+        const a0 = wp(ar * 0.22 - 0.04, 0.01, af * 0.22);
+        const a1 = wp(ar * 0.22 + 0.04, 0.01, af * 0.22);
+        const a2 = wp(ar + 0.04, 0.01, af);
+        const a3 = wp(ar - 0.04, 0.01, af);
+        fc = addCraftQuad(fc, a0, a1, a2, a3, C_ARMS);
+      }
+
+      renderSortedCraftFaces(fc);
+
+      // 4 Campanas de motor y discos de hélice girando a sus RPM reales
+      const propR = 0.22;
+      for (let m = 0; m < 4; m++) {
+        const ar = armCoords[m][0], af = armCoords[m][1];
+        const mHub = wp(ar, 0.05, af);
+        if (mHub) drawInavCircleDot320(mHub.sx, mHub.sy, 2, m < 2 ? C565.ORANGE : C565.GREEN);
+        const ang = sim.flightTime * (28.0 + sim.mRpm[m] * 55.0) + m * 1.1;
+        const cA = Math.cos(ang) * propR, sA = Math.sin(ang) * propR;
+        const wx = px + rx * ar + ux * 0.06 + fx * af;
+        const wy = py + ry * ar + uy * 0.06 + fy * af;
+        const wz = pz + rz * ar + uz * 0.06 + fz * af;
+        projLine(
+          wx + rx * cA + fx * sA, wy + ry * cA + fy * sA, wz + rz * cA + fz * sA,
+          wx - rx * cA - fx * sA, wy - ry * cA - fy * sA, wz - rz * cA - fz * sA,
+          0, 1
+        );
       }
     }
 
@@ -2717,7 +3413,9 @@
       }
       if (hwInput.justPressed('B') || hwInput.justPressed('R3')) {
         craft.chaseCam = !craft.chaseCam;
-        showToast(craft.chaseCam ? 'CAM: 3RD PERSON' : 'CAM: FPV FULL');
+        const btnFollow = document.getElementById('btnFollowCam');
+        if (btnFollow) btnFollow.classList.toggle('active', craft.chaseCam);
+        showToast(craft.chaseCam ? 'VISTA: FOLLOW 3D' : 'VISTA: FPV CABINA');
       }
       if (capTouch.justTapped && capTouch.ly64 <= 12) {
         if (capTouch.lx128 < 42) {
@@ -3212,16 +3910,14 @@
         // 1. Terreno Voxel + Cielo Azul con Nubes Voxel a pantalla completa
         renderVoxelTerrainAndSky(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz);
 
-        // 2. Gates 3D (solo el circuito activo o vacío si está en SIN GATES)
+        // 2. Objetos 3D estilo Comanche 3 (Árboles Sprite + Edificios Low-Poly) + Camino Spline + Gates 3D
         const { projPoint320, projLine } = createProjector320(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz);
-        renderCircuitGates(projLine, this.activeGate);
+        renderComancheWorldObjects(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz, projPoint320);
+        renderCircuitGates(projLine, this.activeGate, projPoint320);
 
+        // 3. Modelo 3D Sólido del Dron Quad-X en vista Follow (Chase Cam)
         if (this.chaseCam) {
-          const arm = 0.65;
-          projLine(this.px - (this.fx + this.rx)*arm, this.py, this.pz - (this.fz + this.rz)*arm,
-                   this.px + (this.fx + this.rx)*arm, this.py, this.pz + (this.fz + this.rz)*arm, 0, 2);
-          projLine(this.px - (this.fx - this.rx)*arm, this.py, this.pz - (this.fz - this.rz)*arm,
-                   this.px + (this.fx - this.rx)*arm, this.py, this.pz + (this.fz - this.rz)*arm, 0, 2);
+          renderSolidDroneModel320(this, projPoint320, projLine);
         }
 
         // 3. OSD estilo INAV con Horizonte Artificial proyectado directamente sobre el horizonte 3D
@@ -3643,29 +4339,14 @@
         // 1. Terreno Voxel + Cielo Azul con Nubes Voxel
         renderVoxelTerrainAndSky(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz);
 
-        // 2. Gates 3D (solo el circuito activo o ninguno en modo Vuelo Libre)
+        // 2. Objetos 3D estilo Comanche 3 (Árboles Sprite + Edificios Low-Poly) + Camino Spline + Gates 3D
         const { projPoint320, projLine } = createProjector320(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz);
-        renderCircuitGates(projLine, this.activeGate);
+        renderComancheWorldObjects(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz, projPoint320);
+        renderCircuitGates(projLine, this.activeGate, projPoint320);
 
+        // 3. Modelo 3D Sólido en vista Follow (Ala Volante con elevones móviles o Avión con Cola y Rudder móvil)
         if (this.chaseCam) {
-          const nx = this.px + this.fx * 1.1, ny = this.py + this.fy * 1.1, nz = this.pz + this.fz * 1.1;
-          const tx = this.px - this.fx * 0.6, ty = this.py - this.fy * 0.6, tz = this.pz - this.fz * 0.6;
-          const lx = this.px - this.fx * 0.3 - this.rx * 1.5, ly = this.py - this.fy * 0.3 - this.ry * 1.5, lz = this.pz - this.fz * 0.3 - this.rz * 1.5;
-          const rx = this.px - this.fx * 0.3 + this.rx * 1.5, ry = this.py - this.fy * 0.3 + this.ry * 1.5, rz = this.pz - this.fz * 0.3 + this.rz * 1.5;
-          projLine(nx, ny, nz, lx, ly, lz, 0, 1);
-          projLine(nx, ny, nz, rx, ry, rz, 0, 1);
-          projLine(lx, ly, lz, tx, ty, tz, 0, 4);
-          projLine(rx, ry, rz, tx, ty, tz, 0, 4);
-          // Si es un avión con cola y timón (hasRudder), dibujar fuselaje trasero y deriva vertical/estabilizador
-          if (fcProfile.wing.hasRudder && fcProfile.wing.yawRate > 0) {
-            const tailX = this.px - this.fx * 1.25, tailY = this.py - this.fy * 1.25, tailZ = this.pz - this.fz * 1.25;
-            const finX  = tailX + this.ux * 0.48,   finY  = tailY + this.uy * 0.48,   finZ  = tailZ + this.uz * 0.48;
-            const hLx   = tailX - this.rx * 0.55,   hLy   = tailY - this.ry * 0.55,   hLz   = tailZ - this.rz * 0.55;
-            const hRx   = tailX + this.rx * 0.55,   hRy   = tailY + this.ry * 0.55,   hRz   = tailZ + this.rz * 0.55;
-            projLine(nx, ny, nz, tailX, tailY, tailZ, 0, 1);
-            projLine(tailX, tailY, tailZ, finX, finY, finZ, 0, 2);
-            projLine(hLx, hLy, hLz, hRx, hRy, hRz, 0, 2);
-          }
+          renderSolidWingModel320(this, projPoint320, projLine);
         }
 
         // 3. OSD estilo INAV a pantalla completa (indica si es Ala sin Rudder o Avión con Cola)
@@ -4483,6 +5164,16 @@
     /***************************************************************************
      * 8. BUCLE PRINCIPAL DE SISTEMA RETRO-GO (CON SIMULADOR SPI DMA ILI9341V)
      ***************************************************************************/
+    document.getElementById('btnFollowCam').addEventListener('click', (e) => {
+      const craft = activeRomId === 'fpv_drone' ? fpvDroneSim : fpvWingSim;
+      craft.chaseCam = !craft.chaseCam;
+      fpvDroneSim.chaseCam = craft.chaseCam;
+      fpvWingSim.chaseCam  = craft.chaseCam;
+      e.currentTarget.classList.toggle('active', craft.chaseCam);
+      showToast(craft.chaseCam ? 'VISTA: FOLLOW 3D' : 'VISTA: FPV CABINA');
+      playTone(660, 0.04);
+    });
+
     document.getElementById('btnRcPad').addEventListener('click', () => {
       if (osState !== 'ingame') {
         osState = 'ingame';
