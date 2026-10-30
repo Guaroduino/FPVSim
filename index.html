@@ -472,7 +472,7 @@
         <span>PWR</span>
         <span id="sdLed" class="led sd-act" title="Flash / SD Activity"></span>
         <span>SPI</span>
-        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + INAV (v14)</span>
+        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + C-LUT (v15)</span>
       </div>
       <div class="top-hw-pills">
         <button id="btnPalette" class="pill-btn">🎨 IPS 60MHz</button>
@@ -1170,7 +1170,7 @@
       document.getElementById('uiHintBar').textContent = hint;
     }
 
-                    /***************************************************************************
+                        /***************************************************************************
      * 4. MOTOR VOXEL (TERRENO SUAVE + CIELO AZUL CON NUBES VOXEL) + INAV OSD 320x240
      ***************************************************************************/
     const DEG2RAD = Math.PI / 180.0;
@@ -1345,7 +1345,32 @@
     let lastRollAngle = 0;
     let cloudDriftX = 0;
 
-    // Renderizador Voxel de Terreno + Cielo con Nubes 3D
+    // =========================================================================
+    // TABLAS LUT EN PUNTO FIJO INT32 PARA ESP32-S3 (CERO DIVISIONES EN BUCLE)
+    // En ESP32-S3 viven en SRAM Interna (< 2 KB):
+    // - RAY_S_Q8[k]: distancia horizontal s * 256 para cada paso k (0..95)
+    // - RAY_INV_S_Q12[k]: (1 / s) * 4096 precalculado (cambia '/' por '*' + '>>')
+    // - CLOUD_DIST_Q8[dy]: distancia al plano de nubes * 256 para dyHoriz (0..511)
+    // =========================================================================
+    const NUM_RAY_STEPS = 96;
+    const RAY_S_Q8      = new Int32Array(NUM_RAY_STEPS);
+    const RAY_INV_S_Q12 = new Int32Array(NUM_RAY_STEPS);
+    const CLOUD_DIST_Q8 = new Int32Array(512);
+
+    (function initS3FixedPointLuts() {
+      let s = 0.6, ds = 0.28;
+      for (let k = 0; k < NUM_RAY_STEPS; k++) {
+        RAY_S_Q8[k]      = Math.round(s * 256);
+        RAY_INV_S_Q12[k] = Math.round((1.0 / s) * 4096);
+        s  += ds;
+        ds += 0.014;
+      }
+      for (let dy = 0; dy < 512; dy++) {
+        CLOUD_DIST_Q8[dy] = Math.round((2400.0 / (dy + 10)) * 256);
+      }
+    })();
+
+    // Renderizador Voxel 100% Punto Fijo Int32 en bucle interno (1 a 1 con C/ESP-IDF en ESP32-S3)
     function renderVoxelTerrainAndSky(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz, dt = 0.016) {
       cloudDriftX = (cloudDriftX + dt * 1.8) % 512;
       if (SPI_MODES[paletteIdx].mono) {
@@ -1356,7 +1381,7 @@
       const theme = TERRAIN_THEMES[currentThemeIdx];
       const fogCol = theme.fogCol;
 
-      // 1. Extraer ángulo de Roll y base des-rotada exacta (R0, U0, F)
+      // 1. Extraer ángulo de Roll y base des-rotada exacta (R0, U0, F) (1 vez por frame)
       const upMag = Math.hypot(cRy, cUy);
       if (upMag > 0.04) {
         lastRollAngle = Math.atan2(cRy, cUy);
@@ -1380,73 +1405,73 @@
       const uH = U0x * H0x + U0z * H0z;
       const fH = cFx * H0x + cFz * H0z;
 
-      const fHClamped = Math.abs(fH) < 0.15 ? (fH >= 0 ? 0.15 : -0.15) : fH;
+      const fHClamped = Math.abs(fH) < 0.20 ? (fH >= 0 ? 0.20 : -0.20) : fH;
       const horizonV = Math.max(-128, Math.min(384, Math.round(128 - (uH / fHClamped) * FOCAL_VOX)));
 
+      // Factores en punto fijo precalculados 1 sola vez por frame para eliminar divisiones por paso
       const invFocalVox = 1.0 / FOCAL_VOX;
-      const maxDist = 75.0;
-      const startX = camX * MAP_SCALE;
-      const startZ = camZ * MAP_SCALE;
-      const skyStartX = camX * 1.2 + cloudDriftX;
-      const skyStartZ = camZ * 1.2;
+      const hProjScale  = (U0y * FOCAL_VOX) / fHClamped;
+      const camY_Tex    = Math.round(camY / HEIGHT_SCALE);
+      // Altura proyectada por unidad de voxHeight (en Q4 para multiplicar por RAY_INV_S_Q12 y hacer >> 16)
+      const heightFactorQ4 = Math.round(HEIGHT_SCALE * hProjScale * 16);
 
-      // 2. Raycasting por columna u (0..255): Terreno abajo + Techo de Nubes Voxel arriba
+      const startX_Q16    = Math.round(camX * MAP_SCALE * 65536);
+      const startZ_Q16    = Math.round(camZ * MAP_SCALE * 65536);
+      const skyStartX_Q16 = Math.round((camX * 1.2 + cloudDriftX) * 65536);
+      const skyStartZ_Q16 = Math.round((camZ * 1.2) * 65536);
+
+      // 2. Raycasting por columna u (0..255) usando SOLO enteros de 32 bits y LUTs
       for (let u = 0; u < VOX_W; u++) {
         const xi = (u - 128) * invFocalVox * Math.max(0.25, fH);
         const dirW_X = H0x + xi * R0x;
         const dirW_Z = H0z + xi * R0z;
-        const dirX = dirW_X * MAP_SCALE;
-        const dirZ = dirW_Z * MAP_SCALE;
+
+        // Direcciones en Q8 (al multiplicar por RAY_S_Q8 o CLOUD_DIST_Q8 dan Q16; luego >> 16 da el texel)
+        const dirX_Q8  = Math.round(dirW_X * MAP_SCALE * 256);
+        const dirZ_Q8  = Math.round(dirW_Z * MAP_SCALE * 256);
+        const dirWX_Q8 = Math.round(dirW_X * 256);
+        const dirWZ_Q8 = Math.round(dirW_Z * 256);
 
         let yMax = VOX_H;
-        let s = 0.6;
-        let ds = 0.28;
 
-        while (s < maxDist && yMax > 0) {
-          const mx = (startX + dirX * s) & MAP_MASK;
-          const mz = (startZ + dirZ * s) & MAP_MASK;
+        for (let k = 0; k < NUM_RAY_STEPS && yMax > 0; k++) {
+          const sQ8 = RAY_S_Q8[k];
+          const mx = ((startX_Q16 + dirX_Q8 * sQ8) >> 16) & MAP_MASK;
+          const mz = ((startZ_Q16 + dirZ_Q8 * sQ8) >> 16) & MAP_MASK;
           const mIdx = (mz << MAP_SHIFT) | mx;
 
-          const dy = voxHeight[mIdx] * HEIGHT_SCALE - camY;
-          const cz = s * fH + dy * cFy;
-          if (cz > 0.25) {
-            const cy0 = s * uH + dy * U0y;
-            const v = (128 - (cy0 * FOCAL_VOX) / cz) | 0;
+          const dhTex = voxHeight[mIdx] - camY_Tex;
+          // Proyección perspectiva sin divisiones: multiplicación entera + shift >> 16
+          const v = horizonV - ((dhTex * heightFactorQ4 * RAY_INV_S_Q12[k]) >> 16);
 
-            if (v < yMax) {
-              const vTop = v < 0 ? 0 : v;
-              let col = voxColor[mIdx];
-              if (s > 38.0) {
-                col = blend565Half(col, fogCol);
-                if (s > 55.0) col = blend565Half(col, fogCol);
-              }
-              let ptr = (vTop << 8) | u;
-              for (let y = vTop; y < yMax; y++, ptr += VOX_W) {
-                voxBuf[ptr] = col;
-              }
-              yMax = vTop;
+          if (v < yMax) {
+            const vTop = v < 0 ? 0 : v;
+            let col = voxColor[mIdx];
+            if (k > 58) {
+              col = blend565Half(col, fogCol);
+              if (k > 76) col = blend565Half(col, fogCol);
             }
+            let ptr = (vTop << 8) | u;
+            for (let y = vTop; y < yMax; y++, ptr += VOX_W) {
+              voxBuf[ptr] = col;
+            }
+            yMax = vTop;
           }
-
-          s += ds;
-          ds += 0.014;
         }
 
-        // 3. Cielo Azul + Nubes proyectadas en perspectiva Voxel (misma técnica de plano horizontal a altura fija)
+        // 3. Cielo Azul + Nubes usando LUT entera CLOUD_DIST_Q8 (cero divisiones por píxel)
         if (yMax > 0) {
           let ptr = u;
           for (let y = 0; y < yMax; y++, ptr += VOX_W) {
             const dyHoriz = horizonV - y;
             if (dyHoriz <= 2) {
-              // Bruma cálida justo en la línea del horizonte
               voxBuf[ptr] = fogCol;
             } else {
-              // Intersección del rayo con el techo de nubes Voxel
-              const sCloud = (2400.0 / (dyHoriz + 10));
-              const cmx = (skyStartX + dirW_X * sCloud) & MAP_MASK;
-              const cmz = (skyStartZ + dirW_Z * sCloud) & MAP_MASK;
+              const lutIdx = dyHoriz < 511 ? dyHoriz : 511;
+              const sCloudQ8 = CLOUD_DIST_Q8[lutIdx];
+              const cmx = ((skyStartX_Q16 + dirWX_Q8 * sCloudQ8) >> 16) & MAP_MASK;
+              const cmz = ((skyStartZ_Q16 + dirWZ_Q8 * sCloudQ8) >> 16) & MAP_MASK;
               let skyCol = voxSkyMap[(cmz << MAP_SHIFT) | cmx];
-              // Mezclar suavemente con la bruma cerca del horizonte (dyHoriz < 36)
               if (dyHoriz < 36) {
                 skyCol = blend565Half(skyCol, fogCol);
                 if (dyHoriz < 16) skyCol = blend565Half(skyCol, fogCol);
@@ -1603,50 +1628,69 @@
       }
     }
 
-    // Texto nativo 320x240 estilo chip OSD MAX7456 de INAV (blanco puro con borde negro de 1px)
+    // =========================================================================
+    // ROM DE CARACTERES OSD ESTILO CHIP MAX7456 (SPRITES 8x12 PRE-BORDEADOS)
+    // En ESP32-S3 se guarda en Flash/SRAM (~6 KB) y se dibuja en 1 sola pasada
+    // lineal sin bucles vecinos por frame: 0 = transparente, 1 = negro, 2 = blanco
+    // =========================================================================
     const TICK_GLYPH = [2, 2, 0, 0, 0];
-    function drawInavText320(str, x320, y240, fg565 = 0xFFFF) {
-      const s = String(str).toUpperCase();
-      let cx = x320 | 0;
-      const cy = y240 | 0;
+    const OSD_GLYPH_W = 8;
+    const OSD_GLYPH_H = 12;
+    const OSD_CHAR_ROM = new Uint8Array(128 * OSD_GLYPH_W * OSD_GLYPH_H);
 
-      // Pasada 1: Contorno negro de 1px
-      for (let i = 0; i < s.length; i++) {
-        const g = s[i] === '\'' ? TICK_GLYPH : FONT_3X5[s[i]];
-        if (g) {
-          for (let r = 0; r < 5; r++) {
-            const rowBits = g[r];
-            for (let c = 0; c < 3; c++) {
-              if ((rowBits >> (2 - c)) & 1) {
-                const px = cx + c * 2;
-                const py = cy + r * 2;
-                for (let oy = -1; oy <= 2; oy++) {
-                  for (let ox = -1; ox <= 2; ox++) {
-                    setPx320(px + ox, py + oy, 0x0000);
+    (function buildMax7456CharacterRom() {
+      for (let code = 32; code < 128; code++) {
+        const ch = String.fromCharCode(code);
+        const g = ch === '\'' ? TICK_GLYPH : FONT_3X5[ch];
+        if (!g) continue;
+        const baseOff = code * (OSD_GLYPH_W * OSD_GLYPH_H);
+
+        // Pasada 1 (solo al iniciar): marcar borde negro (1) y relleno blanco (2)
+        for (let r = 0; r < 5; r++) {
+          const rowBits = g[r];
+          for (let c = 0; c < 3; c++) {
+            if ((rowBits >> (2 - c)) & 1) {
+              const px = 1 + c * 2;
+              const py = 1 + r * 2;
+              for (let oy = -1; oy <= 2; oy++) {
+                for (let ox = -1; ox <= 2; ox++) {
+                  const gx = px + ox, gy = py + oy;
+                  if (gx >= 0 && gx < OSD_GLYPH_W && gy >= 0 && gy < OSD_GLYPH_H) {
+                    const idx = baseOff + gy * OSD_GLYPH_W + gx;
+                    if (ox >= 0 && ox <= 1 && oy >= 0 && oy <= 1) {
+                      OSD_CHAR_ROM[idx] = 2; // Relleno blanco
+                    } else if (OSD_CHAR_ROM[idx] === 0) {
+                      OSD_CHAR_ROM[idx] = 1; // Borde negro 1px
+                    }
                   }
                 }
               }
             }
           }
         }
-        cx += 8;
       }
+    })();
 
-      // Pasada 2: Relleno blanco nítido 2x2 por texel de fuente
-      cx = x320 | 0;
+    // Dibuja texto OSD en 1 sola pasada lineal desde la ROM pre-bordeada (1 a 1 con C en ESP32-S3)
+    function drawInavText320(str, x320, y240, fg565 = 0xFFFF) {
+      const s = String(str).toUpperCase();
+      let cx = (x320 | 0) - 1;
+      const cy = (y240 | 0) - 1;
+
       for (let i = 0; i < s.length; i++) {
-        const g = s[i] === '\'' ? TICK_GLYPH : FONT_3X5[s[i]];
-        if (g) {
-          for (let r = 0; r < 5; r++) {
-            const rowBits = g[r];
-            for (let c = 0; c < 3; c++) {
-              if ((rowBits >> (2 - c)) & 1) {
-                const px = cx + c * 2;
-                const py = cy + r * 2;
-                setPx320(px,     py,     fg565);
-                setPx320(px + 1, py,     fg565);
-                setPx320(px,     py + 1, fg565);
-                setPx320(px + 1, py + 1, fg565);
+        const code = s.charCodeAt(i) & 127;
+        const baseOff = code * (OSD_GLYPH_W * OSD_GLYPH_H);
+        for (let gy = 0; gy < OSD_GLYPH_H; gy++) {
+          const py = cy + gy;
+          if (py < 0 || py >= DISP_H) continue;
+          const dstRow = py * DISP_W;
+          const srcRow = baseOff + gy * OSD_GLYPH_W;
+          for (let gx = 0; gx < OSD_GLYPH_W; gx++) {
+            const v = OSD_CHAR_ROM[srcRow + gx];
+            if (v !== 0) {
+              const px = cx + gx;
+              if (px >= 0 && px < DISP_W) {
+                vram565[dstRow + px] = v === 1 ? 0x0000 : fg565;
               }
             }
           }
