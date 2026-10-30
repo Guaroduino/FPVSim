@@ -472,7 +472,7 @@
         <span>PWR</span>
         <span id="sdLed" class="led sd-act" title="Flash / SD Activity"></span>
         <span>SPI</span>
-        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + COMANCHE 3D (v39)</span>
+        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + COMANCHE 3D (v40)</span>
       </div>
       <div class="top-hw-pills">
         <button id="btnFollowCam" class="pill-btn" title="Alternar Vista Externa 3D Follow Cam (SELECT)">🎥 FOLLOW</button>
@@ -1900,28 +1900,16 @@
             b = b * edgeW + rgba[oppIdx + 2] * (1 - edgeW);
           }
 
-          // Extraer relieve Voxel 3D (unidades de HEIGHT_SCALE = 0.125 m; 64 unidades = 8.0 m máximo estricto):
+          // Extraer relieve Voxel 3D limpio (suelo agrícola plano h = 2 en todo el valle para fidelidad 1:1 con la ortofoto,
+          // dejando que los árboles/edificios sean objetos 3D Comanche y manteniendo solo las lomas lejanas suaves):
           const luma = (r * 77 + g * 150 + b * 29) >> 8;
-          const greenExcess = g - Math.max(r, b);
-          let h = 2; // Suelo agrícola base: 0.25 m
-
-          if (greenExcess > 11 && luma < 78) {
-            // Base suave bajo las arboledas (0.35 m a 1.25 m máx) ya que los árboles ahora son Sprites Comanche 3D
-            const treeFactor = Math.min(8, ((greenExcess - 11) * 0.25) + ((78 - luma) * 0.08));
-            h = Math.round(3 + treeFactor); // 3..11 unidades = 0.37m a 1.37m
-          } else if (luma < 44 && b >= r - 6) {
-            // Cauce del Río Turbio y lagunas de riego
-            h = 0;
-          } else {
-            // Parcelas agrícolas planas en el valle central (0.25 m a 0.50 m) y lomas suaves (<= 8.0 m máx)
-            h = 2 + ((luma >> 7) & 1);
-            if (wxRef < -900 && (wzRef > 450 || wzRef < -550)) {
-              const hillDist = Math.min(1.0, (-900 - wxRef) / 1400.0);
-              h += Math.round(hillDist * hillDist * (42 + ((luma >> 4) & 12)));
-            } else if (wzRef > 950) {
-              const northHill = Math.min(1.0, (wzRef - 950) / 900.0);
-              h += Math.round(northHill * northHill * (36 + ((luma >> 4) & 10)));
-            }
+          let h = 2; // Suelo agrícola base: 0.25 m uniforme (evita deformar carreteras y parcelas al verlas en ángulo)
+          if (wxRef < -950 && (wzRef > 480 || wzRef < -580)) {
+            const hillDist = Math.min(1.0, (-950 - wxRef) / 1400.0);
+            h += Math.round(hillDist * hillDist * (38 + ((luma >> 5) & 6)));
+          } else if (wzRef > 980) {
+            const northHill = Math.min(1.0, (wzRef - 980) / 900.0);
+            h += Math.round(northHill * northHill * (32 + ((luma >> 5) & 6)));
           }
 
           const distSpawn = Math.hypot(wxRef, wzRef);
@@ -1983,40 +1971,36 @@
     // Focal unificada para que Voxel Terrain, Voxel Sky, Gates y Horizonte Artificial coincidan al 100%
     const FOCAL_128  = 68.0;
     const FOCAL_240  = FOCAL_128 * SCALE_Y; // 255.0
-    const BLIT_SCALE = 0.62;
-    const FOCAL_VOX  = FOCAL_240 * BLIT_SCALE; // 158.1
+    const BLIT_SCALE = 0.75;                // Usa 240x180 texels de voxBuf (+46% nitidez en pantalla 320x240)
+    const FOCAL_VOX  = FOCAL_240 * BLIT_SCALE; // 191.25
     let lastRollAngle = 0;
     let cloudDriftX = 0;
 
     // =========================================================================
     // TABLAS LUT EN PUNTO FIJO INT32 PARA ESP32-S3 (CERO DIVISIONES EN BUCLE)
-    // En ESP32-S3 viven en SRAM Interna (< 2.5 KB):
-    // - RAY_S_Q8[k]: distancia horizontal s * 256 (optimizado para vuelo a 8-20m AGL)
-    // - RAY_INV_S_Q14[k]: (1 / s) * 16384 precalculado (cambia '/' por '*' + '>> 16')
+    // En ESP32-S3 viven en SRAM Interna (< 3.5 KB):
+    // - UNIT_S_MULT_Q8[k] / UNIT_INV_S_Q14[k]: distribución armónica lineal en (1/s)
+    //   para que cada paso k avance exactamente ~1 píxel vertical a CUALQUIER altitud
+    // - RAY_S_Q8[k] / PROJ_SCALE_Q8[k]: escalados 1 vez por frame según la altura AGL
     // - CLOUD_DIST_Q8[dy]: distancia al plano de nubes * 256 para dyHoriz (0..511)
-    // - MICRO_TEX_LUT[256]: micro-textura sub-texel extendida hasta ~240m de alcance
+    // - MICRO_TEX_LUT[256]: micro-textura sub-texel solo a ras de suelo (< 18m AGL)
     // =========================================================================
-    const NUM_RAY_STEPS = 128;
-    const RAY_S_Q8      = new Int32Array(NUM_RAY_STEPS);
-    const RAY_INV_S_Q14 = new Int32Array(NUM_RAY_STEPS);
-    const PROJ_SCALE_Q8 = new Int32Array(NUM_RAY_STEPS);
-    const CLOUD_DIST_Q8 = new Int32Array(512);
-    const MICRO_TEX_LUT = new Uint8Array(256);
+    const NUM_RAY_STEPS  = 192;
+    const UNIT_S_MULT_Q8 = new Int32Array(NUM_RAY_STEPS);
+    const UNIT_INV_S_Q14 = new Int32Array(NUM_RAY_STEPS);
+    const RAY_S_Q8       = new Int32Array(NUM_RAY_STEPS);
+    const PROJ_SCALE_Q8  = new Int32Array(NUM_RAY_STEPS);
+    const CLOUD_DIST_Q8  = new Int32Array(512);
+    const MICRO_TEX_LUT  = new Uint8Array(256);
 
     (function initS3FixedPointLuts() {
-      // Distribución de pasos optimizada para volar desde ras de suelo hasta >1,500m de altitud:
-      // Los primeros 96 pasos (k = 0..95) cubren con alta densidad desde 0.8m hasta 240m frente a la aeronave
-      let s = 0.8, ds = 0.25;
+      // Distribución armónica en perspectiva (lineal en 1/s -> 1 paso por cada fila vertical de píxeles):
       for (let k = 0; k < NUM_RAY_STEPS; k++) {
-        RAY_S_Q8[k]      = Math.round(s * 256);
-        RAY_INV_S_Q14[k] = Math.round((1.0 / s) * 16384);
-        if (k < 96) {
-          s  += ds;
-          ds += 0.046; // En k=95 alcanza ~240m con excelente resolución para 8-20m de altura
-        } else {
-          // Pasos 96..127 cubren desde 240m hasta ~3,600m para mantener horizonte completo al subir a >600m
-          s *= 1.088;
-        }
+        const u = k / (NUM_RAY_STEPS - 1);
+        const invNorm = Math.pow(1.0 - u, 1.05) * 0.995 + 0.005; // 1.0 en la base -> 0.005 en el horizonte (rango 200:1)
+        const sMult   = 1.0 / invNorm;
+        UNIT_S_MULT_Q8[k] = Math.round(sMult * 256);
+        UNIT_INV_S_Q14[k] = Math.round(invNorm * 16384);
       }
       for (let dy = 0; dy < 512; dy++) {
         CLOUD_DIST_Q8[dy] = Math.round((2400.0 / (dy + 10)) * 256);
@@ -2067,15 +2051,23 @@
       const horizonV = Math.round(horizonFloat);
       const horizonSubPxQ16 = Math.round((horizonV - horizonFloat) * 65536);
 
-      // Factores en punto fijo precalculados 1 sola vez por frame para eliminar divisiones por paso
+      // Factores en punto fijo adaptados a la altitud real (1 sola vez por frame -> resolución vertical 1:1 a cualquier altura)
       const invFocalVox = 1.0 / FOCAL_VOX;
       const hProjScale  = (U0y * FOCAL_VOX) / fHClamped;
       const camY_Tex    = Math.round(camY / HEIGHT_SCALE);
-      // Pre-escalar (heightFactorQ2 * RAY_INV_S_Q14[k]) >> 8 una sola vez por frame (evita overflow Int32 a >166m de altura)
-      const heightFactorQ2 = Math.round(HEIGHT_SCALE * hProjScale * 4);
+      const groundHere  = getTerrainHeightMeters(camX, camZ);
+      const aglHere     = Math.max(0.8, camY - groundHere);
+      const aglNear     = Math.max(0.85, aglHere - Math.min(2.8, aglHere * 0.22));
+      const dvBot       = Math.max(95.0, 262.0 - horizonFloat);
+      const s0          = Math.max(0.85, Math.min(320.0, (aglNear * Math.max(50.0, Math.abs(hProjScale))) / dvBot));
+      const s0_Q8       = Math.round(s0 * 256);
+      const heightFactorQ2 = Math.round((HEIGHT_SCALE * hProjScale * 4.0) / s0);
       for (let k = 0; k < NUM_RAY_STEPS; k++) {
-        PROJ_SCALE_Q8[k] = (heightFactorQ2 * RAY_INV_S_Q14[k]) >> 8;
+        RAY_S_Q8[k]      = (s0_Q8 * UNIT_S_MULT_Q8[k]) >> 8;
+        PROJ_SCALE_Q8[k] = (heightFactorQ2 * UNIT_INV_S_Q14[k]) >> 8;
       }
+      // A baja altura (< 16m AGL) añade micro-grano de velocidad; al volar alto usa el color 1:1 puro de la imagen satelital
+      const microMaxK = aglHere < 16.0 ? Math.round((16.0 - aglHere) * 3.5) : 0;
 
       const startX_Q16    = Math.round((SPAWN_MX + camX * MAP_SCALE_X) * 65536);
       const startZ_Q16    = Math.round((SPAWN_MZ + camZ * MAP_SCALE_Z) * 65536);
@@ -2111,22 +2103,16 @@
           if (v < yMax) {
             const vTop = v < 0 ? 0 : v;
             let col = voxColor[mIdx];
-            if (k < 96) {
-              // Micro-pixelado sub-texel extendido hasta ~240m de distancia para que al volar a 8-20m
-              // de altura todo el terreno cercano y medio tenga textura fina y sensación de velocidad
-              const shiftSub = k < 48 ? 12 : 13;
-              const subIdx = ((xQ16 >> shiftSub) & 15) | (((zQ16 >> shiftSub) & 15) << 4);
+            if (k < microMaxK) {
+              const subIdx = ((xQ16 >> 12) & 15) | (((zQ16 >> 12) & 15) << 4);
               const mVal = MICRO_TEX_LUT[subIdx];
               if (mVal === 2) {
-                // Oscurecer ~6% por canal sin préstamo/underflow hacia el canal Rojo (0xF800)
                 col = col - ((col >> 4) & 0x0861);
               } else if (mVal === 3) {
-                // Aclarar ~6% por canal sin desbordamiento/overflow entre canales RGB565
                 col = col + (((col ^ 0xFFFF) >> 4) & 0x0861);
               }
-            } else if (k > 106) {
+            } else if (k > NUM_RAY_STEPS - 6) {
               col = blend565Half(col, fogCol);
-              if (k > 118) col = blend565Half(col, fogCol);
             }
             let ptr = (vTop << 8) | u;
             for (let y = vTop; y < yMax; y++, ptr += VOX_W) {
@@ -2176,8 +2162,10 @@
         let uFP = rowU;
         let vFP = rowV;
         for (let sx = 0; sx < DISP_W; sx++) {
-          const uu = (uFP >> 16) & 255;
-          const vv = (vFP >> 16) & 255;
+          const uRaw = uFP >> 16;
+          const vRaw = vFP >> 16;
+          const uu = uRaw < 0 ? 0 : (uRaw > 255 ? 255 : uRaw);
+          const vv = vRaw < 0 ? 0 : (vRaw > 255 ? 255 : vRaw);
           vram565[dstIdx++] = voxBuf[(vv << 8) | uu];
           uFP += du_dx;
           vFP += dv_dx;
