@@ -472,7 +472,7 @@
         <span>PWR</span>
         <span id="sdLed" class="led sd-act" title="Flash / SD Activity"></span>
         <span>SPI</span>
-        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + WING LAUNCH (v27)</span>
+        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + WING LAUNCH (v28)</span>
       </div>
       <div class="top-hw-pills">
         <button id="btnRcPad" class="pill-btn" title="Configurar Emisora TX16S USB/BT y Gamepad Bluetooth">🎮 RC/PAD</button>
@@ -1785,7 +1785,7 @@
           const distSpawn = Math.hypot(wx, wz);
           if (distSpawn < 55) rawH = 2 + (rawH - 2) * Math.max(0, (distSpawn - 25) / 30);
 
-          voxHeight[zOff + mx] = Math.max(0, Math.min(90, Math.round(rawH)));
+          voxHeight[zOff + mx] = Math.max(0, Math.min(64, Math.round(rawH))); // Máximo 64 unidades = 8.0 metros
         }
       }
 
@@ -1851,36 +1851,51 @@
             b = b * edgeW + rgba[oppIdx + 2] * (1 - edgeW);
           }
 
-          // Extraer relieve Voxel 3D (unidades de HEIGHT_SCALE = 0.125 m):
+          // Extraer relieve Voxel 3D (unidades de HEIGHT_SCALE = 0.125 m; 64 unidades = 8.0 m máximo estricto):
           const luma = (r * 77 + g * 150 + b * 29) >> 8;
           const greenExcess = g - Math.max(r, b);
-          let h = 2;
+          let h = 2; // Suelo agrícola base: 0.25 m
 
-          if (greenExcess > 6 && luma < 96) {
-            // Dosel de árboles densos (bosque junto a la pista y riberas del Río Turbio)
-            h = 24 + Math.min(48, (greenExcess * 2) + ((96 - luma) >> 1));
+          if (greenExcess > 11 && luma < 78) {
+            // Dosel de árboles densos (1.25 m a 5.5 m máx, evitando picos altos en pasto o cultivos verdes)
+            const treeFactor = Math.min(34, ((greenExcess - 11) * 1.2) + ((78 - luma) * 0.35));
+            h = Math.round(10 + treeFactor); // 10..44 unidades = 1.25m a 5.50m
           } else if (luma < 44 && b >= r - 6) {
             // Cauce del Río Turbio y lagunas de riego
             h = 0;
           } else {
-            // Parcelas agrícolas planas en el valle central y colinas suaves en los extremos NW / SW
-            h = 2 + ((luma >> 6) & 3);
+            // Parcelas agrícolas planas en el valle central (0.25 m a 0.50 m) y lomas suaves (<= 8.0 m máx)
+            h = 2 + ((luma >> 7) & 1);
             if (wxRef < -900 && (wzRef > 450 || wzRef < -550)) {
               const hillDist = Math.min(1.0, (-900 - wxRef) / 1400.0);
-              h += Math.round(hillDist * hillDist * (95 + ((luma >> 2) & 31)));
+              h += Math.round(hillDist * hillDist * (42 + ((luma >> 4) & 12)));
             } else if (wzRef > 950) {
               const northHill = Math.min(1.0, (wzRef - 950) / 900.0);
-              h += Math.round(northHill * northHill * (70 + ((luma >> 2) & 25)));
+              h += Math.round(northHill * northHill * (36 + ((luma >> 4) & 10)));
             }
           }
 
           const distSpawn = Math.hypot(wxRef, wzRef);
-          if (distSpawn < 65) {
-            h = Math.round(2 + (h - 2) * Math.max(0, (distSpawn - 38) / 27));
+          if (distSpawn < 85) {
+            h = Math.round(2 + (h - 2) * Math.max(0, (distSpawn - 48) / 37));
           }
 
-          voxHeight[zOff + mx] = Math.max(0, Math.min(240, h));
+          // Tope estricto global de 64 unidades (64 * 0.125m = 8.0 metros máximo en todo el mapa)
+          voxHeight[zOff + mx] = Math.max(0, Math.min(64, h));
           voxColor[zOff + mx]  = rgb565(clampByte(r), clampByte(g), clampByte(b));
+        }
+      }
+
+      // Suavizado espacial 3x3 (1 sola pasada al cargar el mapa) para eliminar agujas de 1 texel por compresión JPEG
+      for (let mz = 1; mz < MAP_H - 1; mz++) {
+        const zOff  = mz << MAP_SHIFT_X;
+        const zPrev = (mz - 1) << MAP_SHIFT_X;
+        const zNext = (mz + 1) << MAP_SHIFT_X;
+        for (let mx = 1; mx < MAP_W - 1; mx++) {
+          const sum = (voxHeight[zOff + mx] << 2)
+                    + voxHeight[zOff + mx - 1] + voxHeight[zOff + mx + 1]
+                    + voxHeight[zPrev + mx]    + voxHeight[zNext + mx];
+          voxHeight[zOff + mx] = Math.min(64, sum >> 3);
         }
       }
       choroBakedInPsram = true;
