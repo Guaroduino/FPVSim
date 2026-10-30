@@ -472,7 +472,7 @@
         <span>PWR</span>
         <span id="sdLed" class="led sd-act" title="Flash / SD Activity"></span>
         <span>SPI</span>
-        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + ILI9341V (v11)</span>
+        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + VOXEL (v12)</span>
       </div>
       <div class="top-hw-pills">
         <button id="btnPalette" class="pill-btn">🎨 IPS 60MHz</button>
@@ -1170,26 +1170,1155 @@
       document.getElementById('uiHintBar').textContent = hint;
     }
 
+        /***************************************************************************
+     * 4. MOTOR VOXEL SPACE "COMANCHE 3" (6-DOF ROLL + 512x512 HEIGHT/COLOR PSRAM)
+     ***************************************************************************/
+    const DEG2RAD = Math.PI / 180.0;
+    const RAD2DEG = 180.0 / Math.PI;
+
+    // En ESP32-S3 N16R8 (8MB Octal PSRAM):
+    // Mapa 512x512: Heightmap (256KB) + Colormap RGB565 (512KB) = 768KB por mapa en PSRAM
+    const MAP_DIM   = 512;
+    const MAP_MASK  = 511;
+    const MAP_SHIFT = 9;
+    const MAP_SCALE = 1.6; // 1 metro = 1.6 texels (mapa de 320m x 320m cíclico infinito)
+
+    const voxHeight = new Uint8Array(MAP_DIM * MAP_DIM);
+    const voxColor  = new Uint16Array(MAP_DIM * MAP_DIM);
+
+    // Buffer intermedio des-rotado 256x256 (Comanche 3 6-DOF Roll buffer: 128KB SRAM/PSRAM)
+    const VOX_W = 256;
+    const VOX_H = 256;
+    const voxBuf  = new Uint16Array(VOX_W * VOX_H);
+    const voxZBuf = new Uint16Array(VOX_W * VOX_H);
+    const skyGradLut = new Uint16Array(512);
+
+    // 4 Mapas Voxel Space estilo Comanche 3
+    const VOXEL_MAPS = [
+      {
+        id: 'canyon',
+        name: 'GRAND CANYON',
+        short: 'CANYON',
+        desc: 'MESAS ROJAS + RIO PROFUNDO',
+        skyTop: [12, 24, 58],
+        skyMid: [42, 75, 130],
+        skyBot: [215, 130, 75],
+        fogCol: rgb565(205, 125, 75),
+        waterLvl: 18,
+        runwayAlt: 36,
+        gates: [
+          { x:   0, y: 42, z:  42, w: 9, h: 7 },
+          { x:  28, y: 34, z:  88, w: 9, h: 7 },
+          { x:  68, y: 24, z: 125, w: 9, h: 7 },
+          { x:  95, y: 22, z:  65, w: 9, h: 7 },
+          { x:  72, y: 32, z:   5, w: 9, h: 7 },
+          { x:  38, y: 45, z: -55, w: 9, h: 7 },
+          { x:   0, y: 40, z: -85, w: 9, h: 7 },
+          { x:   0, y: 38, z: -20, w: 9, h: 7 }
+        ]
+      },
+      {
+        id: 'andes',
+        name: 'ANDES PEAKS',
+        short: 'ANDES',
+        desc: 'CUMBRES NEVADAS + VALLE',
+        skyTop: [10, 28, 72],
+        skyMid: [38, 92, 168],
+        skyBot: [155, 200, 235],
+        fogCol: rgb565(150, 195, 230),
+        waterLvl: 14,
+        runwayAlt: 24,
+        gates: [
+          { x:   0, y: 30, z:  45, w: 10, h: 7 },
+          { x: -35, y: 48, z:  92, w: 10, h: 7 },
+          { x: -75, y: 68, z: 130, w: 10, h: 7 },
+          { x: -20, y: 74, z: 165, w: 10, h: 7 },
+          { x:  55, y: 58, z: 120, w: 10, h: 7 },
+          { x:  65, y: 40, z:  45, w: 10, h: 7 },
+          { x:  28, y: 32, z: -35, w: 10, h: 7 },
+          { x:   0, y: 27, z: -25, w: 10, h: 7 }
+        ]
+      },
+      {
+        id: 'volcano',
+        name: 'VOLCANIC ISLES',
+        short: 'VOLCANO',
+        desc: 'ISLA TROPICAL + CRATER LAVA',
+        skyTop: [8, 36, 78],
+        skyMid: [24, 118, 175],
+        skyBot: [235, 175, 110],
+        fogCol: rgb565(215, 165, 115),
+        waterLvl: 20,
+        runwayAlt: 23,
+        gates: [
+          { x:   0, y: 29, z:  45, w: 10, h: 7 },
+          { x:  45, y: 44, z:  85, w: 10, h: 7 },
+          { x:  85, y: 66, z: 110, w: 10, h: 7 },
+          { x: 105, y: 72, z:  75, w: 10, h: 7 },
+          { x:  75, y: 50, z:  20, w: 10, h: 7 },
+          { x:  35, y: 30, z: -40, w: 10, h: 7 },
+          { x:   0, y: 26, z: -75, w: 10, h: 7 },
+          { x:   0, y: 25, z: -20, w: 10, h: 7 }
+        ]
+      },
+      {
+        id: 'night',
+        name: 'NIGHT OPS FLIR',
+        short: 'NVG-FLIR',
+        desc: 'VISION NOCTURNA + RED NEON',
+        skyTop: [2, 8, 14],
+        skyMid: [6, 24, 32],
+        skyBot: [16, 68, 58],
+        fogCol: rgb565(14, 58, 50),
+        waterLvl: 15,
+        runwayAlt: 26,
+        gates: [
+          { x:   0, y: 32, z:  40, w: 9, h: 7 },
+          { x:  30, y: 36, z:  85, w: 9, h: 7 },
+          { x: -25, y: 42, z: 130, w: 9, h: 7 },
+          { x: -65, y: 34, z:  75, w: 9, h: 7 },
+          { x: -40, y: 28, z:  10, w: 9, h: 7 },
+          { x:  25, y: 34, z: -45, w: 9, h: 7 },
+          { x:   0, y: 30, z: -80, w: 9, h: 7 },
+          { x:   0, y: 28, z: -20, w: 9, h: 7 }
+        ]
+      }
+    ];
+
+    let currentMapIdx = 0;
+    // Modos de detalle Voxel: 0 = ULTRA (256 col), 1 = HYBRID (Voxel + Contornos), 2 = FAST (128 col)
+    let voxelDetailMode = 0;
+    const VOXEL_DETAIL_NAMES = ['VOXEL ULTRA 256C', 'VOXEL+GRID HYB', 'VOXEL FAST 128C'];
+
+    function clampByte(v) {
+      return v < 0 ? 0 : (v > 255 ? 255 : (v | 0));
+    }
+
+    // Construye el LUT de cielo atmosférico con dithering Bayer para evitar bandas
+    function buildSkyGradient(mapDef) {
+      const [rt, gt, bt] = mapDef.skyTop;
+      const [rm, gm, bm] = mapDef.skyMid;
+      const [rb, gb, bb] = mapDef.skyBot;
+      for (let i = 0; i < 512; i++) {
+        const t = Math.max(0, Math.min(1, i / 260));
+        let r, g, b;
+        if (t < 0.62) {
+          const u = t / 0.62;
+          r = rt + (rm - rt) * u;
+          g = gt + (gm - gt) * u;
+          b = bt + (bm - bt) * u;
+        } else {
+          const u = (t - 0.62) / 0.38;
+          r = rm + (rb - rm) * u;
+          g = gm + (gb - gm) * u;
+          b = bm + (bb - bm) * u;
+        }
+        const d = (i & 1) ? 1.5 : -1.5;
+        skyGradLut[i] = rgb565(clampByte(r + d), clampByte(g + d), clampByte(b + d));
+      }
+    }
+
+    // Ruido periódico rápido (repetible módulo 512 para mapas sin costuras)
+    const sinLut = new Float32Array(512);
+    for (let i = 0; i < 512; i++) sinLut[i] = Math.sin((i * 2 * Math.PI) / 512);
+
+    function fbmPeriodic(mx, mz) {
+      const s1 = sinLut[(mx * 1 + mz * 1) & 511] * sinLut[(mx * 1 - mz * 2 + 128) & 511];
+      const s2 = sinLut[(mx * 2 + mz * 3 + 64) & 511] * sinLut[(mz * 2 - mx * 1 + 200) & 511];
+      const s3 = sinLut[(mx * 4 - mz * 3 + 30) & 511] * sinLut[(mx * 3 + mz * 4 + 90) & 511];
+      const s4 = sinLut[(mx * 7 + mz * 5) & 511] * 0.5 + sinLut[(mx * 11 - mz * 9) & 511] * 0.5;
+      return s1 * 0.45 + s2 * 0.28 + s3 * 0.17 + s4 * 0.10;
+    }
+
+    // Genera el Heightmap (512x512) y el Colormap RGB565 con iluminación solar direccional (estilo Comanche 3)
+    function generateVoxelMap(mapIdx) {
+      currentMapIdx = ((mapIdx % VOXEL_MAPS.length) + VOXEL_MAPS.length) % VOXEL_MAPS.length;
+      const mapDef = VOXEL_MAPS[currentMapIdx];
+      buildSkyGradient(mapDef);
+
+      const TWO_PI_512 = (2 * Math.PI) / 512;
+      const rwyAltTex = Math.round(mapDef.runwayAlt / 0.35);
+      const waterTex  = Math.round(mapDef.waterLvl / 0.35);
+
+      // Paso 1: Generar alturas (0..255)
+      for (let mz = 0; mz < MAP_DIM; mz++) {
+        const zOff = mz << MAP_SHIFT;
+        const dz0 = ((mz + 256) & 511) - 256;
+
+        for (let mx = 0; mx < MAP_DIM; mx++) {
+          const dx0 = ((mx + 256) & 511) - 256;
+          const n = fbmPeriodic(mx, mz);
+          let h = 60;
+
+          if (mapDef.id === 'canyon') {
+            const riverCenter = Math.sin(mz * TWO_PI_512 * 2) * 58 + Math.cos(mz * TWO_PI_512) * 28;
+            const distRiver = Math.abs(dx0 - riverCenter - 65);
+            let canyonProfile = Math.min(1.0, distRiver / 52.0);
+            canyonProfile = Math.pow(canyonProfile, 0.75);
+            const rawH = 42 + canyonProfile * 145 + n * 58;
+            const step = Math.floor(rawH / 18) * 18;
+            h = step * 0.55 + rawH * 0.45;
+            if (distRiver < 11) h = waterTex - 2;
+          } else if (mapDef.id === 'andes') {
+            const ridge = Math.abs(Math.sin((mx + mz * 0.5) * TWO_PI_512 * 1.5));
+            const valley = Math.min(1.0, Math.abs(dx0) / 85.0);
+            h = 46 + (ridge * 125 + (n + 0.4) * 75) * (0.25 + 0.75 * valley);
+          } else if (mapDef.id === 'volcano') {
+            const vx = dx0 - 115, vz = dz0 - 115;
+            const rVolc = Math.hypot(vx, vz);
+            let cone = Math.max(0, 1.0 - rVolc / 135.0);
+            let volcH = Math.pow(cone, 1.35) * 235;
+            if (rVolc < 24) {
+              volcH = 152 - (1.0 - rVolc / 24.0) * 38;
+            }
+            const isle2 = Math.max(0, 1.0 - Math.hypot(dx0 + 95, dz0 - 80) / 85.0) * 125;
+            h = Math.max(waterTex - 4, 34 + volcH + isle2 + n * 42);
+          } else {
+            const corridor = Math.abs(Math.sin(mz * TWO_PI_512 * 2) * 45 - dx0);
+            const wall = Math.min(1.0, corridor / 48.0);
+            h = 48 + wall * 130 + n * 55;
+          }
+
+          // Aplanar suavemente la zona de la pista de aterrizaje principal alrededor de (x=0, z=-75..+75 texels)
+          const rxDist = Math.abs(dx0);
+          const rzDist = Math.max(0, Math.abs(dz0) - 72);
+          const rwyDist = Math.hypot(rxDist, rzDist * 0.5);
+          if (rwyDist < 36) {
+            const blend = Math.max(0, Math.min(1, (rwyDist - 12) / 24.0));
+            const smooth = blend * blend * (3 - 2 * blend);
+            h = rwyAltTex * (1 - smooth) + h * smooth;
+          }
+
+          if (h < waterTex) h = waterTex;
+          voxHeight[zOff + mx] = Math.max(4, Math.min(254, Math.round(h)));
+        }
+      }
+
+      // Paso 2: Generar Colormap RGB565 con sombreado direccional (Sol desde Noroeste) + Pista + Agua
+      for (let mz = 0; mz < MAP_DIM; mz++) {
+        const zOff = mz << MAP_SHIFT;
+        const dz0 = ((mz + 256) & 511) - 256;
+
+        for (let mx = 0; mx < MAP_DIM; mx++) {
+          const dx0 = ((mx + 256) & 511) - 256;
+          const h = voxHeight[zOff + mx];
+
+          const hR = voxHeight[zOff + ((mx + 2) & MAP_MASK)];
+          const hD = voxHeight[((mz + 2) & MAP_MASK) << MAP_SHIFT | mx];
+          const slope = (h - hR) * 2.2 + (h - hD) * 1.6;
+          const shade = Math.max(0.42, Math.min(1.42, 1.0 + slope * 0.032));
+
+          if (Math.abs(dx0) <= 9 && Math.abs(dz0) <= 72) {
+            let rr = 42, gg = 46, bb = 56;
+            if (Math.abs(dx0) === 8) {
+              if ((mz & 7) < 2) { rr = 255; gg = 220; bb = 80; }
+              else { rr = 180; gg = 190; bb = 205; }
+            } else if (dx0 === 0 && (mz & 7) < 4 && Math.abs(dz0) < 62) {
+              rr = 235; gg = 240; bb = 250;
+            } else if (Math.abs(dz0) >= 64 && Math.abs(dz0) <= 70 && (mx & 1) === 0) {
+              rr = dz0 < 0 ? 40 : 250;
+              gg = dz0 < 0 ? 245 : 60;
+              bb = 70;
+            }
+            voxColor[zOff + mx] = rgb565(rr, gg, bb);
+            continue;
+          }
+
+          let r = 80, g = 100, b = 70;
+
+          if (h <= waterTex) {
+            const wave = ((mx ^ mz) & 3) * 4;
+            if (mapDef.id === 'volcano') {
+              r = 12 + wave; g = 125 + wave * 2; b = 175 + wave * 2;
+            } else if (mapDef.id === 'night') {
+              r = 4; g = 38 + wave; b = 48 + wave;
+            } else {
+              r = 16 + wave; g = 78 + wave; b = 138 + wave * 2;
+            }
+            voxColor[zOff + mx] = rgb565(clampByte(r), clampByte(g), clampByte(b));
+            continue;
+          }
+
+          if (mapDef.id === 'canyon') {
+            const band = (h >> 3) & 3;
+            if (h < waterTex + 8) {
+              r = 65; g = 115; b = 52;
+            } else if (band === 0) {
+              r = 188; g = 96; b = 54;
+            } else if (band === 1) {
+              r = 212; g = 126; b = 68;
+            } else if (band === 2) {
+              r = 165; g = 78; b = 46;
+            } else {
+              r = 224; g = 152; b = 88;
+            }
+          } else if (mapDef.id === 'andes') {
+            if (h > 152) {
+              r = 220; g = 232; b = 248;
+            } else if (h > 110) {
+              r = 115; g = 122; b = 135;
+            } else if (h > 68) {
+              r = 38; g = 88; b = 48;
+            } else {
+              r = 64; g = 128; b = 56;
+            }
+          } else if (mapDef.id === 'volcano') {
+            const vx = dx0 - 115, vz = dz0 - 115;
+            const rVolc = Math.hypot(vx, vz);
+            if (rVolc < 22) {
+              const glow = ((mx * 3 + mz * 5) & 7) * 12;
+              r = 250; g = clampByte(75 + glow); b = 16;
+              voxColor[zOff + mx] = rgb565(r, g, b);
+              continue;
+            } else if (h < waterTex + 7) {
+              r = 218; g = 195; b = 132;
+            } else if (h > 128) {
+              r = 72; g = 64; b = 68;
+            } else {
+              r = 42; g = 132; b = 54;
+            }
+          } else {
+            const isGrid = ((mx & 15) === 0) || ((mz & 15) === 0);
+            const isContour = ((h & 15) === 0);
+            if (isGrid) {
+              r = 16; g = 195; b = 145;
+            } else if (isContour) {
+              r = 0; g = 230; b = 195;
+            } else {
+              r = 8; g = 45 + (h >> 1); b = 38 + (h >> 2);
+            }
+          }
+
+          r = clampByte(r * shade);
+          g = clampByte(g * shade);
+          b = clampByte(b * shade);
+          voxColor[zOff + mx] = rgb565(r, g, b);
+        }
+      }
+    }
+
+    // Inicializar el primer mapa Voxel
+    generateVoxelMap(0);
+
+    // Consulta la altura del terreno en metros en cualquier coordenada del mundo (x, z)
+    function getTerrainHeightMeters(wx, wz) {
+      const mx = Math.floor(wx * MAP_SCALE) & MAP_MASK;
+      const mz = Math.floor(wz * MAP_SCALE) & MAP_MASK;
+      return voxHeight[(mz << MAP_SHIFT) | mx] * 0.35;
+    }
+
+    // Mezcla rápida RGB565 al 50% para niebla atmosférica lejana
+    function blend565Half(c1, c2) {
+      return (((c1 & 0xF7DE) >> 1) + ((c2 & 0xF7DE) >> 1));
+    }
+
+    let lastCamRoll = 0;
+
+    // Renderizador Voxel Space 2 (Comanche 3) con soporte 6-DOF completo (Pitch + Yaw + 360° Roll)
+    function renderVoxelSpaceComanche(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz) {
+      const mapDef = VOXEL_MAPS[currentMapIdx];
+      const fogCol = mapDef.fogCol;
+
+      // 1. Extraer ángulo de alabeo (Roll) exacto de la cámara y vectores des-rotados (R0, U0, H0)
+      const upMag = Math.hypot(cRy, cUy);
+      if (upMag > 0.04) {
+        lastCamRoll = Math.atan2(cRy, cUy);
+      }
+      const roll = lastCamRoll;
+      const cR = Math.cos(roll), sR = Math.sin(roll);
+
+      let R0x = cR * cRx - sR * cUx;
+      let R0z = cR * cRz - sR * cUz;
+      const rNorm = Math.hypot(R0x, R0z) || 1.0;
+      R0x /= rNorm;
+      R0z /= rNorm;
+
+      const H0x = -R0z;
+      const H0z =  R0x;
+
+      const U0y = Math.max(0.22, Math.abs(sR * cRy + cR * cUy));
+
+      const focal = 136.0;
+      const invFocal = 1.0 / focal;
+      const horizonV = Math.max(-96, Math.min(352, Math.round(128 + (cFy / U0y) * focal)));
+
+      const colStep = (voxelDetailMode === 2) ? 2 : 1;
+      const showContour = (voxelDetailMode === 1);
+      const maxDist = 215.0;
+
+      // 2. Raycasting Voxel Front-to-Back por cada columna u del buffer des-rotado (256 columnas)
+      for (let u = 0; u < VOX_W; u += colStep) {
+        const xi = (u - 128) * invFocal;
+        const dirX = (H0x + xi * R0x) * MAP_SCALE;
+        const dirZ = (H0z + xi * R0z) * MAP_SCALE;
+        const startX = camX * MAP_SCALE;
+        const startZ = camZ * MAP_SCALE;
+
+        let yMax = VOX_H;
+        let z = 1.4;
+        let dz = 0.75;
+
+        while (z < maxDist && yMax > 0) {
+          const mx = (startX + dirX * z) & MAP_MASK;
+          const mz = (startZ + dirZ * z) & MAP_MASK;
+          const mIdx = (mz << MAP_SHIFT) | mx;
+
+          const hMeters = voxHeight[mIdx] * 0.35;
+          let v = (horizonV - ((hMeters - camY) * focal) / z) | 0;
+
+          if (v < yMax) {
+            const vTop = v < 0 ? 0 : v;
+            let col = voxColor[mIdx];
+
+            if (showContour && (((mx & 7) === 0) || ((mz & 7) === 0))) {
+              col = blend565Half(col, C565.CYAN);
+            }
+            if (z > 115.0) {
+              col = blend565Half(col, fogCol);
+              if (z > 165.0) col = blend565Half(col, fogCol);
+            }
+
+            const zVal = (z * 16) | 0;
+            let ptr = (vTop << 8) | u;
+            if (colStep === 1) {
+              for (let y = vTop; y < yMax; y++, ptr += VOX_W) {
+                voxBuf[ptr]  = col;
+                voxZBuf[ptr] = zVal;
+              }
+            } else {
+              for (let y = vTop; y < yMax; y++, ptr += VOX_W) {
+                voxBuf[ptr]      = col;
+                voxBuf[ptr + 1]  = col;
+                voxZBuf[ptr]     = zVal;
+                voxZBuf[ptr + 1] = zVal;
+              }
+            }
+            yMax = vTop;
+          }
+
+          z += dz;
+          dz += 0.026;
+        }
+
+        if (yMax > 0) {
+          let ptr = u;
+          if (colStep === 1) {
+            for (let y = 0; y < yMax; y++, ptr += VOX_W) {
+              const lutIdx = Math.max(0, Math.min(511, 256 + (y - horizonV)));
+              voxBuf[ptr]  = skyGradLut[lutIdx];
+              voxZBuf[ptr] = 65535;
+            }
+          } else {
+            for (let y = 0; y < yMax; y++, ptr += VOX_W) {
+              const lutIdx = Math.max(0, Math.min(511, 256 + (y - horizonV)));
+              const sc = skyGradLut[lutIdx];
+              voxBuf[ptr]      = sc;
+              voxBuf[ptr + 1]  = sc;
+              voxZBuf[ptr]     = 65535;
+              voxZBuf[ptr + 1] = 65535;
+            }
+          }
+        }
+      }
+
+      // 3. Blit Rotado en Punto Fijo 16.16 desde voxBuf (256x256) hacia vram565 (320x240)
+      if (SPI_MODES[paletteIdx].mono) {
+        fbClear(0);
+        return { roll, cR, sR, focal };
+      }
+
+      const scale = 0.62;
+      const du_dx = ( cR * scale * 65536) | 0;
+      const dv_dx = (-sR * scale * 65536) | 0;
+      const du_dy = ( sR * scale * 65536) | 0;
+      const dv_dy = ( cR * scale * 65536) | 0;
+
+      const centerU = 128 * 65536;
+      const centerV = 128 * 65536;
+
+      let rowU = centerU - 160 * du_dx - 120 * du_dy;
+      let rowV = centerV - 160 * dv_dx - 120 * dv_dy;
+
+      let dstIdx = 0;
+      for (let sy = 0; sy < DISP_H; sy++) {
+        let uFP = rowU;
+        let vFP = rowV;
+        for (let sx = 0; sx < DISP_W; sx++) {
+          const uu = (uFP >> 16) & 255;
+          const vv = (vFP >> 16) & 255;
+          vram565[dstIdx++] = voxBuf[(vv << 8) | uu];
+          uFP += du_dx;
+          vFP += dv_dx;
+        }
+        rowU += du_dy;
+        rowV += dv_dy;
+      }
+
+      return { roll, cR, sR, focal };
+    }
+
+    function create3DProjector(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz) {
+      const f128 = 87.5;
+      return function projLine3D(x0, y0, z0, x1, y1, z1, dash = 0, col = 1) {
+        const dx0 = x0 - camX, dy0 = y0 - camY, dz0 = z0 - camZ;
+        const dx1 = x1 - camX, dy1 = y1 - camY, dz1 = z1 - camZ;
+        let cx0 = dx0*cRx + dy0*cRy + dz0*cRz, cy0 = dx0*cUx + dy0*cUy + dz0*cUz, cz0 = dx0*cFx + dy0*cFy + dz0*cFz;
+        let cx1 = dx1*cRx + dy1*cRy + dz1*cRz, cy1 = dx1*cUx + dy1*cUy + dz1*cUz, cz1 = dx1*cFx + dy1*cFy + dz1*cFz;
+        if (cz0 < 0.4 && cz1 < 0.4) return;
+        if (cz0 > 185 && cz1 > 185) return;
+        if (cz0 < 0.4) { const t = (0.4 - cz0)/(cz1 - cz0); cx0 += t*(cx1 - cx0); cy0 += t*(cy1 - cy0); cz0 = 0.4; }
+        else if (cz1 < 0.4) { const t = (0.4 - cz1)/(cz0 - cz1); cx1 += t*(cx0 - cx1); cy1 += t*(cy0 - cy1); cz1 = 0.4; }
+        fbDrawLine(64 + cx0 * f128 / cz0, 32 - cy0 * f128 / cz0, 64 + cx1 * f128 / cz1, 32 - cy1 * f128 / cz1, dash, col);
+      };
+    }
+
+    function renderCourseGates3D(projLine3D, gates, activeGate) {
+      for (let i = 0; i < gates.length; i++) {
+        const g = gates[i];
+        const hw = g.w * 0.5, hh = g.h * 0.5;
+        const isAct = (i === activeGate);
+        const col = isAct ? 2 : 5;
+        const postCol = isAct ? 4 : 9;
+        const gTerr = getTerrainHeightMeters(g.x, g.z);
+        projLine3D(g.x - hw, gTerr, g.z, g.x - hw, g.y + hh, g.z, 0, postCol);
+        projLine3D(g.x + hw, gTerr, g.z, g.x + hw, g.y + hh, g.z, 0, postCol);
+        projLine3D(g.x - hw, g.y + hh, g.z, g.x + hw, g.y + hh, g.z, 0, col);
+        projLine3D(g.x - hw, g.y - hh, g.z, g.x + hw, g.y - hh, g.z, 0, col);
+        if (isAct) {
+          projLine3D(g.x - hw - 0.6, g.y - hh - 0.6, g.z, g.x + hw + 0.6, g.y - hh - 0.6, g.z, 0, 3);
+          projLine3D(g.x - hw - 0.6, g.y + hh + 0.6, g.z, g.x + hw + 0.6, g.y + hh + 0.6, g.z, 0, 3);
+          projLine3D(g.x, g.y + hh + 1.5, g.z, g.x - 2.2, g.y + hh + 4.0, g.z, 0, 2);
+          projLine3D(g.x, g.y + hh + 1.5, g.z, g.x + 2.2, g.y + hh + 4.0, g.z, 0, 2);
+        }
+      }
+    }
+
+    function renderMiniRadar(px, pz, fx, fz, activeGate) {
+      const rx0 = 266, ry0 = 24, rw = 48, rh = 48;
+      const cxMap = Math.floor(px * MAP_SCALE);
+      const czMap = Math.floor(pz * MAP_SCALE);
+      const borderCol = C565.CYAN;
+
+      for (let py = 0; py < rh; py++) {
+        const mz = (czMap + ((rh >> 1) - py) * 3) & MAP_MASK;
+        const rowOff = (ry0 + py) * DISP_W + rx0;
+        const mRow = mz << MAP_SHIFT;
+        for (let x = 0; x < rw; x++) {
+          if (py === 0 || py === rh - 1 || x === 0 || x === rw - 1) {
+            vram565[rowOff + x] = borderCol;
+          } else {
+            const mx = (cxMap + (x - (rw >> 1)) * 3) & MAP_MASK;
+            vram565[rowOff + x] = blend565Half(voxColor[mRow | mx], C565.BLACK);
+          }
+        }
+      }
+
+      const gates = VOXEL_MAPS[currentMapIdx].gates;
+      const g = gates[activeGate];
+      if (g) {
+        const gx = Math.round((rw >> 1) + ((g.x - px) * MAP_SCALE) / 3);
+        const gy = Math.round((rh >> 1) - ((g.z - pz) * MAP_SCALE) / 3);
+        const gxClamped = Math.max(3, Math.min(rw - 4, gx));
+        const gyClamped = Math.max(3, Math.min(rh - 4, gy));
+        for (let dy = -2; dy <= 2; dy++) {
+          for (let dx = -2; dx <= 2; dx++) {
+            vram565[(ry0 + gyClamped + dy) * DISP_W + (rx0 + gxClamped + dx)] = C565.YELLOW;
+          }
+        }
+      }
+
+      const midX = rx0 + (rw >> 1), midY = ry0 + (rh >> 1);
+      const hLen = Math.hypot(fx, fz) || 1;
+      const hx = fx / hLen, hz = fz / hLen;
+      for (let s = 0; s < 10; s++) {
+        const pxLine = Math.round(midX + hx * s);
+        const pyLine = Math.round(midY - hz * s);
+        vram565[pyLine * DISP_W + pxLine] = C565.WHITE;
+      }
+      vram565[midY * DISP_W + midX] = C565.RED;
+    }
+
+    function renderFpvOsd({
+      craftType, mode, spdMs, thrPct, altMsl, altAgl, vario,
+      activeGate, totalGates, gateDist, gateBearing,
+      rollRad, pitchRad, stallWarn, updraftWarn, chaseCam
+    }) {
+      const mapDef = VOXEL_MAPS[currentMapIdx];
+
+      if (!chaseCam) {
+        const cR = Math.cos(rollRad), sR = Math.sin(rollRad);
+        const pitchOff = Math.max(-18, Math.min(18, pitchRad * 28));
+        const hx = 64 + sR * pitchOff;
+        const hy = 32 + cR * pitchOff;
+        fbDrawLine(hx - cR * 18, hy + sR * 18, hx - cR * 6, hy + sR * 6, 0, 3);
+        fbDrawLine(hx + cR * 6,  hy - sR * 6,  hx + cR * 18, hy - sR * 18, 0, 3);
+        fbDrawLine(60, 32, 62, 32, 0, 2);
+        fbDrawLine(66, 32, 68, 32, 0, 2);
+        fbSetPixel(64, 32, 2);
+      }
+
+      fbRect(0, 0, 128, 8, true, 0);
+      fbDrawText(`${craftType}:${mode}`, 2, 1, mode === 'ACRO' ? 2 : 3);
+      fbDrawText(mapDef.short, 48, 1, 5);
+
+      const dirChar = gateBearing < -0.35 ? '<' : (gateBearing > 0.35 ? '>' : '^');
+      fbDrawText(`G${activeGate + 1}/${totalGates}${dirChar}${Math.min(999, Math.round(gateDist))}M`, 82, 1, 10);
+
+      if (stallWarn) {
+        fbRect(34, 12, 60, 8, true, 4);
+        fbDrawText('! STALL PULL DN !', 36, 13, 1);
+      } else if (altAgl < 3.2 && spdMs > 18 && vario < -3.0) {
+        fbRect(38, 12, 52, 8, true, 4);
+        fbDrawText('! PULL UP !', 44, 13, 2);
+      } else if (updraftWarn) {
+        fbRect(38, 12, 52, 7, true, 7);
+        fbDrawText('RIDGE LIFT ++', 41, 13, 3);
+      }
+
+      fbRect(0, 56, 128, 8, true, 0);
+      const kmh = Math.round(spdMs * 3.6);
+      fbDrawText(`${kmh}KMH`, 2, 57, 1);
+      fbDrawText(`THR:${Math.round(thrPct)}%`, 36, 57, 2);
+      fbDrawText(`AGL:${Math.max(0, Math.round(altAgl))}M`, 74, 57, altAgl < 5 ? 9 : 3);
+      const vsSign = vario >= 0 ? '+' : '';
+      fbDrawText(`${vsSign}${vario.toFixed(0)}`, 112, 57, vario >= 0 ? 5 : 9);
+    }
+
+    function handleCommonFlightHotkeys(currentCraft) {
+      if (hwInput.justPressed('SELECT')) {
+        generateVoxelMap(currentMapIdx + 1);
+        currentCraft.reset();
+        showToast(`MAP: ${VOXEL_MAPS[currentMapIdx].name}`);
+        playTone(720, 0.06);
+      }
+      if (hwInput.justPressed('UP')) {
+        voxelDetailMode = (voxelDetailMode + 1) % VOXEL_DETAIL_NAMES.length;
+        showToast(VOXEL_DETAIL_NAMES[voxelDetailMode]);
+        playTone(640, 0.04);
+      }
+      if (hwInput.justPressed('DOWN')) {
+        voxelDetailMode = (voxelDetailMode + VOXEL_DETAIL_NAMES.length - 1) % VOXEL_DETAIL_NAMES.length;
+        showToast(VOXEL_DETAIL_NAMES[voxelDetailMode]);
+        playTone(540, 0.04);
+      }
+      if (hwInput.justPressed('LEFT') || hwInput.justPressed('RIGHT')) {
+        const nextId = activeRomId === 'fpv_drone' ? 'fpv_wing' : 'fpv_drone';
+        launchRom(nextId);
+        showToast(nextId === 'fpv_drone' ? 'SIM: FPV DRONE 5"' : 'SIM: FPV FIXED-WING');
+        return true;
+      }
+      if (capTouch.justTapped && capTouch.ly64 <= 10) {
+        if (capTouch.lx128 < 44) {
+          currentCraft.cycleMode();
+        } else if (capTouch.lx128 < 82) {
+          generateVoxelMap(currentMapIdx + 1);
+          currentCraft.reset();
+          showToast(`MAP: ${VOXEL_MAPS[currentMapIdx].name}`);
+        } else {
+          const nextId = activeRomId === 'fpv_drone' ? 'fpv_wing' : 'fpv_drone';
+          launchRom(nextId);
+          showToast(nextId === 'fpv_drone' ? 'SIM: FPV DRONE 5"' : 'SIM: FPV FIXED-WING');
+          return true;
+        }
+        capTouch.justTapped = false;
+      }
+      return false;
+    }
+
+    function integrateRotationSO3(state, pitchRate, rollRate, yawRate, dt) {
+      const p = pitchRate * dt, r = rollRate * dt, y = yawRate * dt;
+      const thSq = p*p + r*r + y*y;
+      if (thSq <= 1e-12) return;
+      const th = Math.sqrt(thSq);
+      const c1 = Math.sin(th) / th, c2 = (1 - Math.cos(th)) / thSq;
+      const rx = state.rx, ry = state.ry, rz = state.rz;
+      const ux = state.ux, uy = state.uy, uz = state.uz;
+      const fx = state.fx, fy = state.fy, fz = state.fz;
+
+      const v1Rx = -r*ux - y*fx, v1Ry = -r*uy - y*fy, v1Rz = -r*uz - y*fz;
+      const v1Ux =  r*rx + p*fx, v1Uy =  r*ry + p*fy, v1Uz =  r*rz + p*fz;
+      const v1Fx =  y*rx - p*ux, v1Fy =  y*ry - p*uy, v1Fz =  y*rz - p*uz;
+
+      const v2Rx = -r*v1Ux - y*v1Fx, v2Ry = -r*v1Uy - y*v1Fy, v2Rz = -r*v1Uz - y*v1Fz;
+      const v2Ux =  r*v1Rx + p*v1Fx, v2Uy =  r*v1Ry + p*v1Fy, v2Uz =  r*v1Rz + p*v1Fz;
+      const v2Fx =  y*v1Rx - p*v1Ux, v2Fy =  y*v1Ry - p*v1Uy, v2Fz =  y*v1Rz - p*v1Uz;
+
+      state.rx = rx + c1*v1Rx + c2*v2Rx; state.ry = ry + c1*v1Ry + c2*v2Ry; state.rz = rz + c1*v1Rz + c2*v2Rz;
+      state.ux = ux + c1*v1Ux + c2*v2Ux; state.uy = uy + c1*v1Uy + c2*v2Uy; state.uz = uz + c1*v1Uz + c2*v2Uz;
+      state.fx = fx + c1*v1Fx + c2*v2Fx; state.fy = fy + c1*v1Fy + c2*v2Fy; state.fz = fz + c1*v1Fz + c2*v2Fz;
+
+      const fL = Math.hypot(state.fx, state.fy, state.fz) || 1;
+      state.fx /= fL; state.fy /= fL; state.fz /= fL;
+      const dot = state.ux*state.fx + state.uy*state.fy + state.uz*state.fz;
+      state.ux -= dot*state.fx; state.uy -= dot*state.fy; state.uz -= dot*state.fz;
+      const uL = Math.hypot(state.ux, state.uy, state.uz) || 1;
+      state.ux /= uL; state.uy /= uL; state.uz /= uL;
+      state.rx = state.uy*state.fz - state.uz*state.fy;
+      state.ry = state.uz*state.fx - state.ux*state.fz;
+      state.rz = state.ux*state.fy - state.uy*state.fx;
+    }
+
     /***************************************************************************
-     * 4. SISTEMA OPERATIVO RETRO-GO
+     * 5. SIMULADOR 1: FPV DRONE 5" FREESTYLE / RACING (BETAFLIGHT ACRO/ANGLE/HORIZON)
+     ***************************************************************************/
+    const fpvDroneSim = {
+      px: 0, py: 38, pz: -30,
+      vx: 0, vy: 0, vz: 0,
+      pitchRate: 0, rollRate: 0, yawRate: 0,
+      rx: 1, ry: 0, rz: 0,
+      ux: 0, uy: 1, uz: 0,
+      fx: 0, fy: 0, fz: 1,
+      modes: ['ACRO', 'ANGLE', 'HORZN'],
+      modeIdx: 0,
+      chaseCam: false,
+      activeGate: 0,
+      thrCmd: 0.35,
+      propPhase: 0,
+
+      reset() {
+        this.px = 0;
+        this.pz = -32;
+        this.py = getTerrainHeightMeters(this.px, this.pz) + 2.2;
+        this.vx = 0; this.vy = 0; this.vz = 0;
+        this.pitchRate = 0; this.rollRate = 0; this.yawRate = 0;
+        this.rx = 1; this.ry = 0; this.rz = 0;
+        this.ux = 0; this.uy = 1; this.uz = 0;
+        this.fx = 0; this.fy = 0; this.fz = 1;
+        this.activeGate = 0;
+        lastCamRoll = 0;
+      },
+
+      cycleMode() {
+        this.modeIdx = (this.modeIdx + 1) % this.modes.length;
+        showToast(`DRONE MODE: ${this.modes[this.modeIdx]}`);
+        playTone(680, 0.04);
+      },
+
+      step(dt) {
+        if (handleCommonFlightHotkeys(this)) return;
+
+        if (hwInput.justPressed('Y') || hwInput.justPressed('L3')) this.cycleMode();
+        if (hwInput.justPressed('X')) { this.reset(); showToast('DRONE RUNWAY RESET'); }
+        if (hwInput.justPressed('B') || hwInput.justPressed('R3')) {
+          this.chaseCam = !this.chaseCam;
+          showToast(this.chaseCam ? 'CAM: CHASE 3RD PERSON' : 'CAM: FPV 20° UPTILT');
+        }
+
+        const baseThr = 0.34;
+        let thr = hwInput.ly >= 0 ? baseThr + hwInput.ly * (1 - baseThr) : baseThr * (1 + hwInput.ly);
+        if (hwInput.btn.A) thr = Math.min(1.0, thr + 0.30);
+        this.thrCmd = thr;
+        this.propPhase += (25 + thr * 65) * dt;
+
+        const mode = this.modes[this.modeIdx];
+        const curPitch = Math.atan2(-this.fy, Math.max(0.1, this.uy));
+        const curRoll  = Math.atan2(-this.ry, Math.max(0.1, this.uy));
+
+        let tPitch = 0, tRoll = 0, tYaw = hwInput.lx * 220 * DEG2RAD;
+        if (mode === 'ACRO') {
+          tPitch = hwInput.ry * 320 * DEG2RAD;
+          tRoll  = hwInput.rx * 320 * DEG2RAD;
+        } else if (mode === 'ANGLE') {
+          tPitch = ((hwInput.ry * 50 * DEG2RAD) - curPitch) * 7.5;
+          tRoll  = ((hwInput.rx * 50 * DEG2RAD) - curRoll)  * 7.5;
+        } else {
+          const stickDeflect = Math.min(1.0, Math.hypot(hwInput.rx, hwInput.ry));
+          const acroP = hwInput.ry * 300 * DEG2RAD;
+          const acroR = hwInput.rx * 300 * DEG2RAD;
+          const stabP = ((hwInput.ry * 50 * DEG2RAD) - curPitch) * 7.0;
+          const stabR = ((hwInput.rx * 50 * DEG2RAD) - curRoll)  * 7.0;
+          tPitch = stabP * (1 - stickDeflect) + acroP * stickDeflect;
+          tRoll  = stabR * (1 - stickDeflect) + acroR * stickDeflect;
+        }
+
+        const alpha = Math.min(1.0, 22.0 * dt);
+        this.pitchRate += (tPitch - this.pitchRate) * alpha;
+        this.rollRate  += (tRoll  - this.rollRate)  * alpha;
+        this.yawRate   += (tYaw   - this.yawRate)   * alpha;
+
+        integrateRotationSO3(this, this.pitchRate, this.rollRate, this.yawRate, dt);
+
+        const thrust = thr * 29.0;
+        const spd = Math.hypot(this.vx, this.vy, this.vz);
+        const drag = 0.08 + 0.0075 * spd;
+        this.vx += (this.ux * thrust - this.vx * drag) * dt;
+        this.vy += (this.uy * thrust - 9.81 - this.vy * drag) * dt;
+        this.vz += (this.uz * thrust - this.vz * drag) * dt;
+
+        this.px += this.vx * dt;
+        this.py += this.vy * dt;
+        this.pz += this.vz * dt;
+
+        const groundH = getTerrainHeightMeters(this.px, this.pz);
+        if (this.py < groundH + 0.6) {
+          this.py = groundH + 0.6;
+          if (this.vy < 0) this.vy = -this.vy * 0.25;
+          this.vx *= 0.90;
+          this.vz *= 0.90;
+        }
+
+        const gates = VOXEL_MAPS[currentMapIdx].gates;
+        const g = gates[this.activeGate];
+        if (g && Math.hypot(this.px - g.x, this.py - g.y, this.pz - g.z) < g.w * 0.75) {
+          this.activeGate = (this.activeGate + 1) % gates.length;
+          showToast(`GATE ${this.activeGate}/${gates.length} CLEAR!`);
+          playTone(880, 0.08);
+        }
+      },
+
+      render() {
+        const tilt = (this.chaseCam ? 8 : 18) * DEG2RAD;
+        const cT = Math.cos(tilt), sT = Math.sin(tilt);
+        const cRx = this.rx, cRy = this.ry, cRz = this.rz;
+        const cUx = cT*this.ux - sT*this.fx, cUy = cT*this.uy - sT*this.fy, cUz = cT*this.uz - sT*this.fz;
+        const cFx = sT*this.ux + cT*this.fx, cFy = sT*this.uy + cT*this.fy, cFz = sT*this.uz + cT*this.fz;
+
+        const groundAtDrone = getTerrainHeightMeters(this.px, this.pz);
+        const camX = this.chaseCam ? this.px - cFx * 4.2 + cUx * 1.3 : this.px;
+        const camZ = this.chaseCam ? this.pz - cFz * 4.2 + cUz * 1.3 : this.pz;
+        const minCamY = getTerrainHeightMeters(camX, camZ) + 0.5;
+        const camY = Math.max(minCamY, this.chaseCam ? this.py - cFy * 4.2 + cUy * 1.3 : this.py);
+
+        const voxInfo = renderVoxelSpaceComanche(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz);
+
+        const projLine3D = create3DProjector(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz);
+        const gates = VOXEL_MAPS[currentMapIdx].gates;
+        renderCourseGates3D(projLine3D, gates, this.activeGate);
+
+        if (this.chaseCam) {
+          const arm = 0.85;
+          const p1x = this.px + (this.fx + this.rx) * arm, p1y = this.py + (this.fy + this.ry) * arm, p1z = this.pz + (this.fz + this.rz) * arm;
+          const p2x = this.px + (this.fx - this.rx) * arm, p2y = this.py + (this.fy - this.ry) * arm, p2z = this.pz + (this.fz - this.rz) * arm;
+          const p3x = this.px + (-this.fx + this.rx) * arm, p3y = this.py + (-this.fy + this.ry) * arm, p3z = this.pz + (-this.fz + this.rz) * arm;
+          const p4x = this.px + (-this.fx - this.rx) * arm, p4y = this.py + (-this.fy - this.ry) * arm, p4z = this.pz + (-this.fz - this.rz) * arm;
+          projLine3D(p1x, p1y, p1z, p4x, p4y, p4z, 0, 1);
+          projLine3D(p2x, p2y, p2z, p3x, p3y, p3z, 0, 1);
+          projLine3D(p3x, p3y, p3z, p4x, p4y, p4z, 0, 4);
+          const pr = 0.42 * Math.cos(this.propPhase), ps = 0.42 * Math.sin(this.propPhase);
+          for (const [mx, my, mz] of [[p1x, p1y, p1z], [p2x, p2y, p2z], [p3x, p3y, p3z], [p4x, p4y, p4z]]) {
+            projLine3D(mx - this.rx*pr, my - this.ry*pr, mz - this.rz*pr, mx + this.rx*pr, my + this.ry*pr, mz + this.rz*pr, 0, 5);
+            projLine3D(mx - this.fx*ps, my - this.fy*ps, mz - this.fz*ps, mx + this.fx*ps, my + this.fy*ps, mz + this.fz*ps, 0, 3);
+          }
+        }
+
+        renderMiniRadar(this.px, this.pz, this.fx, this.fz, this.activeGate);
+
+        const g = gates[this.activeGate] || gates[0];
+        const dxG = g.x - this.px, dzG = g.z - this.pz;
+        const gateDist = Math.hypot(dxG, g.y - this.py, dzG);
+        const gateBearing = Math.atan2(dxG * this.rx + dzG * this.rz, dxG * this.fx + dzG * this.fz);
+        const spd = Math.hypot(this.vx, this.vy, this.vz);
+
+        renderFpvOsd({
+          craftType: 'QUAD',
+          mode: this.modes[this.modeIdx],
+          spdMs: spd,
+          thrPct: this.thrCmd * 100,
+          altMsl: this.py,
+          altAgl: this.py - groundAtDrone,
+          vario: this.vy,
+          activeGate: this.activeGate,
+          totalGates: gates.length,
+          gateDist,
+          gateBearing,
+          rollRad: voxInfo.roll,
+          pitchRad: Math.asin(Math.max(-1, Math.min(1, cFy))),
+          stallWarn: false,
+          updraftWarn: false,
+          chaseCam: this.chaseCam
+        });
+      }
+    };
+
+    /***************************************************************************
+     * 6. SIMULADOR 2: FPV FIXED-WING / ALA FIJA (INAV ACRO / FBWA / CRUISE)
+     ***************************************************************************/
+    const fpvWingSim = {
+      px: 0, py: 38, pz: -38,
+      vx: 0, vy: 0, vz: 24,
+      airspeed: 24,
+      thrCmd: 0.55,
+      pitchRate: 0, rollRate: 0, yawRate: 0,
+      rx: 1, ry: 0, rz: 0,
+      ux: 0, uy: 1, uz: 0,
+      fx: 0, fy: 0, fz: 1,
+      modes: ['FBWA', 'ACRO', 'CRUISE'],
+      modeIdx: 0,
+      chaseCam: true,
+      activeGate: 0,
+      isStalling: false,
+      inUpdraft: false,
+      onGround: false,
+
+      reset() {
+        this.px = 0;
+        this.pz = -38;
+        const rwyH = getTerrainHeightMeters(this.px, this.pz);
+        this.py = rwyH + 4.5;
+        this.airspeed = 26.0;
+        this.vx = 0; this.vy = 0; this.vz = 26.0;
+        this.thrCmd = 0.58;
+        this.pitchRate = 0; this.rollRate = 0; this.yawRate = 0;
+        this.rx = 1; this.ry = 0; this.rz = 0;
+        this.ux = 0; this.uy = 1; this.uz = 0;
+        this.fx = 0; this.fy = 0; this.fz = 1;
+        this.activeGate = 0;
+        this.isStalling = false;
+        this.inUpdraft = false;
+        lastCamRoll = 0;
+      },
+
+      cycleMode() {
+        this.modeIdx = (this.modeIdx + 1) % this.modes.length;
+        showToast(`WING MODE: ${this.modes[this.modeIdx]}`);
+        playTone(740, 0.04);
+      },
+
+      step(dt) {
+        if (handleCommonFlightHotkeys(this)) return;
+
+        if (hwInput.justPressed('Y') || hwInput.justPressed('L3')) this.cycleMode();
+        if (hwInput.justPressed('X')) { this.reset(); showToast('WING LAUNCH ON RUNWAY'); }
+        if (hwInput.justPressed('B') || hwInput.justPressed('R3')) {
+          this.chaseCam = !this.chaseCam;
+          showToast(this.chaseCam ? 'CAM: CHASE WING' : 'CAM: COCKPIT HUD');
+        }
+
+        let thr = (hwInput.ly + 1.0) * 0.5;
+        if (Math.abs(hwInput.ly) < 0.05) thr = 0.55;
+        if (hwInput.btn.A) thr = 1.0;
+        this.thrCmd = thr;
+
+        const mode = this.modes[this.modeIdx];
+        const curPitch = Math.asin(Math.max(-1, Math.min(1, this.fy)));
+        const curRoll  = Math.atan2(this.ry, Math.max(0.12, this.uy));
+
+        const elevInput = hwInput.ry;
+        const ailInput  = hwInput.rx;
+        const rudInput  = hwInput.lx;
+
+        let tPitch = 0, tRoll = 0, tYaw = rudInput * 65 * DEG2RAD;
+
+        if (mode === 'ACRO') {
+          tPitch = elevInput * 175 * DEG2RAD;
+          tRoll  = ailInput  * 250 * DEG2RAD;
+        } else if (mode === 'FBWA') {
+          const targetPitch = elevInput * 36 * DEG2RAD;
+          const targetRoll  = -ailInput * 58 * DEG2RAD;
+          tPitch = (targetPitch - curPitch) * 5.2;
+          tRoll  = (targetRoll  - curRoll)  * 6.0;
+        } else {
+          const targetPitch = (elevInput * 22 * DEG2RAD) - (this.vy * 0.025);
+          const targetRoll  = -ailInput * 42 * DEG2RAD;
+          tPitch = (targetPitch - curPitch) * 4.5;
+          tRoll  = (targetRoll  - curRoll)  * 5.0;
+        }
+
+        const bankTurnYaw = -this.ry * (9.81 / Math.max(14.0, this.airspeed)) * 1.45;
+        tYaw += bankTurnYaw;
+
+        const stallSpeed = 13.5;
+        this.isStalling = (!this.onGround && this.airspeed < stallSpeed);
+        if (this.isStalling) {
+          tPitch -= (stallSpeed - this.airspeed) * 0.35;
+        }
+
+        const ctrlAuth = Math.min(1.25, Math.max(0.35, this.airspeed / 24.0));
+        const alpha = Math.min(1.0, 16.0 * dt);
+        this.pitchRate += (tPitch * ctrlAuth - this.pitchRate) * alpha;
+        this.rollRate  += (tRoll  * ctrlAuth - this.rollRate)  * alpha;
+        this.yawRate   += (tYaw   - this.yawRate)   * alpha;
+
+        integrateRotationSO3(this, this.pitchRate, this.rollRate, this.yawRate, dt);
+
+        const maxThrustAccel = (hwInput.btn.A ? 24.0 : 16.5) * thr;
+        const parasiteDrag   = 0.011 * this.airspeed * this.airspeed;
+        const inducedDrag    = (Math.abs(elevInput) * 1.8 + (1.0 - Math.abs(this.uy)) * 1.2);
+        const gravityAlongF  = -9.81 * this.fy;
+
+        this.airspeed += (maxThrustAccel - parasiteDrag - inducedDrag + gravityAlongF) * dt;
+        this.airspeed = Math.max(6.0, Math.min(72.0, this.airspeed));
+
+        const liftFactor = Math.min(1.35, (this.airspeed / 20.5) * (this.airspeed / 20.5));
+        const wingLift = 9.81 * liftFactor;
+
+        const groundHere  = getTerrainHeightMeters(this.px, this.pz);
+        const groundAhead = getTerrainHeightMeters(this.px + this.fx * 8, this.pz + this.fz * 8);
+        const agl = this.py - groundHere;
+        let ridgeUpdraft = 0;
+        if (agl < 22.0 && groundAhead > groundHere + 1.2) {
+          ridgeUpdraft = Math.min(5.5, (groundAhead - groundHere) * 0.9);
+          this.inUpdraft = true;
+        } else {
+          this.inUpdraft = false;
+        }
+
+        const targetVx = this.fx * this.airspeed;
+        const targetVy = this.fy * this.airspeed + (this.uy * wingLift - 9.81 + ridgeUpdraft) * 0.45;
+        const targetVz = this.fz * this.airspeed;
+
+        const aeroLock = Math.min(1.0, 9.0 * dt);
+        this.vx += (targetVx - this.vx) * aeroLock;
+        this.vy += (targetVy - this.vy) * aeroLock;
+        this.vz += (targetVz - this.vz) * aeroLock;
+
+        this.px += this.vx * dt;
+        this.py += this.vy * dt;
+        this.pz += this.vz * dt;
+
+        const newGroundH = getTerrainHeightMeters(this.px, this.pz);
+        if (this.py <= newGroundH + 0.75) {
+          this.py = newGroundH + 0.75;
+          this.onGround = true;
+          if (this.vy < 0) this.vy = 0;
+          this.ry *= 0.85;
+          this.uy = Math.max(0.9, this.uy);
+        } else {
+          this.onGround = false;
+        }
+
+        const gates = VOXEL_MAPS[currentMapIdx].gates;
+        const g = gates[this.activeGate];
+        if (g && Math.hypot(this.px - g.x, this.py - g.y, this.pz - g.z) < g.w * 0.85) {
+          this.activeGate = (this.activeGate + 1) % gates.length;
+          showToast(`WAYPOINT ${this.activeGate}/${gates.length} OK!`);
+          playTone(940, 0.08);
+        }
+      },
+
+      render() {
+        const cRx = this.rx, cRy = this.ry, cRz = this.rz;
+        const cUx = this.ux, cUy = this.uy, cUz = this.uz;
+        const cFx = this.fx, cFy = this.fy, cFz = this.fz;
+
+        const groundAtWing = getTerrainHeightMeters(this.px, this.pz);
+        const camX = this.chaseCam ? this.px - cFx * 5.2 + cUx * 1.4 : this.px;
+        const camZ = this.chaseCam ? this.pz - cFz * 5.2 + cUz * 1.4 : this.pz;
+        const minCamY = getTerrainHeightMeters(camX, camZ) + 0.6;
+        const camY = Math.max(minCamY, this.chaseCam ? this.py - cFy * 5.2 + cUy * 1.4 : this.py);
+
+        const voxInfo = renderVoxelSpaceComanche(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz);
+
+        const projLine3D = create3DProjector(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz);
+        const gates = VOXEL_MAPS[currentMapIdx].gates;
+        renderCourseGates3D(projLine3D, gates, this.activeGate);
+
+        if (this.chaseCam) {
+          const noseX = this.px + this.fx * 1.5, noseY = this.py + this.fy * 1.5, noseZ = this.pz + this.fz * 1.5;
+          const tailX = this.px - this.fx * 0.9, tailY = this.py - this.fy * 0.9, tailZ = this.pz - this.fz * 0.9;
+          const lwX = this.px - this.fx * 0.5 - this.rx * 2.1, lwY = this.py - this.fy * 0.5 - this.ry * 2.1, lwZ = this.pz - this.fz * 0.5 - this.rz * 2.1;
+          const rwX = this.px - this.fx * 0.5 + this.rx * 2.1, rwY = this.py - this.fy * 0.5 + this.ry * 2.1, rwZ = this.pz - this.fz * 0.5 + this.rz * 2.1;
+          const lTipX = lwX + this.ux * 0.55, lTipY = lwY + this.uy * 0.55, lTipZ = lwZ + this.uz * 0.55;
+          const rTipX = rwX + this.ux * 0.55, rTipY = rwY + this.uy * 0.55, rTipZ = rwZ + this.uz * 0.55;
+
+          projLine3D(noseX, noseY, noseZ, lwX, lwY, lwZ, 0, 1);
+          projLine3D(noseX, noseY, noseZ, rwX, rwY, rwZ, 0, 1);
+          projLine3D(lwX, lwY, lwZ, tailX, tailY, tailZ, 0, 4);
+          projLine3D(rwX, rwY, rwZ, tailX, tailY, tailZ, 0, 4);
+          projLine3D(noseX, noseY, noseZ, tailX, tailY, tailZ, 0, 5);
+          projLine3D(lwX, lwY, lwZ, lTipX, lTipY, lTipZ, 0, 2);
+          projLine3D(rwX, rwY, rwZ, rTipX, rTipY, rTipZ, 0, 2);
+        }
+
+        renderMiniRadar(this.px, this.pz, this.fx, this.fz, this.activeGate);
+
+        const g = gates[this.activeGate] || gates[0];
+        const dxG = g.x - this.px, dzG = g.z - this.pz;
+        const gateDist = Math.hypot(dxG, g.y - this.py, dzG);
+        const gateBearing = Math.atan2(dxG * this.rx + dzG * this.rz, dxG * this.fx + dzG * this.fz);
+
+        renderFpvOsd({
+          craftType: 'WING',
+          mode: this.modes[this.modeIdx],
+          spdMs: this.airspeed,
+          thrPct: this.thrCmd * 100,
+          altMsl: this.py,
+          altAgl: this.py - groundAtWing,
+          vario: this.vy,
+          activeGate: this.activeGate,
+          totalGates: gates.length,
+          gateDist,
+          gateBearing,
+          rollRad: voxInfo.roll,
+          pitchRad: Math.asin(Math.max(-1, Math.min(1, cFy))),
+          stallWarn: this.isStalling,
+          updraftWarn: this.inUpdraft,
+          chaseCam: this.chaseCam
+        });
+      }
+    };
+
+    /***************************************************************************
+     * 7. EXPLORADOR INTERACTIVO DE MAPAS VOXEL COMANCHE 3 + BENCHMARK ESP32-S3
+     ***************************************************************************/
+    let explorerCamAngle = 0;
+    function renderVoxelExplorer(dt) {
+      explorerCamAngle += dt * 0.35;
+      if (hwInput.justPressed('LEFT') || hwInput.justPressed('UP')) {
+        generateVoxelMap(currentMapIdx - 1);
+        showToast(`MAP: ${VOXEL_MAPS[currentMapIdx].name}`);
+        playTone(620, 0.04);
+      }
+      if (hwInput.justPressed('RIGHT') || hwInput.justPressed('DOWN') || hwInput.justPressed('SELECT') || capTouch.justTapped) {
+        capTouch.justTapped = false;
+        generateVoxelMap(currentMapIdx + 1);
+        showToast(`MAP: ${VOXEL_MAPS[currentMapIdx].name}`);
+        playTone(720, 0.04);
+      }
+      if (hwInput.justPressed('Y')) {
+        voxelDetailMode = (voxelDetailMode + 1) % VOXEL_DETAIL_NAMES.length;
+        showToast(VOXEL_DETAIL_NAMES[voxelDetailMode]);
+      }
+      if (hwInput.justPressed('A')) {
+        launchRom('fpv_drone');
+        return;
+      }
+      if (hwInput.justPressed('B')) {
+        launchRom('fpv_wing');
+        return;
+      }
+
+      const camX = Math.sin(explorerCamAngle) * 55 + hwInput.lx * 40;
+      const camZ = Math.cos(explorerCamAngle) * 55 + hwInput.ly * 40;
+      const camY = getTerrainHeightMeters(camX, camZ) + 26 + hwInput.ry * 15;
+      const yaw = explorerCamAngle + Math.PI * 0.5 + hwInput.rx * 1.2;
+      const roll = Math.sin(explorerCamAngle * 2) * 0.22;
+
+      const cY = Math.cos(yaw), sY = Math.sin(yaw);
+      const cR = Math.cos(roll), sR = Math.sin(roll);
+      renderVoxelSpaceComanche(
+        camX, camY, camZ,
+        cY * cR, sR, -sY * cR,
+        -cY * sR, cR, sY * sR,
+        sY, -0.18, cY
+      );
+
+      const m = VOXEL_MAPS[currentMapIdx];
+      fbRect(0, 0, 128, 9, true, 0);
+      fbDrawText(`MAP ${currentMapIdx + 1}/4: ${m.name}`, 2, 2, 2);
+      fbRect(0, 48, 128, 16, true, 0);
+      fbDrawText(`${m.desc} (768KB PSRAM)`, 2, 50, 5);
+      fbDrawText('DPAD:MAPA | A:DRONE | B:ALA FIJA', 2, 57, 3);
+    }
+
+    /***************************************************************************
+     * 8. SISTEMA OPERATIVO RETRO-GO (FPV EDITION) + OVERLAY IN-GAME
      ***************************************************************************/
     const ROM_LIST = [
-      { id: 'fpv',    sys: 'S3-3D', name: 'FPV DRONE ACRO',  size: '64KB', fav: true  },
-      { id: 'rally',  sys: 'S3-3D', name: 'WRC RALLY STAGE', size: '96KB', fav: true  },
-      { id: 'space',  sys: 'S3-3D', name: 'STARFIGHTER 3D',  size: '80KB', fav: false },
-      { id: 'arena',  sys: 'ARCDE', name: 'TWIN-STICK ARENA',size: '48KB', fav: true  },
-      { id: 'hwtest', sys: 'TOOLS', name: 'SPI & TOUCH DIAG',size: '32KB', fav: false }
+      { id: 'fpv_drone', sys: 'S3-FPV', name: 'FPV DRONE VOXEL',  size: '128KB', fav: true  },
+      { id: 'fpv_wing',  sys: 'S3-FPV', name: 'FPV FIXED-WING',   size: '128KB', fav: true  },
+      { id: 'vox_maps',  sys: 'VOXEL',  name: 'COMANCHE 3 MAPS',  size: '768KB', fav: true  },
+      { id: 'hwtest',    sys: 'TOOLS',  name: 'SPI & TOUCH DIAG', size: '32KB',  fav: false }
     ];
 
     let osState = 'boot';
-    let bootTimer = 1.0;
-    let activeRomId = 'fpv';
+    let bootTimer = 0.85;
+    let activeRomId = 'fpv_drone';
     let rgTabIdx = 0;
     let rgCursor = 0;
     let navCooldown = 0;
     let previewAnimT = 0;
 
-    // Emulación del controlador táctil capacitivo FT6336U (I2C) integrado en la pantalla IPS 2.8"
     const capTouch = {
       active: false,
       x320: 160,
@@ -1236,13 +2365,13 @@
     let rgOverlayOpen = false;
     let rgOverlayCursor = 0;
     const RG_OVERLAY_ITEMS = [
-      'CONTINUE GAME',
-      'SAVE STATE (NVS)',
-      'LOAD STATE (NVS)',
-      'RESET CART',
+      'RESUME FLIGHT',
+      'SWITCH: DRONE <-> WING',
+      'NEXT VOXEL MAP (1-4)',
+      'VOXEL QUALITY MODE',
+      'RESET TO RUNWAY',
       'QUIT TO RETRO-GO'
     ];
-    const savedStates = {};
     let toastMsg = '';
     let toastTimer = 0;
 
@@ -1259,18 +2388,14 @@
       rgOverlayOpen = false;
       playTone(820, 0.08);
 
-      if (romId === 'fpv') {
-        setFaceLabels('MODO', 'RST', 'CAM', 'BOOST', 'L:THR/YAW R:PIT/ROL MENU:OSD');
-        fpvGame.reset();
-      } else if (romId === 'rally') {
-        setFaceLabels('CAM', 'RST', 'DRFT', 'GAS', 'L/DPAD:GIRO A:GAS B:DRIFT');
-        rallyGame.reset();
-      } else if (romId === 'space') {
-        setFaceLabels('RDR', 'RST', 'TRBO', 'FIRE', 'STICKS:NAVE A/R3:LASER');
-        spaceGame.reset();
-      } else if (romId === 'arena') {
-        setFaceLabels('EMP', 'RST', 'BOMB', 'FIRE', 'L/DPAD:MOVER R:APUNTAR 360');
-        arenaGame.reset();
+      if (romId === 'fpv_drone') {
+        setFaceLabels('MODO', 'RST', 'CAM', 'BOOST', 'SELECT:MAPA | DPAD:DRONE/WING');
+        fpvDroneSim.reset();
+      } else if (romId === 'fpv_wing') {
+        setFaceLabels('MODO', 'RST', 'CAM', 'WEP', 'SELECT:MAPA | DPAD:DRONE/WING');
+        fpvWingSim.reset();
+      } else if (romId === 'vox_maps') {
+        setFaceLabels('QUAL', 'RST', 'WING', 'DRONE', 'DPAD/SELECT:MAPA | A:DRONE B:WING');
       } else if (romId === 'hwtest') {
         setFaceLabels('Y', 'X', 'B', 'A', 'TOCA LA PANTALLA IPS O PULSA ★ MENU');
       }
@@ -1281,38 +2406,34 @@
       fbRect(bx, by, bw, bh, true, 8);
       fbRect(bx, by, bw, bh, false, 2);
 
-      if (romId === 'fpv') {
-        fbRect(bx + 11, by + 7, 17, 14, false, 10);
-        const dy = Math.round(Math.sin(t * 4) * 3);
-        const cx = bx + 19, cy = by + 21 + dy;
+      if (romId === 'fpv_drone') {
+        fbRect(bx + 11, by + 6, 17, 13, false, 10);
+        const dy = Math.round(Math.sin(t * 4) * 2);
+        const cx = bx + 19, cy = by + 20 + dy;
         fbDrawLine(cx - 8, cy - 3, cx + 8, cy + 3, 0, 5);
         fbDrawLine(cx - 8, cy + 3, cx + 8, cy - 3, 0, 5);
         fbCircle(cx - 8, cy - 3, 2, 3);
         fbCircle(cx + 8, cy - 3, 2, 3);
-        fbDrawText('ACRO', bx + 11, by + 29, 2);
-      } else if (romId === 'rally') {
-        fbDrawLine(bx + 19, by + 4, bx + 4, by + 28, 0, 4);
-        fbDrawLine(bx + 19, by + 4, bx + 34, by + 28, 0, 4);
-        fbRect(bx + 12, by + 19, 15, 7, true, 9);
-        fbDrawText('WRC', bx + 14, by + 29, 2);
-      } else if (romId === 'space') {
+        fbDrawText('QUAD', bx + 11, by + 29, 2);
+      } else if (romId === 'fpv_wing') {
         const cx = bx + 19, cy = by + 16;
-        fbCircle(cx, cy, 5, 4);
-        fbDrawLine(cx - 10, cy - 8, cx - 10, cy + 8, 0, 5);
-        fbDrawLine(cx + 10, cy - 8, cx + 10, cy + 8, 0, 5);
-        fbDrawLine(cx - 10, cy, cx + 10, cy, 0, 1);
-        fbDrawText('3D', bx + 16, by + 29, 3);
-      } else if (romId === 'arena') {
-        const cx = bx + 19, cy = by + 16;
-        fbCircle(cx, cy, 4, 5);
-        const ang = t * 3;
-        fbDrawLine(cx, cy, cx + Math.cos(ang) * 11, cy + Math.sin(ang) * 11, 0, 2);
-        fbDrawText('360', bx + 14, by + 29, 5);
+        const bank = Math.sin(t * 2.5) * 4;
+        fbDrawLine(cx, cy - 6, cx - 13, cy + 6 + bank, 0, 1);
+        fbDrawLine(cx, cy - 6, cx + 13, cy + 6 - bank, 0, 1);
+        fbDrawLine(cx - 13, cy + 6 + bank, cx, cy + 2, 0, 4);
+        fbDrawLine(cx + 13, cy + 6 - bank, cx, cy + 2, 0, 4);
+        fbDrawText('WING', bx + 11, by + 29, 3);
+      } else if (romId === 'vox_maps') {
+        for (let i = 0; i < 6; i++) {
+          const h = 6 + Math.round(Math.sin(t * 2 + i) * 5);
+          fbRect(bx + 5 + i * 5, by + 24 - h, 4, h, true, (i & 1) ? 3 : 9);
+        }
+        fbDrawText('VOXL', bx + 11, by + 29, 5);
       } else {
         fbRect(bx + 9, by + 6, 20, 18, false, 3);
         fbDrawLine(bx + 12, by + 15, bx + 26, by + 15, 0, 2);
         fbDrawLine(bx + 19, by + 9, bx + 19, by + 21, 0, 2);
-        fbDrawText('IPS', bx + 14, by + 29, 3);
+        fbDrawText('DIAG', bx + 11, by + 29, 3);
       }
     }
 
@@ -1321,19 +2442,19 @@
       fbClear(0);
       fbRect(2, 2, 124, 60, false, 5);
       fbRect(3, 3, 122, 11, true, 8);
-      fbDrawText('RETRO-GO S3 // ILI9341V IPS', 10, 6, 2);
+      fbDrawText('RETRO-GO S3 // VOXEL FPV', 12, 6, 2);
       fbDrawText('MCU : ESP32-S3 LX7 240MHZ', 8, 18, 1);
       fbDrawText('MEM : 16MB FLASH / 8MB PSRAM', 8, 26, 3);
-      fbDrawText('LCD : 2.8" 320X240 RGB565 DMA', 8, 34, 5);
-      fbDrawText('TCH : FT6336 CAPACITIVE I2C', 8, 42, 2);
+      fbDrawText('ENG : COMANCHE 3 VOXEL SPACE', 8, 34, 5);
+      fbDrawText('SIM : FPV DRONE + FIXED-WING', 8, 42, 2);
 
-      const pct = Math.min(1.0, (1.0 - bootTimer) / 0.85);
+      const pct = Math.min(1.0, (0.85 - bootTimer) / 0.75);
       fbRect(12, 51, 104, 6, false, 1);
       fbRect(14, 53, Math.round(pct * 100), 2, true, 3);
 
       if (bootTimer <= 0 || hwInput.justPressed('A') || hwInput.justPressed('MENU') || capTouch.justTapped) {
         osState = 'launcher';
-        setFaceLabels('FAV*', 'INFO', 'TAB', 'RUN', 'TOUCH/DPAD/STICK:NAV | A:RUN');
+        setFaceLabels('MAPA', 'INFO', 'WING', 'RUN', 'TOUCH/DPAD/STICK:NAV | A:RUN');
       }
     }
 
@@ -1344,7 +2465,6 @@
       const filteredRoms = rgTabIdx === 1 ? ROM_LIST.filter(r => r.fav) : ROM_LIST;
       if (rgCursor >= filteredRoms.length) rgCursor = Math.max(0, filteredRoms.length - 1);
 
-      // Soporte Touch Capacitivo directo sobre la pantalla 2.8" IPS en el Launcher
       if (capTouch.justTapped) {
         if (capTouch.ly64 <= 11) {
           if (capTouch.lx128 < 32) rgTabIdx = 0;
@@ -1352,7 +2472,7 @@
           else rgTabIdx = 2;
           playTone(620, 0.03);
         } else if (rgTabIdx !== 2 && capTouch.ly64 >= 12 && capTouch.ly64 <= 52) {
-          const idx = Math.floor((capTouch.ly64 - 12) / 8);
+          const idx = Math.floor((capTouch.ly64 - 12) / 9);
           if (idx >= 0 && idx < filteredRoms.length) {
             if (rgCursor === idx || capTouch.lx128 > 82) {
               launchRom(filteredRoms[idx].id);
@@ -1378,26 +2498,31 @@
           rgCursor = (rgCursor - 1 + (filteredRoms.length || 1)) % (filteredRoms.length || 1);
           navCooldown = 0.17;
           playTone(480, 0.025);
-        } else if (navX > 0.55 || hwInput.justPressed('RIGHT') || hwInput.justPressed('SELECT')) {
+        } else if (navX > 0.55 || hwInput.justPressed('RIGHT')) {
           rgTabIdx = (rgTabIdx + 1) % 3;
           navCooldown = 0.22;
           playTone(620, 0.03);
-        } else if (navX < -0.55 || hwInput.justPressed('LEFT') || hwInput.justPressed('B')) {
+        } else if (navX < -0.55 || hwInput.justPressed('LEFT')) {
           rgTabIdx = (rgTabIdx + 2) % 3;
           navCooldown = 0.22;
           playTone(620, 0.03);
         }
       }
 
-      if (hwInput.justPressed('Y') && filteredRoms[rgCursor]) {
-        filteredRoms[rgCursor].fav = !filteredRoms[rgCursor].fav;
-        blinkSdLed();
+      if (hwInput.justPressed('SELECT') || hwInput.justPressed('Y')) {
+        generateVoxelMap(currentMapIdx + 1);
+        showToast(`MAP: ${VOXEL_MAPS[currentMapIdx].name}`);
         playTone(700, 0.04);
       }
 
       if (hwInput.justPressed('X')) {
         rgTabIdx = rgTabIdx === 2 ? 0 : 2;
         playTone(580, 0.03);
+      }
+
+      if (hwInput.justPressed('B')) {
+        launchRom('fpv_wing');
+        return;
       }
 
       if ((hwInput.justPressed('A') || hwInput.justPressed('L3') || hwInput.justPressed('R3')) && rgTabIdx !== 2) {
@@ -1410,7 +2535,7 @@
 
       fbClear(0);
       fbRect(0, 0, 128, 10, true, 8);
-      const tabs = ['[ROMS]', '[FAV]', '[S3-FW]'];
+      const tabs = ['[FPV]', '[FAV]', '[VOXEL-S3]'];
       let tx = 2;
       for (let i = 0; i < tabs.length; i++) {
         if (i === rgTabIdx) {
@@ -1419,28 +2544,28 @@
         } else {
           fbDrawText(tabs[i], tx, 2, 1);
         }
-        tx += tabs[i].length * 4 + 5;
+        tx += tabs[i].length * 4 + 4;
       }
-      fbDrawText('320X240', 98, 2, 3);
+      fbDrawText(VOXEL_MAPS[currentMapIdx].short, 98, 2, 3);
 
       if (rgTabIdx === 2) {
-        fbDrawText('LCD : 2.8" ILI9341V IPS SPI', 4, 13, 5);
-        fbDrawText('RES : 320X240 RGB565 (150KB)', 4, 21, 2);
-        fbDrawText('SPI : 60-80MHZ DUAL-CORE DMA', 4, 29, 3);
-        fbDrawText('FPS : 48-60 FPS CONTINUOS', 4, 37, 1);
-        fbDrawText('TCH : FT6336 CAPACITIVE I2C', 4, 45, 9);
+        fbDrawText('ENG : COMANCHE 3 VOXEL SPACE', 4, 13, 2);
+        fbDrawText('MAP : 512X512 H+RGB565 768KB', 4, 21, 5);
+        fbDrawText('MEM : 8MB OCTAL PSRAM N16R8', 4, 29, 3);
+        fbDrawText('DOF : 360 ROLL + PITCH + YAW', 4, 37, 1);
+        fbDrawText('FPS : 45-60 FPS DMA ILI9341V', 4, 45, 9);
         fbDrawLine(0, 53, 127, 53, 0, 6);
-        fbDrawText('TOCA TAB O PULSA B PARA ROMS', 4, 56, 2);
+        fbDrawText('Y/SELECT: CAMBIAR MAPA (1-4)', 4, 56, 2);
         return;
       }
 
       for (let i = 0; i < filteredRoms.length; i++) {
         const rom = filteredRoms[i];
-        const y = 13 + i * 8;
+        const y = 14 + i * 9;
         const sel = (i === rgCursor);
         const label = (rom.fav ? '*' : ' ') + rom.name.slice(0, 18);
         if (sel) {
-          fbRect(1, y - 1, 82, 7, true, 4);
+          fbRect(1, y - 1, 82, 8, true, 4);
           fbDrawText('>' + label, 2, y, 1);
         } else {
           fbDrawText(' ' + label, 2, y, rom.fav ? 2 : 1);
@@ -1451,15 +2576,15 @@
       if (currentRom) {
         drawRomBoxArt(currentRom.id, previewAnimT);
         fbRect(0, 53, 128, 11, true, 8);
-        fbDrawText(`${currentRom.sys} | ${currentRom.size} | A/TOUCH:RUN`, 2, 56, 3);
+        fbDrawText(`MAP:${VOXEL_MAPS[currentMapIdx].name} | A:FLY`, 2, 56, 3);
       }
     }
 
     function updateAndRenderRetroGoOverlay(dt) {
       if (navCooldown > 0) navCooldown -= dt;
 
-      if (capTouch.justTapped && capTouch.ly64 >= 16 && capTouch.ly64 <= 54) {
-        const idx = Math.floor((capTouch.ly64 - 17) / 7);
+      if (capTouch.justTapped && capTouch.ly64 >= 14 && capTouch.ly64 <= 56) {
+        const idx = Math.floor((capTouch.ly64 - 15) / 7);
         if (idx >= 0 && idx < RG_OVERLAY_ITEMS.length) {
           rgOverlayCursor = idx;
           hwInput.btn.A = true;
@@ -1490,495 +2615,47 @@
         if (rgOverlayCursor === 0) {
           rgOverlayOpen = false;
         } else if (rgOverlayCursor === 1) {
-          if (activeRomId === 'fpv') savedStates.fpv = JSON.stringify({ px: fpvGame.px, py: fpvGame.py, pz: fpvGame.pz, gate: fpvGame.activeGate });
-          if (activeRomId === 'rally') savedStates.rally = JSON.stringify({ z: rallyGame.trackZ, x: rallyGame.playerX, spd: rallyGame.speed });
-          showToast('STATE SAVED TO NVS');
-          rgOverlayOpen = false;
+          const nextId = activeRomId === 'fpv_drone' ? 'fpv_wing' : 'fpv_drone';
+          launchRom(nextId);
+          showToast(nextId === 'fpv_drone' ? 'CRAFT: FPV DRONE' : 'CRAFT: FIXED-WING');
         } else if (rgOverlayCursor === 2) {
-          if (activeRomId === 'fpv' && savedStates.fpv) {
-            const s = JSON.parse(savedStates.fpv);
-            fpvGame.px = s.px; fpvGame.py = s.py; fpvGame.pz = s.pz; fpvGame.activeGate = s.gate;
-          }
-          if (activeRomId === 'rally' && savedStates.rally) {
-            const s = JSON.parse(savedStates.rally);
-            rallyGame.trackZ = s.z; rallyGame.playerX = s.x; rallyGame.speed = s.spd;
-          }
-          showToast('STATE LOADED');
+          generateVoxelMap(currentMapIdx + 1);
+          if (activeRomId === 'fpv_drone') fpvDroneSim.reset();
+          if (activeRomId === 'fpv_wing') fpvWingSim.reset();
+          showToast(`MAP: ${VOXEL_MAPS[currentMapIdx].name}`);
           rgOverlayOpen = false;
         } else if (rgOverlayCursor === 3) {
-          launchRom(activeRomId);
-          showToast('CART RESET');
+          voxelDetailMode = (voxelDetailMode + 1) % VOXEL_DETAIL_NAMES.length;
+          showToast(VOXEL_DETAIL_NAMES[voxelDetailMode]);
+          rgOverlayOpen = false;
         } else if (rgOverlayCursor === 4) {
+          launchRom(activeRomId);
+          showToast('RUNWAY RESET');
+        } else if (rgOverlayCursor === 5) {
           rgOverlayOpen = false;
           osState = 'launcher';
-          setFaceLabels('FAV*', 'INFO', 'TAB', 'RUN', 'TOUCH/DPAD/STICK:NAV | A:RUN');
+          setFaceLabels('MAPA', 'INFO', 'WING', 'RUN', 'TOUCH/DPAD/STICK:NAV | A:RUN');
         }
         return;
       }
 
-      fbRect(16, 6, 96, 52, true, 0);
-      fbRect(16, 6, 96, 52, false, 2);
-      fbRect(16, 6, 96, 9, true, 4);
-      fbDrawText('RETRO-GO IN-GAME MENU', 22, 8, 1);
+      fbRect(12, 4, 104, 56, true, 0);
+      fbRect(12, 4, 104, 56, false, 2);
+      fbRect(12, 4, 104, 9, true, 4);
+      fbDrawText('FPV VOXEL IN-FLIGHT MENU', 16, 6, 1);
 
       for (let i = 0; i < RG_OVERLAY_ITEMS.length; i++) {
-        const y = 18 + i * 7;
+        const y = 15 + i * 7;
         if (i === rgOverlayCursor) {
-          fbRect(19, y - 1, 90, 7, true, 2);
-          fbDrawText('>' + RG_OVERLAY_ITEMS[i], 21, y, 0);
+          fbRect(15, y - 1, 98, 7, true, 2);
+          fbDrawText('>' + RG_OVERLAY_ITEMS[i], 17, y, 0);
         } else {
-          fbDrawText(' ' + RG_OVERLAY_ITEMS[i], 21, y, 1);
+          fbDrawText(' ' + RG_OVERLAY_ITEMS[i], 17, y, 1);
         }
       }
     }
 
-    /***************************************************************************
-     * 5. LOS 5 CARTUCHOS / JUEGOS
-     ***************************************************************************/
-    const DEG2RAD = Math.PI / 180.0;
-
-    // CARTUCHO 1: FPV DRONE 3D ACRO
-    const fpvGame = {
-      px: 0, py: 2.2, pz: -10,
-      vx: 0, vy: 0, vz: 0,
-      pitchRate: 0, rollRate: 0, yawRate: 0,
-      rx: 1, ry: 0, rz: 0,
-      ux: 0, uy: 1, uz: 0,
-      fx: 0, fy: 0, fz: 1,
-      mode: 'ACRO',
-      chaseCam: false,
-      activeGate: 0,
-      thrCmd: 0.36,
-      gates: [
-        { x:  0, y: 2.5, z:   5, w: 5.0, h: 4.0 },
-        { x:  6, y: 3.0, z:  22, w: 5.0, h: 4.0 },
-        { x: 22, y: 3.2, z:  34, w: 5.0, h: 4.0 },
-        { x: 34, y: 2.5, z:  16, w: 5.0, h: 4.0 },
-        { x: 22, y: 2.5, z:  -6, w: 5.0, h: 4.0 },
-        { x:  0, y: 2.5, z: -18, w: 5.0, h: 4.0 }
-      ],
-      reset() {
-        this.px = 0; this.py = 2.2; this.pz = -10;
-        this.vx = 0; this.vy = 0; this.vz = 0;
-        this.pitchRate = 0; this.rollRate = 0; this.yawRate = 0;
-        this.rx = 1; this.ry = 0; this.rz = 0;
-        this.ux = 0; this.uy = 1; this.uz = 0;
-        this.fx = 0; this.fy = 0; this.fz = 1;
-        this.activeGate = 0;
-      },
-      step(dt) {
-        if (hwInput.justPressed('Y') || hwInput.justPressed('L3')) {
-          this.mode = this.mode === 'ACRO' ? 'STAB' : 'ACRO';
-          showToast(`MODE: ${this.mode}`);
-        }
-        if (hwInput.justPressed('X')) { this.reset(); showToast('DRONE RESET'); }
-        if (hwInput.justPressed('B') || hwInput.justPressed('R3')) {
-          this.chaseCam = !this.chaseCam;
-          showToast(this.chaseCam ? 'CAM: 3RD PERSON' : 'CAM: FPV');
-        }
-
-        const baseThr = 0.36;
-        let thr = hwInput.ly >= 0 ? baseThr + hwInput.ly * (1 - baseThr) : baseThr * (1 + hwInput.ly);
-        if (hwInput.btn.A) thr = Math.min(1.0, thr + 0.25);
-        this.thrCmd = thr;
-
-        const curPitch = Math.atan2(-this.fy, this.uy);
-        const curRoll  = Math.atan2(-this.ry, this.uy);
-
-        let tPitch = 0, tRoll = 0, tYaw = hwInput.lx * 210 * DEG2RAD;
-        if (this.mode === 'ACRO') {
-          tPitch = hwInput.ry * 300 * DEG2RAD;
-          tRoll  = hwInput.rx * 300 * DEG2RAD;
-        } else {
-          tPitch = ((hwInput.ry * 48 * DEG2RAD) - curPitch) * 7.0;
-          tRoll  = ((hwInput.rx * 48 * DEG2RAD) - curRoll)  * 7.0;
-        }
-
-        const alpha = Math.min(1.0, 20.0 * dt);
-        this.pitchRate += (tPitch - this.pitchRate) * alpha;
-        this.rollRate  += (tRoll  - this.rollRate)  * alpha;
-        this.yawRate   += (tYaw   - this.yawRate)   * alpha;
-
-        const p = this.pitchRate * dt, r = this.rollRate * dt, y = this.yawRate * dt;
-        const thSq = p*p + r*r + y*y;
-        if (thSq > 1e-12) {
-          const th = Math.sqrt(thSq);
-          const c1 = Math.sin(th) / th, c2 = (1 - Math.cos(th)) / thSq;
-          const rx = this.rx, ry = this.ry, rz = this.rz;
-          const ux = this.ux, uy = this.uy, uz = this.uz;
-          const fx = this.fx, fy = this.fy, fz = this.fz;
-
-          const v1Rx = -r*ux - y*fx, v1Ry = -r*uy - y*fy, v1Rz = -r*uz - y*fz;
-          const v1Ux =  r*rx + p*fx, v1Uy =  r*ry + p*fy, v1Uz =  r*rz + p*fz;
-          const v1Fx =  y*rx - p*ux, v1Fy =  y*ry - p*uy, v1Fz =  y*rz - p*uz;
-
-          const v2Rx = -r*v1Ux - y*v1Fx, v2Ry = -r*v1Uy - y*v1Fy, v2Rz = -r*v1Uz - y*v1Fz;
-          const v2Ux =  r*v1Rx + p*v1Fx, v2Uy =  r*v1Ry + p*v1Fy, v2Uz =  r*v1Rz + p*v1Fz;
-          const v2Fx =  y*v1Rx - p*v1Ux, v2Fy =  y*v1Ry - p*v1Uy, v2Fz =  y*v1Rz - p*v1Uz;
-
-          this.rx = rx + c1*v1Rx + c2*v2Rx; this.ry = ry + c1*v1Ry + c2*v2Ry; this.rz = rz + c1*v1Rz + c2*v2Rz;
-          this.ux = ux + c1*v1Ux + c2*v2Ux; this.uy = uy + c1*v1Uy + c2*v2Uy; this.uz = uz + c1*v1Uz + c2*v2Uz;
-          this.fx = fx + c1*v1Fx + c2*v2Fx; this.fy = fy + c1*v1Fy + c2*v2Fy; this.fz = fz + c1*v1Fz + c2*v2Fz;
-
-          const fL = Math.hypot(this.fx, this.fy, this.fz) || 1;
-          this.fx /= fL; this.fy /= fL; this.fz /= fL;
-          const dot = this.ux*this.fx + this.uy*this.fy + this.uz*this.fz;
-          this.ux -= dot*this.fx; this.uy -= dot*this.fy; this.uz -= dot*this.fz;
-          const uL = Math.hypot(this.ux, this.uy, this.uz) || 1;
-          this.ux /= uL; this.uy /= uL; this.uz /= uL;
-          this.rx = this.uy*this.fz - this.uz*this.fy;
-          this.ry = this.uz*this.fx - this.ux*this.fz;
-          this.rz = this.ux*this.fy - this.uy*this.fx;
-        }
-
-        const thrust = thr * 26.0;
-        const spd = Math.hypot(this.vx, this.vy, this.vz);
-        const drag = 0.08 + 0.008 * spd;
-        this.vx += (this.ux * thrust - this.vx * drag) * dt;
-        this.vy += (this.uy * thrust - 9.81 - this.vy * drag) * dt;
-        this.vz += (this.uz * thrust - this.vz * drag) * dt;
-
-        this.px += this.vx * dt; this.py += this.vy * dt; this.pz += this.vz * dt;
-        if (this.py < 0.25) {
-          this.py = 0.25;
-          if (this.vy < 0) this.vy = -this.vy * 0.2;
-          this.vx *= 0.92; this.vz *= 0.92;
-        }
-
-        const g = this.gates[this.activeGate];
-        if (Math.hypot(this.px - g.x, this.py - g.y, this.pz - g.z) < 3.5) {
-          this.activeGate = (this.activeGate + 1) % this.gates.length;
-          showToast(`GATE ${this.activeGate}/${this.gates.length} OK!`);
-          playTone(880, 0.08);
-        }
-      },
-      render() {
-        fbClear(0);
-
-        const tilt = 15 * DEG2RAD;
-        const cT = Math.cos(tilt), sT = Math.sin(tilt);
-        const cRx = this.rx, cRy = this.ry, cRz = this.rz;
-        const cUx = cT*this.ux - sT*this.fx, cUy = cT*this.uy - sT*this.fy, cUz = cT*this.uz - sT*this.fz;
-        const cFx = sT*this.ux + cT*this.fx, cFy = sT*this.uy + cT*this.fy, cFz = sT*this.uz + cT*this.fz;
-
-        const camX = this.chaseCam ? this.px - cFx * 3.5 + cUx * 1.0 : this.px;
-        const camY = this.chaseCam ? Math.max(0.3, this.py - cFy * 3.5 + cUy * 1.0) : this.py;
-        const camZ = this.chaseCam ? this.pz - cFz * 3.5 + cUz * 1.0 : this.pz;
-
-        const projLine = (x0, y0, z0, x1, y1, z1, dash = 0, col = 1) => {
-          const dx0 = x0 - camX, dy0 = y0 - camY, dz0 = z0 - camZ;
-          const dx1 = x1 - camX, dy1 = y1 - camY, dz1 = z1 - camZ;
-          let cx0 = dx0*cRx + dy0*cRy + dz0*cRz, cy0 = dx0*cUx + dy0*cUy + dz0*cUz, cz0 = dx0*cFx + dy0*cFy + dz0*cFz;
-          let cx1 = dx1*cRx + dy1*cRy + dz1*cRz, cy1 = dx1*cUx + dy1*cUy + dz1*cUz, cz1 = dx1*cFx + dy1*cFy + dz1*cFz;
-          if (cz0 < 0.2 && cz1 < 0.2) return;
-          if (cz0 > 75 && cz1 > 75) return;
-          if (cz0 < 0.2) { const t = (0.2 - cz0)/(cz1 - cz0); cx0 += t*(cx1 - cx0); cy0 += t*(cy1 - cy0); cz0 = 0.2; }
-          else if (cz1 < 0.2) { const t = (0.2 - cz1)/(cz0 - cz1); cx1 += t*(cx0 - cx1); cy1 += t*(cy0 - cy1); cz1 = 0.2; }
-          const f = 68.0;
-          fbDrawLine(64 + cx0*f/cz0, 32 - cy0*f/cz0, 64 + cx1*f/cz1, 32 - cy1*f/cz1, dash, col);
-        };
-
-        for (let i = -48; i <= 48; i += 8) {
-          projLine(i, 0, -48, i, 0, 48, 1, 7);
-          projLine(-48, 0, i, 48, 0, i, 1, 7);
-        }
-
-        for (let i = 0; i < this.gates.length; i++) {
-          const g = this.gates[i];
-          const hw = g.w * 0.5, hh = g.h * 0.5;
-          const isAct = (i === this.activeGate);
-          const col = isAct ? 10 : 5;
-          projLine(g.x - hw, 0, g.z, g.x - hw, g.y + hh, g.z, 0, col);
-          projLine(g.x + hw, 0, g.z, g.x + hw, g.y + hh, g.z, 0, col);
-          projLine(g.x - hw, g.y + hh, g.z, g.x + hw, g.y + hh, g.z, 0, isAct ? 2 : col);
-          projLine(g.x - hw, g.y - hh, g.z, g.x + hw, g.y - hh, g.z, 0, col);
-          if (isAct) {
-            projLine(g.x, g.y + hh + 1.2, g.z, g.x - 1, g.y + hh + 2.4, g.z, 0, 2);
-            projLine(g.x, g.y + hh + 1.2, g.z, g.x + 1, g.y + hh + 2.4, g.z, 0, 2);
-          }
-        }
-
-        let hFx = cFx, hFz = cFz, hN = Math.hypot(hFx, hFz) || 1;
-        hFx /= hN; hFz /= hN;
-        const hRx = hFz, hRz = -hFx;
-        projLine(camX + hFx*45 - hRx*14, camY, camZ + hFx*45 - hRz*14,
-                 camX + hFx*45 + hRx*14, camY, camZ + hFz*45 + hRz*14, 0, 3);
-
-        fbRect(0, 0, 128, 8, true, 0);
-        fbDrawText(this.mode, 2, 2, this.mode === 'ACRO' ? 2 : 3);
-        fbDrawText('16.4V', 48, 2, 5);
-        fbDrawText(`G${this.activeGate + 1}/6`, 104, 2, 10);
-
-        const spd = Math.hypot(this.vx, this.vy, this.vz);
-        fbRect(0, 56, 128, 8, true, 0);
-        fbDrawText(`V:${Math.round(spd)}M/S`, 2, 58, 1);
-        fbDrawText(`THR:${Math.round(this.thrCmd * 100)}%`, 48, 58, 2);
-        fbDrawText(`A:${this.py.toFixed(1)}M`, 96, 58, 3);
-      }
-    };
-
-    // CARTUCHO 2: RALLY STAGE 3D WRC (ASFALTO + PIANOS ROJOS/BLANCOS + COCHE WRC RGB565)
-    const rallyGame = {
-      trackZ: 0, playerX: 0, speed: 0, driftAngle: 0, distance: 0, camChase: true,
-      reset() { this.trackZ = 0; this.playerX = 0; this.speed = 0; this.driftAngle = 0; this.distance = 0; },
-      getCurveAt(z) { return Math.sin(z * 0.035) * 1.4 + Math.cos(z * 0.08) * 0.9; },
-      getHillAt(z) { return Math.sin(z * 0.05) * 1.8; },
-      step(dt) {
-        if (hwInput.justPressed('X')) { this.reset(); showToast('STAGE RESTART'); }
-        if (hwInput.justPressed('Y') || hwInput.justPressed('L3')) {
-          this.camChase = !this.camChase;
-          showToast(this.camChase ? 'CAM: CHASE WRC' : 'CAM: BUMPER');
-        }
-
-        const steerInput = Math.abs(hwInput.lx) > Math.abs(hwInput.rx) ? hwInput.lx : hwInput.rx;
-        const gasInput   = Math.max(hwInput.btn.A ? 1.0 : 0.0, Math.max(0, hwInput.ry), Math.max(0, hwInput.ly));
-        const brakeInput = Math.max(hwInput.btn.B || hwInput.btn.R3 ? 1.0 : 0.0, Math.max(0, -hwInput.ry));
-
-        const offRoad = Math.abs(this.playerX) > 1.05;
-        const maxSpd = offRoad ? 105 : 215;
-
-        if (gasInput > 0.05) this.speed += gasInput * 75 * dt;
-        else this.speed -= 22 * dt;
-        if (brakeInput > 0.05) this.speed -= brakeInput * 95 * dt;
-        if (offRoad) this.speed -= 45 * dt;
-        this.speed = Math.max(0, Math.min(maxSpd, this.speed));
-
-        const spdNorm = this.speed / 180.0;
-        const dz = (this.speed * 0.28) * dt;
-        this.trackZ += dz;
-        this.distance += dz;
-
-        const roadCurve = this.getCurveAt(this.trackZ);
-        const isDrifting = brakeInput > 0.2 && Math.abs(steerInput) > 0.25 && this.speed > 60;
-        const targetDrift = isDrifting ? steerInput * 0.85 : steerInput * 0.25;
-        this.driftAngle += (targetDrift - this.driftAngle) * Math.min(1, 8 * dt);
-
-        const turnRate = steerInput * (isDrifting ? 2.3 : 1.75) * Math.min(1.0, this.speed / 45.0);
-        const centrifugal = roadCurve * spdNorm * spdNorm * 1.15;
-        this.playerX = Math.max(-2.2, Math.min(2.2, this.playerX + (turnRate - centrifugal) * dt));
-      },
-      render() {
-        fbFillHorizon320(Math.round(21 * SCALE_Y), C565.SKYTOP, C565.GNDBOT);
-        const bgOffset = ((this.trackZ * 2) | 0) % 32;
-        fbDrawLine(0, 21, 127, 21, 0, 5);
-        fbDrawLine(0, 21, 24 - (bgOffset >> 2), 11, 0, 9);
-        fbDrawLine(24 - (bgOffset >> 2), 11, 52 - (bgOffset >> 2), 21, 0, 9);
-        fbDrawLine(60, 21, 88, 9, 0, 10);
-        fbDrawLine(88, 9, 120, 21, 0, 10);
-
-        const numSegs = 26, segLen = 2.2;
-        const baseZ = Math.floor(this.trackZ / segLen) * segLen;
-        const fracZ = (this.trackZ - baseZ) / segLen;
-        let prevLeftX = 0, prevRightX = 0, prevY = 0, accumCurve = 0, curveVel = 0;
-
-        for (let i = 1; i <= numSegs; i++) {
-          const worldZ = baseZ + i * segLen;
-          const relZ = (i - fracZ) * segLen;
-          if (relZ < 0.5) continue;
-
-          curveVel += this.getCurveAt(worldZ) * 0.14;
-          accumCurve += curveVel;
-          const hill = this.getHillAt(worldZ) - this.getHillAt(this.trackZ);
-          const scale = 38.0 / relZ;
-
-          const roadCenterX = 64 + (accumCurve - this.playerX * 3.4) * scale;
-          const roadHalfW   = 3.2 * scale;
-          const sy = Math.max(21, Math.min(63, Math.round(22 + (1.45 - hill * 0.15) * scale)));
-          const lx = roadCenterX - roadHalfW, rx = roadCenterX + roadHalfW;
-
-          if (i > 1) {
-            const segIdx = Math.floor(worldZ / segLen);
-            const roadCol = (segIdx & 1) ? rgb565(46, 52, 66) : rgb565(36, 42, 54);
-            fbFillQuadScanline(lx, rx, sy, prevLeftX, prevRightX, prevY, roadCol);
-
-            const kerbCol = (segIdx & 1) ? 4 : 1;
-            fbDrawLine(prevLeftX, prevY, lx, sy, 0, kerbCol);
-            fbDrawLine(prevRightX, prevY, rx, sy, 0, kerbCol);
-
-            if (segIdx % 2 === 0) {
-              const cx0 = (prevLeftX + prevRightX) * 0.5, cx1 = (lx + rx) * 0.5;
-              fbDrawLine(cx0, prevY, cx1, sy, 0, 2);
-              if (segIdx % 4 === 0 && i < 18) {
-                const postH = Math.max(2, Math.round(2.0 * scale));
-                fbDrawLine(lx - 1.2 * scale, sy, lx - 1.2 * scale, sy - postH, 0, 2);
-                fbDrawLine(rx + 1.2 * scale, sy, rx + 1.2 * scale, sy - postH, 0, 2);
-              }
-            }
-          }
-          prevLeftX = lx; prevRightX = rx; prevY = sy;
-        }
-
-        if (this.camChase) {
-          const carCx = 64 + Math.round(this.driftAngle * 10), carCy = 55;
-          const skew = Math.round(this.driftAngle * 7);
-          fbRect(carCx - 11 + skew, carCy - 5, 22, 6, true, 4);
-          fbRect(carCx - 11 + skew, carCy - 5, 22, 6, false, 1);
-          fbDrawLine(carCx - 7 + skew, carCy - 9, carCx + 7 + skew, carCy - 9, 0, 5);
-          fbDrawLine(carCx - 11 + skew, carCy - 5, carCx - 7 + skew, carCy - 9, 0, 1);
-          fbDrawLine(carCx + 11 + skew, carCy - 5, carCx + 7 + skew, carCy - 9, 0, 1);
-          fbRect(carCx - 9 + skew, carCy - 4, 4, 2, true, 2);
-          fbRect(carCx + 5 + skew, carCy - 4, 4, 2, true, 2);
-          fbRect(carCx - 13 + skew, carCy - 2, 4, 4, true, 0);
-          fbRect(carCx + 9 + skew,  carCy - 2, 4, 4, true, 0);
-        }
-
-        fbRect(0, 0, 128, 8, true, 0);
-        fbDrawText(`${Math.round(this.speed)}KMH`, 2, 2, 3);
-        const gear = this.speed < 5 ? 'N' : Math.min(6, Math.ceil(this.speed / 36));
-        fbDrawText(`G:${gear}`, 54, 2, 2);
-        fbDrawText(`${(this.distance / 100).toFixed(1)}KM`, 90, 2, 5);
-      }
-    };
-
-    // CARTUCHO 3: STARFIGHTER 3D (RGB565 SPACE COMBAT)
-    const spaceGame = {
-      score: 0, shield: 100, speed: 22, enemies: [], stars: [], lasers: [], cooldown: 0,
-      reset() {
-        this.score = 0; this.shield = 100; this.enemies = []; this.lasers = []; this.stars = [];
-        for (let i = 0; i < 40; i++) this.stars.push({ x: (Math.random() - 0.5) * 90, y: (Math.random() - 0.5) * 50, z: Math.random() * 60 + 2, c: (i % 3 === 0) ? 5 : 1 });
-        for (let i = 0; i < 4; i++) this.spawnEnemy(25 + i * 14);
-      },
-      spawnEnemy(zDist = 55) {
-        this.enemies.push({ x: (Math.random() - 0.5) * 32, y: (Math.random() - 0.5) * 18, z: zDist, vx: (Math.random() - 0.5) * 6, vy: (Math.random() - 0.5) * 4 });
-      },
-      step(dt) {
-        if (hwInput.justPressed('X')) { this.reset(); showToast('MISSION RESET'); }
-        if (this.cooldown > 0) this.cooldown -= dt;
-
-        const yawIn   = Math.abs(hwInput.rx) > Math.abs(hwInput.lx) ? hwInput.rx : hwInput.lx;
-        const pitchIn = Math.abs(hwInput.ry) > Math.abs(hwInput.ly) ? hwInput.ry : hwInput.ly;
-        this.speed = hwInput.btn.B ? 42 : (20 + Math.max(0, hwInput.ly) * 18);
-
-        if ((hwInput.btn.A || hwInput.btn.R3 || hwInput.btn.L3) && this.cooldown <= 0) {
-          this.lasers.push({ z: 2.0 });
-          this.cooldown = 0.16;
-          playTone(920, 0.05, 'sawtooth', 0.04);
-        }
-
-        for (const s of this.stars) {
-          s.x -= yawIn * 26 * dt; s.y -= pitchIn * 18 * dt; s.z -= this.speed * dt;
-          if (s.z < 1) { s.z = 60; s.x = (Math.random() - 0.5) * 90; s.y = (Math.random() - 0.5) * 50; }
-        }
-        for (let i = this.lasers.length - 1; i >= 0; i--) {
-          this.lasers[i].z += 85 * dt;
-          if (this.lasers[i].z > 65) this.lasers.splice(i, 1);
-        }
-        for (let i = this.enemies.length - 1; i >= 0; i--) {
-          const e = this.enemies[i];
-          e.x += (e.vx - yawIn * 22) * dt; e.y += (e.vy - pitchIn * 16) * dt; e.z -= (this.speed * 0.65) * dt;
-          let hit = false;
-          for (let j = this.lasers.length - 1; j >= 0; j--) {
-            if (Math.abs(this.lasers[j].z - e.z) < 4.5 && Math.hypot(e.x, e.y) < 4.8) {
-              hit = true; this.lasers.splice(j, 1); break;
-            }
-          }
-          if (hit) {
-            this.score += 100; playTone(220, 0.12); this.enemies.splice(i, 1); this.spawnEnemy(58);
-          } else if (e.z < 1.5) {
-            if (Math.hypot(e.x, e.y) < 4.5) this.shield = Math.max(0, this.shield - 15);
-            this.enemies.splice(i, 1); this.spawnEnemy(58);
-          }
-        }
-      },
-      render() {
-        fbClear(0);
-        const f = 58.0;
-        for (const s of this.stars) fbSetPixel(64 + (s.x * f) / s.z, 32 - (s.y * f) / s.z, s.c || 1);
-        for (const e of this.enemies) {
-          const sx = 64 + (e.x * f) / e.z, sy = 32 - (e.y * f) / e.z;
-          const r = Math.max(2, Math.round((2.2 * f) / e.z));
-          fbCircle(sx, sy, r, 4);
-          fbDrawLine(sx - r * 1.6, sy - r * 1.4, sx - r * 1.6, sy + r * 1.4, 0, 9);
-          fbDrawLine(sx + r * 1.6, sy - r * 1.4, sx + r * 1.6, sy + r * 1.4, 0, 9);
-          fbDrawLine(sx - r * 1.6, sy, sx + r * 1.6, sy, 0, 2);
-        }
-        for (const l of this.lasers) {
-          const z1 = l.z + 6;
-          fbDrawLine(20, 56, 64 - (8 * f) / z1, 32 + (2 * f) / z1, 0, 3);
-          fbDrawLine(108, 56, 64 + (8 * f) / z1, 32 + (2 * f) / z1, 0, 3);
-        }
-        fbCircle(64, 32, 6, 5); fbSetPixel(64, 32, 2);
-        fbRect(0, 0, 128, 8, true, 8);
-        fbDrawText(`SCR:${this.score}`, 2, 2, 2);
-        fbDrawText(`SHD:${this.shield}%`, 86, 2, this.shield > 30 ? 3 : 4);
-      }
-    };
-
-    // CARTUCHO 4: TWIN-STICK ARENA (RGB565 GEOMETRY WARS STYLE)
-    const arenaGame = {
-      px: 64, py: 32, aimX: 1, aimY: 0, bullets: [], foes: [], score: 0, lives: 3, bombs: 3, fireTimer: 0, spawnTimer: 0,
-      reset() { this.px = 64; this.py = 32; this.bullets = []; this.foes = []; this.score = 0; this.lives = 3; this.bombs = 3; },
-      step(dt) {
-        if (hwInput.justPressed('X')) this.reset();
-        this.px = Math.max(6, Math.min(121, this.px + hwInput.lx * 52 * dt));
-        this.py = Math.max(10, Math.min(59, this.py - hwInput.ly * 52 * dt));
-
-        if ((hwInput.justPressed('B') || hwInput.justPressed('Y') || hwInput.justPressed('L3')) && this.bombs > 0) {
-          this.bombs--; this.score += this.foes.length * 10; this.foes.length = 0;
-          showToast('EMP DETONATED!');
-        }
-
-        const rMag = Math.hypot(hwInput.rx, hwInput.ry);
-        if (rMag > 0.2) { this.aimX = hwInput.rx / rMag; this.aimY = -hwInput.ry / rMag; }
-
-        this.fireTimer -= dt;
-        if ((rMag > 0.25 || hwInput.btn.A || hwInput.btn.R3) && this.fireTimer <= 0) {
-          this.bullets.push({ x: this.px + this.aimX * 4, y: this.py + this.aimY * 4, vx: this.aimX * 115, vy: this.aimY * 115 });
-          this.fireTimer = 0.11; playTone(760, 0.03);
-        }
-
-        for (let i = this.bullets.length - 1; i >= 0; i--) {
-          const b = this.bullets[i]; b.x += b.vx * dt; b.y += b.vy * dt;
-          if (b.x < 2 || b.x > 125 || b.y < 9 || b.y > 62) this.bullets.splice(i, 1);
-        }
-
-        this.spawnTimer -= dt;
-        if (this.spawnTimer <= 0 && this.foes.length < 14) {
-          const edge = (Math.random() * 4) | 0;
-          this.foes.push({
-            x: edge === 0 ? 4 : (edge === 1 ? 123 : Math.random() * 120 + 4),
-            y: edge === 2 ? 10 : (edge === 3 ? 60 : Math.random() * 50 + 10)
-          });
-          this.spawnTimer = 0.65;
-        }
-
-        for (let i = this.foes.length - 1; i >= 0; i--) {
-          const f = this.foes[i];
-          const dx = this.px - f.x, dy = this.py - f.y, dist = Math.hypot(dx, dy) || 1;
-          f.x += (dx / dist) * 24 * dt; f.y += (dy / dist) * 24 * dt;
-          if (dist < 4.5) {
-            this.lives = Math.max(0, this.lives - 1); this.foes.splice(i, 1);
-            if (this.lives === 0) this.reset();
-            continue;
-          }
-          for (let j = this.bullets.length - 1; j >= 0; j--) {
-            const b = this.bullets[j];
-            if (Math.hypot(b.x - f.x, b.y - f.y) < 4.0) {
-              this.score += 25; this.foes.splice(i, 1); this.bullets.splice(j, 1); break;
-            }
-          }
-        }
-      },
-      render() {
-        fbClear(0);
-        for (let gx = 16; gx < 128; gx += 16) fbDrawLine(gx, 8, gx, 63, 1, 8);
-        for (let gy = 16; gy < 64; gy += 12) fbDrawLine(0, gy, 127, gy, 1, 8);
-        fbRect(0, 8, 128, 56, false, 5);
-        fbCircle(this.px, this.py, 3, 3);
-        fbDrawLine(this.px, this.py, this.px + this.aimX * 8, this.py + this.aimY * 8, 0, 5);
-        for (const b of this.bullets) fbRect(b.x - 1, b.y - 1, 2, 2, true, 2);
-        for (const f of this.foes) {
-          fbDrawLine(f.x, f.y - 3, f.x + 3, f.y, 0, 4); fbDrawLine(f.x + 3, f.y, f.x, f.y + 3, 0, 4);
-          fbDrawLine(f.x, f.y + 3, f.x - 3, f.y, 0, 10); fbDrawLine(f.x - 3, f.y, f.x, f.y - 3, 0, 10);
-        }
-        fbRect(0, 0, 128, 8, true, 8);
-        fbDrawText(`PTS:${this.score}`, 2, 1, 2);
-        fbDrawText(`HP:${this.lives}`, 60, 1, 3);
-        fbDrawText(`EMP:${this.bombs}`, 94, 1, 5);
-      }
-    };
-
-    // CARTUCHO 5: ILI9341V SPI + FT6336 TOUCH + ADC DIAGNOSTIC
+    // CARTUCHO 4: ILI9341V SPI + FT6336 TOUCH + ADC DIAGNOSTIC
     function renderHwDiagnostic() {
       fbClear(0);
       fbRect(0, 0, 128, 8, true, 8);
@@ -2016,7 +2693,7 @@
       fbDrawText(`SPI:${mode.spiMhz}MHZ (${dmaMs}MS)`, 40, 35, 3);
       fbDrawText(`TCH:${capTouch.x320},${capTouch.y240}`, 40, 43, capTouch.active ? 2 : 5);
       fbRect(0, 55, 128, 9, true, 8);
-      fbDrawText('150KB RGB565 DMA | 45-60FPS OK', 4, 57, 3);
+      fbDrawText('VOXEL PSRAM: 768KB | 60FPS OK', 4, 57, 3);
 
       if (capTouch.active) {
         fbCircle(capTouch.lx128, capTouch.ly64, 5, 4);
@@ -2026,7 +2703,7 @@
     }
 
     /***************************************************************************
-     * 6. BUCLE PRINCIPAL DE SISTEMA RETRO-GO (CON SIMULADOR SPI DMA ILI9341V)
+     * 9. BUCLE PRINCIPAL DE SISTEMA RETRO-GO (CON SIMULADOR SPI DMA ILI9341V)
      ***************************************************************************/
     document.getElementById('btnPalette').addEventListener('click', (e) => {
       paletteIdx = (paletteIdx + 1) % SPI_MODES.length;
@@ -2079,26 +2756,21 @@
           }
 
           if (!rgOverlayOpen) {
-            if (activeRomId === 'fpv') {
-              for (let s = 0; s < 4; s++) fpvGame.step(dt / 4);
-              fpvGame.render();
-            } else if (activeRomId === 'rally') {
-              rallyGame.step(dt);
-              rallyGame.render();
-            } else if (activeRomId === 'space') {
-              spaceGame.step(dt);
-              spaceGame.render();
-            } else if (activeRomId === 'arena') {
-              arenaGame.step(dt);
-              arenaGame.render();
+            if (activeRomId === 'fpv_drone') {
+              for (let s = 0; s < 4; s++) fpvDroneSim.step(dt / 4);
+              fpvDroneSim.render();
+            } else if (activeRomId === 'fpv_wing') {
+              for (let s = 0; s < 4; s++) fpvWingSim.step(dt / 4);
+              fpvWingSim.render();
+            } else if (activeRomId === 'vox_maps') {
+              renderVoxelExplorer(dt);
             } else if (activeRomId === 'hwtest') {
               renderHwDiagnostic();
             }
           } else {
-            if (activeRomId === 'fpv') fpvGame.render();
-            else if (activeRomId === 'rally') rallyGame.render();
-            else if (activeRomId === 'space') spaceGame.render();
-            else if (activeRomId === 'arena') arenaGame.render();
+            if (activeRomId === 'fpv_drone') fpvDroneSim.render();
+            else if (activeRomId === 'fpv_wing') fpvWingSim.render();
+            else if (activeRomId === 'vox_maps') renderVoxelExplorer(0);
             else if (activeRomId === 'hwtest') renderHwDiagnostic();
 
             updateAndRenderRetroGoOverlay(dt);
