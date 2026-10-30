@@ -3540,9 +3540,9 @@
       const agl = Math.max(0.2, py - groundH);
       const wScale = fcProfile.windScale;
 
-      // 0. Modelo de Enlace RF (RSSI % y dBm) que cae casi a 0% al llegar al borde del mapa (WORLD_W_M x WORLD_D_M)
+      // 0. Modelo de Enlace RF (RSSI % y dBm) que cae casi a 0% al llegar al borde del mapa (WORLD_W_M x WORLD_H_M)
       const halfW = WORLD_W_M * 0.47;
-      const halfD = WORLD_D_M * 0.47;
+      const halfD = WORLD_H_M * 0.47;
       const normX = Math.abs(px) / halfW;
       const normZ = Math.abs(pz) / halfD;
       const edgeRatio = Math.max(normX, normZ, Math.hypot(normX, normZ) * 0.76);
