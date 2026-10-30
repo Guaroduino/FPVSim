@@ -472,7 +472,7 @@
         <span>PWR</span>
         <span id="sdLed" class="led sd-act" title="Flash / SD Activity"></span>
         <span>SPI</span>
-        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + 3 CIRCUITOS (v22)</span>
+        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + 3 CIRCUITOS (v23)</span>
       </div>
       <div class="top-hw-pills">
         <button id="btnRates" class="pill-btn active" title="Configurar Rates, PID y Físicas">⚙️ RATES</button>
@@ -1277,16 +1277,34 @@
       ])
     ];
 
+    // Modos de circuito: 0 = C1 Rojo, 1 = C2 Morado, 2 = C3 Naranja, 3 = SIN GATES (Vuelo Libre)
+    const TOTAL_CIRCUIT_MODES = CHOROBOBO_CIRCUITS.length + 1;
     let currentCircuitIdx = 0;
     let CIRCUIT_GATES = CHOROBOBO_CIRCUITS[0].gates;
 
-    function selectChoroboboCircuit(idx, craft = null) {
-      currentCircuitIdx = ((idx % CHOROBOBO_CIRCUITS.length) + CHOROBOBO_CIRCUITS.length) % CHOROBOBO_CIRCUITS.length;
-      CIRCUIT_GATES = CHOROBOBO_CIRCUITS[currentCircuitIdx].gates;
+    function isFreeFlightNoGates() {
+      return currentCircuitIdx >= CHOROBOBO_CIRCUITS.length;
+    }
+
+    function getActiveCircuitLabel() {
+      if (isFreeFlightNoGates()) return 'SIN GATES (LIBRE)';
+      return CHOROBOBO_CIRCUITS[currentCircuitIdx].name;
+    }
+
+    function selectChoroboboCircuit(idx, craft = null, resetCraft = false) {
+      currentCircuitIdx = ((idx % TOTAL_CIRCUIT_MODES) + TOTAL_CIRCUIT_MODES) % TOTAL_CIRCUIT_MODES;
+      if (!isFreeFlightNoGates()) {
+        CIRCUIT_GATES = CHOROBOBO_CIRCUITS[currentCircuitIdx].gates;
+      }
       if (craft) {
         craft.activeGate = 0;
+        if (resetCraft && !isFreeFlightNoGates()) craft.reset();
       }
-      showToast(`${CHOROBOBO_CIRCUITS[currentCircuitIdx].name} (15 GATES)`);
+      if (isFreeFlightNoGates()) {
+        showToast('MAPA LIMPIO: SIN GATES (VUELO LIBRE)');
+      } else {
+        showToast(`${CHOROBOBO_CIRCUITS[currentCircuitIdx].name} (15 GATES)`);
+      }
       playTone(840, 0.05);
     }
 
@@ -1760,40 +1778,39 @@
       return { projPoint320, projLine };
     }
 
-    // Renderiza los 3 Circuitos de 15 Gates orientados 3D (Rojo, Morado, Naranja) + resalta la puerta activa
+    // Renderiza únicamente el circuito activo seleccionado (Rojo, Morado o Naranja) o ninguno en modo Vuelo Libre (SIN GATES)
     function renderCircuitGates(projLine, activeGate) {
-      for (let c = 0; c < CHOROBOBO_CIRCUITS.length; c++) {
-        const circuit = CHOROBOBO_CIRCUITS[c];
-        const isCurrentCircuit = (c === currentCircuitIdx);
-        const gates = circuit.gates;
-        const baseCol = circuit.palIdx; // 4 = Rojo, 10 = Morado, 9 = Naranja
+      if (isFreeFlightNoGates()) return;
 
-        for (let i = 0; i < gates.length; i++) {
-          const g = gates[i];
-          const isAct = isCurrentCircuit && (i === activeGate);
-          const isNext = isCurrentCircuit && (i === (activeGate + 1) % gates.length);
-          const col = isAct ? 3 : (isNext ? 2 : baseCol);
+      const circuit = CHOROBOBO_CIRCUITS[currentCircuitIdx];
+      const gates = circuit.gates;
+      const baseCol = circuit.palIdx; // 4 = Rojo, 10 = Morado, 9 = Naranja
 
-          const hw = g.w * 0.5, hh = g.h * 0.5;
-          const gFloor = getTerrainHeightMeters(g.x, g.z);
-          const gCenterY = gFloor + g.y;
-          const yBot = gFloor + Math.max(2.0, g.y - hh);
-          const yTop = gCenterY + hh;
+      for (let i = 0; i < gates.length; i++) {
+        const g = gates[i];
+        const isAct = (i === activeGate);
+        const isNext = (i === (activeGate + 1) % gates.length);
+        const col = isAct ? 3 : (isNext ? 2 : baseCol);
 
-          const lx = g.x - g.nx * hw, lz = g.z - g.nz * hw;
-          const rx = g.x + g.nx * hw, rz = g.z + g.nz * hw;
+        const hw = g.w * 0.5, hh = g.h * 0.5;
+        const gFloor = getTerrainHeightMeters(g.x, g.z);
+        const gCenterY = gFloor + g.y;
+        const yBot = gFloor + Math.max(2.0, g.y - hh);
+        const yTop = gCenterY + hh;
 
-          // Postes laterales desde el suelo hasta el tope + travesaño superior e inferior orientados 3D
-          projLine(lx, gFloor, lz, lx, yTop, lz, 0, col);
-          projLine(rx, gFloor, rz, rx, yTop, rz, 0, col);
-          projLine(lx, yTop,   lz, rx, yTop, rz, 0, isAct ? 2 : col);
-          projLine(lx, yBot,   lz, rx, yBot, rz, 0, col);
+        const lx = g.x - g.nx * hw, lz = g.z - g.nz * hw;
+        const rx = g.x + g.nx * hw, rz = g.z + g.nz * hw;
 
-          if (isAct) {
-            // Chevron luminoso sobre la puerta activa actual (Gate 1..15)
-            projLine(g.x, yTop + 2.0, g.z, g.x - g.nx * 3.5, yTop + 5.0, g.z - g.nz * 3.5, 0, 2);
-            projLine(g.x, yTop + 2.0, g.z, g.x + g.nx * 3.5, yTop + 5.0, g.z + g.nz * 3.5, 0, 2);
-          }
+        // Postes laterales desde el suelo hasta el tope + travesaño superior e inferior orientados 3D
+        projLine(lx, gFloor, lz, lx, yTop, lz, 0, col);
+        projLine(rx, gFloor, rz, rx, yTop, rz, 0, col);
+        projLine(lx, yTop,   lz, rx, yTop, rz, 0, isAct ? 2 : col);
+        projLine(lx, yBot,   lz, rx, yBot, rz, 0, col);
+
+        if (isAct) {
+          // Chevron luminoso sobre la puerta activa actual (Gate 1..15)
+          projLine(g.x, yTop + 2.0, g.z, g.x - g.nx * 3.5, yTop + 5.0, g.z - g.nz * 3.5, 0, 2);
+          projLine(g.x, yTop + 2.0, g.z, g.x + g.nx * 3.5, yTop + 5.0, g.z + g.nz * 3.5, 0, 2);
         }
       }
     }
@@ -2076,9 +2093,13 @@
       drawInavText320(`${vario.toFixed(1)}M/S`,   252, 120, WHITE);
 
       const brgDeg = Math.round(gateBearingRad * RAD2DEG);
-      const cShort = CHOROBOBO_CIRCUITS[currentCircuitIdx].shortCode;
       drawHomeIcon320(238, 155);
-      drawInavText320(`${cShort} ${activeGate + 1}/15`, 250, 140, WHITE);
+      if (isFreeFlightNoGates()) {
+        drawInavText320('FREE FLY', 250, 140, GREEN_DOT);
+      } else {
+        const cShort = CHOROBOBO_CIRCUITS[currentCircuitIdx].shortCode;
+        drawInavText320(`${cShort} ${activeGate + 1}/15`, 250, 140, WHITE);
+      }
       drawInavText320(`BRG ${brgDeg >= 0 ? '+' : ''}${brgDeg}`, 250, 156, WHITE);
 
       const mins = String(Math.floor(flightTimeSec / 60)).padStart(2, '0');
@@ -2135,13 +2156,11 @@
         playTone(700, 0.04);
       }
       if (hwInput.justPressed('UP')) {
-        selectChoroboboCircuit(currentCircuitIdx + 1, craft);
-        craft.reset();
+        selectChoroboboCircuit(currentCircuitIdx + 1, craft, true);
         return true;
       }
       if (hwInput.justPressed('DOWN')) {
-        selectChoroboboCircuit(currentCircuitIdx - 1, craft);
-        craft.reset();
+        selectChoroboboCircuit(currentCircuitIdx - 1, craft, true);
         return true;
       }
       if (hwInput.justPressed('LEFT') || hwInput.justPressed('RIGHT')) {
@@ -2164,8 +2183,7 @@
       }
       if (capTouch.justTapped && capTouch.ly64 <= 12) {
         if (capTouch.lx128 < 42) {
-          selectChoroboboCircuit(currentCircuitIdx + 1, craft);
-          craft.reset();
+          selectChoroboboCircuit(currentCircuitIdx + 1, craft, false);
         } else if (capTouch.lx128 < 86) {
           // Tocar el centro superior abre directamente el configurador de Rates/Físicas
           rgOverlayOpen = true;
@@ -2564,13 +2582,15 @@
           this.vx *= 0.90; this.vz *= 0.90;
         }
 
-        const g = CIRCUIT_GATES[this.activeGate];
-        const gFloor = getTerrainHeightMeters(g.x, g.z);
-        if (Math.hypot(this.px - g.x, this.pz - g.z) < 14.0 && Math.abs(this.py - (gFloor + g.y)) < 11.0) {
-          this.activeGate = (this.activeGate + 1) % CIRCUIT_GATES.length;
-          const cShort = CHOROBOBO_CIRCUITS[currentCircuitIdx].shortCode;
-          showToast(`${cShort} GATE ${this.activeGate || 15}/15 OK!`);
-          playTone(880, 0.08);
+        if (!isFreeFlightNoGates()) {
+          const g = CIRCUIT_GATES[this.activeGate];
+          const gFloor = getTerrainHeightMeters(g.x, g.z);
+          if (Math.hypot(this.px - g.x, this.pz - g.z) < 14.0 && Math.abs(this.py - (gFloor + g.y)) < 11.0) {
+            this.activeGate = (this.activeGate + 1) % CIRCUIT_GATES.length;
+            const cShort = CHOROBOBO_CIRCUITS[currentCircuitIdx].shortCode;
+            showToast(`${cShort} GATE ${this.activeGate || 15}/15 OK!`);
+            playTone(880, 0.08);
+          }
         }
       },
 
@@ -2589,7 +2609,7 @@
         // 1. Terreno Voxel + Cielo Azul con Nubes Voxel a pantalla completa
         renderVoxelTerrainAndSky(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz);
 
-        // 2. Gates 3D
+        // 2. Gates 3D (solo el circuito activo o vacío si está en SIN GATES)
         const { projPoint320, projLine } = createProjector320(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz);
         renderCircuitGates(projLine, this.activeGate);
 
@@ -2602,7 +2622,7 @@
         }
 
         // 3. OSD estilo INAV con Horizonte Artificial proyectado directamente sobre el horizonte 3D
-        const g = CIRCUIT_GATES[this.activeGate];
+        const g = isFreeFlightNoGates() ? { x: 0, y: 12, z: 0 } : CIRCUIT_GATES[this.activeGate];
         const dxG = g.x - this.px, dzG = g.z - this.pz;
         const gateDist = Math.hypot(dxG, g.y - this.py, dzG);
         const gateBearingRad = Math.atan2(dxG * this.rx + dzG * this.rz, dxG * this.fx + dzG * this.fz);
@@ -2629,9 +2649,9 @@
 
     /***************************************************************************
      * 6. SIMULADOR 2: FPV FIXED-WING 6-DOF (dRehmFlight + JSBSim Post-Stall)
-     *    - Semialas Izquierda/Derecha (alpha_L, alpha_R) con Tip-Stall real
-     *    - Curva Hoerner de Placa Plana +/-180 deg + Mezcla de Elevones (elevL, elevR)
-     *    - Offset de Centro de Gravedad (CG) configurable en tiempo real
+     *    - Sustentación estrictamente ortogonal al viento relativo (L _|_ V_air)
+     *    - Hélice Pusher con velocidad de paso (Advance Ratio) y freno de molinete
+     *    - Arrastre inducido en giros de alta G + Semialas con Tip-Stall real
      ***************************************************************************/
     // Evalúa C_L(alpha) combinando perfil sustentador lineal + placa plana post-pérdida de JSBSim/Hoerner
     function evalWingLiftCoeff(alphaEff, stallAngle, elevDeflect) {
@@ -2656,8 +2676,8 @@
       mode: 'MANU', // Inicia en MANU (Elevones directos + estabilidad aerodinámica real); Y cambia MANU -> ACRO -> HOR
       chaseCam: false,
       activeGate: 0,
-      thrCmd: 0.46,
-      motorRpm: 0.46,
+      thrCmd: 0.40,
+      motorRpm: 0.40,
       elevL: 0,
       elevR: 0,
       lastAlpha: 0,
@@ -2675,7 +2695,7 @@
         this.fx = g0.tx; this.fy = 0; this.fz = g0.tz;
         this.ux = 0;     this.uy = 1; this.uz = 0;
         this.rx = g0.nx; this.ry = 0; this.rz = g0.nz;
-        this.motorRpm = 0.46;
+        this.motorRpm = 0.40;
         this.elevL = 0; this.elevR = 0; this.lastAlpha = 0;
         this.activeGate = 0;
         this.flightTime = 0;
@@ -2692,9 +2712,10 @@
         updateAeroEnvironment(this.px, this.py, this.pz, groundH, dt);
 
         // 1. Comando de motor + spool-up de hélice trasera (pusher prop Z-84)
-        const baseThr = 0.46;
-        let thr = hwInput.ly >= 0 ? baseThr + hwInput.ly * (1 - baseThr) : baseThr * (1 + hwInput.ly);
-        if (hwInput.btn.A) thr = Math.min(1.0, thr + 0.35);
+        // Con stick centrado (ly=0) mantiene 40% de crucero; al bajar stick (ly=-1) corta a 0% para planear/frenar
+        const baseThr = 0.40;
+        let thr = hwInput.ly >= 0 ? baseThr + hwInput.ly * (1.0 - baseThr) : Math.max(0.0, baseThr * (1.0 + hwInput.ly));
+        if (hwInput.btn.A) thr = Math.min(1.0, thr + 0.38);
         this.thrCmd = thr;
         this.motorRpm += (thr - this.motorRpm) * Math.min(1.0, 14.0 * dt);
 
@@ -2723,12 +2744,11 @@
         this.elevR = Math.max(-1.0, Math.min(1.0, rcPitch - rcRoll * 0.85));
 
         // 4. Aerodinámica de Semiala Izquierda y Derecha (alpha_L, alpha_R) + Pérdida de Punta (Tip-Stall)
-        // Al alabear con tasa rollRate (p), la semiala que baja ve mayor ángulo de ataque local: deltaAlpha = p * b_half / Va
         const halfSpan = 0.44;
         const dAlphaRoll = (this.rollRate * halfSpan) / Math.max(4.5, Va);
         const alpha0 = -0.042;
         const alphaEff  = alpha - alpha0;
-        const alphaEffL = alphaEff - dAlphaRoll; // Roll+ baja semiala derecha (+dAlpha) y sube izquierda (-dAlpha)
+        const alphaEffL = alphaEff - dAlphaRoll;
         const alphaEffR = alphaEff + dAlphaRoll;
 
         const stallAngle = 0.27 / Math.sqrt(Math.max(0.6, cfg.wingLoad));
@@ -2740,10 +2760,7 @@
         const CL_R = evalWingLiftCoeff(alphaEffR, stallAngle, this.elevR);
         const CL   = 0.5 * (CL_L + CL_R);
 
-        // Diferencial de sustentación entre semialas: genera amortiguamiento natural pre-stall y autorrotación (wing drop) en pérdida
         const wingAsymTorque = (CL_L - CL_R) * 2.15 * cfg.tipStall;
-
-        // Autoridad de los elevones proporcional a la presión dinámica + prop-wash de la hélice pusher
         const ctrlAuth = Math.min(1.70, 0.25 + (Va / 15.0) * 0.88 + this.motorRpm * 0.24);
 
         let stallPitchTorque = 0, stallRollTorque = wingAsymTorque;
@@ -2757,7 +2774,6 @@
         const curPitch = Math.atan2(-this.fy, this.uy);
         const curRoll  = Math.atan2(-this.ry, this.uy);
         const bankTurnYaw = -this.ry * (9.81 / Math.max(9.0, Va)) * 0.92;
-        // CG positivo = morro pesado (más estable en pitch); CG negativo = cola pesada (más ágil/inestable)
         const cmAlphaStab = 4.8 + cfg.cgOffset * 48.0;
 
         if (this.mode === 'MANU') {
@@ -2795,50 +2811,71 @@
 
         stepRotationSO3(this, dt);
 
-        // 6. Fuerzas Aerodinámicas 3D Reales (Empuje + Sustentación + Arrastre Inducido/Parásito + Fuerza Lateral + Gravedad)
+        // 6. Fuerzas Aerodinámicas 3D con Conservación Exacta de Energía (SIN tope de velocidad hardcodeado)
         const invWingLoad = 1.0 / Math.max(0.55, cfg.wingLoad);
-        const qDyn = 0.044 * Va * Va * invWingLoad;
-        const CD   = 0.060 + 0.095 * CL * CL + 0.55 * beta * beta + (isStalled ? 0.22 * Math.sin(Math.abs(alphaEff)) : 0);
-        const CY   = -1.65 * beta;
-
-        const liftAcc   = Math.max(-26.0, Math.min(36.0, qDyn * CL));
-        const dragAcc   = Math.min(30.0, qDyn * CD);
-        const sideAcc   = Math.max(-15.0, Math.min(15.0, qDyn * CY));
-        const thrustAcc = this.motorRpm * cfg.maxThrustAcc * invWingLoad;
-
         const invVa = 1.0 / Va;
         const airDirX = vAirX * invVa, airDirY = vAirY * invVa, airDirZ = vAirZ * invVa;
 
-        const ax = this.fx * thrustAcc + this.ux * liftAcc - airDirX * dragAcc + this.rx * sideAcc;
-        const ay = this.fy * thrustAcc + this.uy * liftAcc - airDirY * dragAcc + this.ry * sideAcc - 9.81;
-        const az = this.fz * thrustAcc + this.uz * liftAcc - airDirZ * dragAcc + this.rz * sideAcc;
+        // Vector unitario de Sustentación (liftDir) estrictamente ORTOGONAL a V_air (evita empuje fantasma al tirar de pitch)
+        const uDotAir = this.ux * airDirX + this.uy * airDirY + this.uz * airDirZ;
+        let liftDirX = this.ux - uDotAir * airDirX;
+        let liftDirY = this.uy - uDotAir * airDirY;
+        let liftDirZ = this.uz - uDotAir * airDirZ;
+        const liftLen = Math.hypot(liftDirX, liftDirY, liftDirZ) || 1.0;
+        liftDirX /= liftLen; liftDirY /= liftLen; liftDirZ /= liftLen;
+
+        // Polar de arrastre de ala volante Z-84 (AR ~3.6): arrastre parásito + inducido en giros (k*CL^2) + elevones + resbalamiento
+        const qDyn     = 0.056 * Va * Va * invWingLoad;
+        const elevDrag = 0.065 * (this.elevL * this.elevL + this.elevR * this.elevR);
+        const CD       = 0.054 + 0.195 * CL * CL + elevDrag + 0.65 * beta * beta + (isStalled ? 0.28 * Math.sin(Math.abs(alphaEff)) : 0);
+        const CY       = -1.65 * beta;
+
+        const liftAcc = Math.max(-32.0, Math.min(42.0, qDyn * CL));
+        const dragAcc = qDyn * CD;
+        const sideAcc = Math.max(-16.0, Math.min(16.0, qDyn * CY));
+
+        // Modelo de Hélice de Paso Fijo (Advance Ratio) + Freno de Molinete (Windmilling) al cortar gas o picar
+        // La velocidad de paso máxima de la hélice depende de la potencia configurada (cfg.maxThrustAcc)
+        const propPitchMaxSpd = 18.0 + cfg.maxThrustAcc * 0.95; // ~35 m/s (126 km/h) a 100% gas en Sport Z84
+        const propTargetSpd   = propPitchMaxSpd * (0.12 + 0.88 * this.motorRpm);
+        let thrustAcc = 0;
+        if ( uBody < propTargetSpd ) {
+          // Empuje decae conforme la velocidad del aire alcanza la velocidad de paso de la hélice
+          const slipRatio = (propTargetSpd - Math.max(0, uBody)) / Math.max(4.0, propTargetSpd);
+          thrustAcc = this.motorRpm * cfg.maxThrustAcc * invWingLoad * (0.35 + 0.65 * slipRatio);
+        } else {
+          // Cuando el avión va más rápido que el paso de la hélice (al cortar gas o tras un picado), la hélice frena
+          thrustAcc = -0.24 * (uBody - propTargetSpd) * (1.0 - 0.45 * this.motorRpm) * invWingLoad;
+        }
+
+        const ax = this.fx * thrustAcc + liftDirX * liftAcc - airDirX * dragAcc + this.rx * sideAcc;
+        const ay = this.fy * thrustAcc + liftDirY * liftAcc - airDirY * dragAcc + this.ry * sideAcc - 9.81;
+        const az = this.fz * thrustAcc + liftDirZ * liftAcc - airDirZ * dragAcc + this.rz * sideAcc;
 
         this.vx += ax * dt;
         this.vy += ay * dt;
         this.vz += az * dt;
 
-        // Limitar velocidad máxima estructural de la Z-84 (~135 km/h = 37.5 m/s)
+        // Velocidad real emergente del equilibrio Empuje(Va) == Arrastre(Va^2) + Gravedad (sin límite artificial)
         this.spd = Math.hypot(this.vx, this.vy, this.vz);
-        if (this.spd > 37.5) {
-          const sScale = 37.5 / this.spd;
-          this.vx *= sScale; this.vy *= sScale; this.vz *= sScale;
-          this.spd = 37.5;
-        }
         this.totalDistKm += (this.spd * dt) / 1000.0;
 
         this.px += this.vx * dt; this.py += this.vy * dt; this.pz += this.vz * dt;
         if (this.py < groundH + 0.35) {
           this.py = groundH + 0.35;
           if (this.vy < 0) this.vy = -this.vy * 0.2;
+          this.vx *= 0.96; this.vz *= 0.96;
         }
 
-        const g = CIRCUIT_GATES[this.activeGate];
-        const gFloor = getTerrainHeightMeters(g.x, g.z);
-        if (Math.hypot(this.px - g.x, this.pz - g.z) < 15.0 && Math.abs(this.py - (gFloor + g.y)) < 11.5) {
-          this.activeGate = (this.activeGate + 1) % CIRCUIT_GATES.length;
-          const cShort = CHOROBOBO_CIRCUITS[currentCircuitIdx].shortCode;
-          showToast(`${cShort} GATE ${this.activeGate || 15}/15 OK!`);
-          playTone(920, 0.08);
+        if (!isFreeFlightNoGates()) {
+          const g = CIRCUIT_GATES[this.activeGate];
+          const gFloor = getTerrainHeightMeters(g.x, g.z);
+          if (Math.hypot(this.px - g.x, this.pz - g.z) < 15.0 && Math.abs(this.py - (gFloor + g.y)) < 11.5) {
+            this.activeGate = (this.activeGate + 1) % CIRCUIT_GATES.length;
+            const cShort = CHOROBOBO_CIRCUITS[currentCircuitIdx].shortCode;
+            showToast(`${cShort} GATE ${this.activeGate || 15}/15 OK!`);
+            playTone(920, 0.08);
+          }
         }
       },
 
@@ -2855,7 +2892,7 @@
         // 1. Terreno Voxel + Cielo Azul con Nubes Voxel
         renderVoxelTerrainAndSky(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz);
 
-        // 2. Gates 3D
+        // 2. Gates 3D (solo el circuito activo o ninguno en modo Vuelo Libre)
         const { projPoint320, projLine } = createProjector320(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz);
         renderCircuitGates(projLine, this.activeGate);
 
@@ -2871,7 +2908,7 @@
         }
 
         // 3. OSD estilo INAV a pantalla completa (Z-84 INAV-S3)
-        const g = CIRCUIT_GATES[this.activeGate];
+        const g = isFreeFlightNoGates() ? { x: 0, y: 12, z: 0 } : CIRCUIT_GATES[this.activeGate];
         const dxG = g.x - this.px, dzG = g.z - this.pz;
         const gateDist = Math.hypot(dxG, g.y - this.py, dzG);
         const gateBearingRad = Math.atan2(dxG * this.rx + dzG * this.rz, dxG * this.fx + dzG * this.fz);
@@ -2966,7 +3003,10 @@
     const RG_OVERLAY_ITEMS = [
       'CONTINUE FLIGHT',
       'RATES & PHYSICS CFG',
-      'CIRCUITO: ROJO/MOR/NAR',
+      'C1: CIRCUITO ROJO (15G)',
+      'C2: CIRCUITO MORADO (15G)',
+      'C3: CIRCUITO NARANJA (15G)',
+      'OFF: MAPA SIN GATES (LIBRE)',
       'SWITCH: DRONE <-> WING',
       'TERRAIN THEME (1-4)',
       'QUIT TO RETRO-GO'
@@ -3434,8 +3474,8 @@
       }
       if (navCooldown > 0) navCooldown -= dt;
 
-      if (capTouch.justTapped && capTouch.ly64 >= 14 && capTouch.ly64 <= 56) {
-        const idx = Math.floor((capTouch.ly64 - 15) / 6.5);
+      if (capTouch.justTapped && capTouch.ly64 >= 12 && capTouch.ly64 <= 59) {
+        const idx = Math.floor((capTouch.ly64 - 12) / 5.2);
         if (idx >= 0 && idx < RG_OVERLAY_ITEMS.length) {
           rgOverlayCursor = idx;
           hwInput.btn.A = true;
@@ -3446,11 +3486,11 @@
       if (navCooldown <= 0) {
         if (navY < -0.45 || hwInput.justPressed('DOWN') || hwInput.justPressed('SELECT')) {
           rgOverlayCursor = (rgOverlayCursor + 1) % RG_OVERLAY_ITEMS.length;
-          navCooldown = 0.17;
+          navCooldown = 0.16;
           playTone(500, 0.025);
         } else if (navY > 0.45 || hwInput.justPressed('UP')) {
           rgOverlayCursor = (rgOverlayCursor - 1 + RG_OVERLAY_ITEMS.length) % RG_OVERLAY_ITEMS.length;
-          navCooldown = 0.17;
+          navCooldown = 0.16;
           playTone(500, 0.025);
         }
       }
@@ -3463,25 +3503,33 @@
       if (hwInput.justPressed('A')) {
         hwInput.btn.A = false;
         playTone(740, 0.05);
+        const activeSim = activeRomId === 'fpv_wing' ? fpvWingSim : fpvDroneSim;
         if (rgOverlayCursor === 0) {
           rgOverlayOpen = false;
         } else if (rgOverlayCursor === 1) {
           rgTuningOpen = true;
           rgTuningTab = activeRomId === 'fpv_wing' ? 1 : 0;
         } else if (rgOverlayCursor === 2) {
-          const activeSim = activeRomId === 'fpv_wing' ? fpvWingSim : fpvDroneSim;
-          selectChoroboboCircuit(currentCircuitIdx + 1, activeSim);
-          activeSim.reset();
+          selectChoroboboCircuit(0, activeSim, true);
           rgOverlayOpen = false;
         } else if (rgOverlayCursor === 3) {
+          selectChoroboboCircuit(1, activeSim, true);
+          rgOverlayOpen = false;
+        } else if (rgOverlayCursor === 4) {
+          selectChoroboboCircuit(2, activeSim, true);
+          rgOverlayOpen = false;
+        } else if (rgOverlayCursor === 5) {
+          selectChoroboboCircuit(3, activeSim, false);
+          rgOverlayOpen = false;
+        } else if (rgOverlayCursor === 6) {
           const nextId = activeRomId === 'fpv_drone' ? 'fpv_wing' : 'fpv_drone';
           launchRom(nextId);
           showToast(nextId === 'fpv_drone' ? 'SIM: FPV DRONE' : 'SIM: FIXED-WING');
-        } else if (rgOverlayCursor === 4) {
+        } else if (rgOverlayCursor === 7) {
           generateGentleVoxelMap(currentThemeIdx + 1);
           showToast(TERRAIN_THEMES[currentThemeIdx].name);
           rgOverlayOpen = false;
-        } else if (rgOverlayCursor === 5) {
+        } else if (rgOverlayCursor === 8) {
           rgOverlayOpen = false;
           osState = 'launcher';
           setFaceLabels('TEMA', 'RATES', 'WING', 'RUN', 'TOUCH/DPAD/STICK:NAV | A:RUN');
@@ -3489,18 +3537,22 @@
         return;
       }
 
-      fbRect(14, 5, 100, 54, true, 0);
-      fbRect(14, 5, 100, 54, false, 2);
-      fbRect(14, 5, 100, 9, true, 4);
-      fbDrawText('INAV FPV MENU', 36, 7, 1);
+      fbRect(10, 3, 108, 58, true, 0);
+      fbRect(10, 3, 108, 58, false, 2);
+      fbRect(10, 3, 108, 8, true, 4);
+      fbDrawText('INAV FPV MENU // GATES', 20, 5, 1);
 
       for (let i = 0; i < RG_OVERLAY_ITEMS.length; i++) {
-        const y = 16 + i * 6.5;
+        const y = 13 + i * 5.2;
+        const iy = Math.round(y);
+        const isCurrentGateOpt = (i >= 2 && i <= 5) && ((i - 2) === currentCircuitIdx);
+        const prefix = isCurrentGateOpt ? '*' : ' ';
         if (i === rgOverlayCursor) {
-          fbRect(17, Math.round(y - 1), 94, 6, true, 2);
-          fbDrawText('>' + RG_OVERLAY_ITEMS[i], 19, Math.round(y), 0);
+          fbRect(13, iy - 1, 102, 5, true, 2);
+          fbDrawText('>' + prefix + RG_OVERLAY_ITEMS[i], 14, iy, 0);
         } else {
-          fbDrawText(' ' + RG_OVERLAY_ITEMS[i], 19, Math.round(y), i === 1 ? 3 : 1);
+          const col = isCurrentGateOpt ? 3 : (i === 1 ? 5 : 1);
+          fbDrawText(' ' + prefix + RG_OVERLAY_ITEMS[i], 14, iy, col);
         }
       }
     }
