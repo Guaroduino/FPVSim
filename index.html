@@ -462,7 +462,7 @@
         <span>PWR</span>
         <span id="sdLed" class="led sd-act" title="Flash / SD Activity"></span>
         <span>SPI</span>
-        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + COMANCHE 3D (v42)</span>
+        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + COMANCHE 3D (v43)</span>
       </div>
       <div class="top-hw-pills">
         <button id="btnFollowCam" class="pill-btn" title="Alternar Vista Externa 3D Follow Cam (SELECT)">🎥 FOLLOW</button>
@@ -2737,6 +2737,94 @@
       return fc;
     }
 
+    // Cámara Follow Moderna con Resorte Elástico (Spring-Lag + Horizon Damping, 0 allocs en SRAM)
+    const followCamState = {
+      activeCraft: null,
+      fx: 0, fy: 0, fz: 1,
+      ux: 0, uy: 1, uz: 0,
+      rx: 1, ry: 0, rz: 0,
+      camX: 0, camY: 5, camZ: -15,
+      cRx: 1, cRy: 0, cRz: 0,
+      cUx: 0, cUy: 1, cUz: 0,
+      cFx: 0, cFy: 0, cFz: 1
+    };
+
+    function computeFollowCamPose(craft, baseDist, baseUp, lookDownDeg) {
+      // Dirección objetivo: combina 58% trayectoria real (velocidad) + 42% morro para apreciar AoA, derrape y virajes
+      const spd = Math.hypot(craft.vx, craft.vy, craft.vz);
+      let tfx = craft.fx, tfy = craft.fy, tfz = craft.fz;
+      if (spd > 2.5) {
+        const vxN = craft.vx / spd, vyN = craft.vy / spd, vzN = craft.vz / spd;
+        tfx = craft.fx * 0.42 + vxN * 0.58;
+        tfy = craft.fy * 0.42 + vyN * 0.58;
+        tfz = craft.fz * 0.42 + vzN * 0.58;
+        const tLen = Math.hypot(tfx, tfy, tfz) || 1.0;
+        tfx /= tLen; tfy /= tLen; tfz /= tLen;
+      }
+
+      // Vector Up objetivo: 74% horizonte mundial + 26% alabeo del avión (el avión se inclina y gira libremente frente a la cámara)
+      const upWorldWeight = craft.uy >= -0.15 ? 0.74 : 0.45;
+      let tux = craft.ux * (1.0 - upWorldWeight);
+      let tuy = craft.uy * (1.0 - upWorldWeight) + upWorldWeight;
+      let tuz = craft.uz * (1.0 - upWorldWeight);
+      const uLen0 = Math.hypot(tux, tuy, tuz) || 1.0;
+      tux /= uLen0; tuy /= uLen0; tuz /= uLen0;
+
+      if (followCamState.activeCraft !== craft) {
+        followCamState.activeCraft = craft;
+        followCamState.fx = tfx; followCamState.fy = tfy; followCamState.fz = tfz;
+        followCamState.ux = tux; followCamState.uy = tuy; followCamState.uz = tuz;
+      } else {
+        const lagF = 0.11;
+        const lagU = 0.09;
+        followCamState.fx += (tfx - followCamState.fx) * lagF;
+        followCamState.fy += (tfy - followCamState.fy) * lagF;
+        followCamState.fz += (tfz - followCamState.fz) * lagF;
+        followCamState.ux += (tux - followCamState.ux) * lagU;
+        followCamState.uy += (tuy - followCamState.uy) * lagU;
+        followCamState.uz += (tuz - followCamState.uz) * lagU;
+      }
+
+      let fL = Math.hypot(followCamState.fx, followCamState.fy, followCamState.fz) || 1.0;
+      let fx = followCamState.fx / fL, fy = followCamState.fy / fL, fz = followCamState.fz / fL;
+      const dotUF = followCamState.ux * fx + followCamState.uy * fy + followCamState.uz * fz;
+      let ux = followCamState.ux - dotUF * fx;
+      let uy = followCamState.uy - dotUF * fy;
+      let uz = followCamState.uz - dotUF * fz;
+      const uL = Math.hypot(ux, uy, uz) || 1.0;
+      ux /= uL; uy /= uL; uz /= uL;
+      const rx = uy * fz - uz * fy;
+      const ry = uz * fx - ux * fz;
+      const rz = ux * fy - uy * fx;
+
+      followCamState.fx = fx; followCamState.fy = fy; followCamState.fz = fz;
+      followCamState.ux = ux; followCamState.uy = uy; followCamState.uz = uz;
+      followCamState.rx = rx; followCamState.ry = ry; followCamState.rz = rz;
+
+      // Distancia más amplia con ligero estiramiento dinámico al dar gas
+      const dynDist = baseDist + (craft.thrCmd || 0.5) * 0.65;
+      const camX = craft.px - fx * dynDist + ux * baseUp;
+      const camZ = craft.pz - fz * dynDist + uz * baseUp;
+      const minCamY = getTerrainHeightMeters(camX, camZ) + 0.45;
+      const camY = Math.max(minCamY, craft.py - fy * dynDist + uy * baseUp);
+
+      const pitchDown = lookDownDeg * DEG2RAD;
+      const cP = Math.cos(pitchDown), sP = Math.sin(pitchDown);
+      followCamState.camX = camX;
+      followCamState.camY = camY;
+      followCamState.camZ = camZ;
+      followCamState.cRx = rx;
+      followCamState.cRy = ry;
+      followCamState.cRz = rz;
+      followCamState.cUx = cP * ux + sP * fx;
+      followCamState.cUy = cP * uy + sP * fy;
+      followCamState.cUz = cP * uz + sP * fz;
+      followCamState.cFx = -sP * ux + cP * fx;
+      followCamState.cFy = -sP * uy + cP * fy;
+      followCamState.cFz = -sP * uz + cP * fz;
+      return followCamState;
+    }
+
     // Dibuja el Modelo 3D Sólido del Ala Volante (Z-84 / AR Wing) o Avión con Cola (Bixler / Talon / Edge 540)
     function renderSolidWingModel320(sim, projPoint320, projLine) {
       const px = sim.px, py = sim.py, pz = sim.pz;
@@ -3697,6 +3785,7 @@
         this.flightTime = 0;
         this.totalDistKm = 0;
         lastRollAngle = 0;
+        followCamState.activeCraft = null;
         aeroEnv.stallWarn = false;
       },
 
@@ -3914,14 +4003,22 @@
       render() {
         const tilt = fcProfile.drone.camTilt * DEG2RAD;
         const cT = Math.cos(tilt), sT = Math.sin(tilt);
-        const cRx = this.rx, cRy = this.ry, cRz = this.rz;
-        const cUx = cT*this.ux - sT*this.fx, cUy = cT*this.uy - sT*this.fy, cUz = cT*this.uz - sT*this.fz;
-        const cFx = sT*this.ux + cT*this.fx, cFy = sT*this.uy + cT*this.fy, cFz = sT*this.uz + cT*this.fz;
+        let cRx = this.rx, cRy = this.ry, cRz = this.rz;
+        let cUx = cT*this.ux - sT*this.fx, cUy = cT*this.uy - sT*this.fy, cUz = cT*this.uz - sT*this.fz;
+        let cFx = sT*this.ux + cT*this.fx, cFy = sT*this.uy + cT*this.fy, cFz = sT*this.uz + cT*this.fz;
+        let camX = this.px, camY = this.py, camZ = this.pz;
 
-        const camX = this.chaseCam ? this.px - cFx * 3.5 + cUx * 1.0 : this.px;
-        const camZ = this.chaseCam ? this.pz - cFz * 3.5 + cUz * 1.0 : this.pz;
-        const minCamY = getTerrainHeightMeters(camX, camZ) + 0.35;
-        const camY = Math.max(minCamY, this.chaseCam ? this.py - cFy * 3.5 + cUy * 1.0 : this.py);
+        if (this.chaseCam) {
+          const fc = computeFollowCamPose(this, 4.6, 1.15, 6.0);
+          camX = fc.camX; camY = fc.camY; camZ = fc.camZ;
+          cRx = fc.cRx; cRy = fc.cRy; cRz = fc.cRz;
+          cUx = fc.cUx; cUy = fc.cUy; cUz = fc.cUz;
+          cFx = fc.cFx; cFy = fc.cFy; cFz = fc.cFz;
+        } else {
+          followCamState.activeCraft = null;
+          const minCamY = getTerrainHeightMeters(camX, camZ) + 0.35;
+          camY = Math.max(minCamY, this.py);
+        }
 
         // 1. Terreno Voxel + Cielo Azul con Nubes Voxel a pantalla completa
         renderVoxelTerrainAndSky(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz);
@@ -4045,6 +4142,7 @@
         this.flightTime = 0;
         this.totalDistKm = 0;
         lastRollAngle = 0;
+        followCamState.activeCraft = null;
         aeroEnv.stallWarn = false;
       },
 
@@ -4340,14 +4438,22 @@
       },
 
       render() {
-        const cRx = this.rx, cRy = this.ry, cRz = this.rz;
-        const cUx = this.ux, cUy = this.uy, cUz = this.uz;
-        const cFx = this.fx, cFy = this.fy, cFz = this.fz;
+        let cRx = this.rx, cRy = this.ry, cRz = this.rz;
+        let cUx = this.ux, cUy = this.uy, cUz = this.uz;
+        let cFx = this.fx, cFy = this.fy, cFz = this.fz;
+        let camX = this.px, camY = this.py, camZ = this.pz;
 
-        const camX = this.chaseCam ? this.px - cFx * 3.8 + cUx * 0.9 : this.px;
-        const camZ = this.chaseCam ? this.pz - cFz * 3.8 + cUz * 0.9 : this.pz;
-        const minCamY = getTerrainHeightMeters(camX, camZ) + 0.35;
-        const camY = Math.max(minCamY, this.chaseCam ? this.py - cFy * 3.8 + cUy * 0.9 : this.py);
+        if (this.chaseCam) {
+          const fc = computeFollowCamPose(this, 5.0, 1.25, 6.5);
+          camX = fc.camX; camY = fc.camY; camZ = fc.camZ;
+          cRx = fc.cRx; cRy = fc.cRy; cRz = fc.cRz;
+          cUx = fc.cUx; cUy = fc.cUy; cUz = fc.cUz;
+          cFx = fc.cFx; cFy = fc.cFy; cFz = fc.cFz;
+        } else {
+          followCamState.activeCraft = null;
+          const minCamY = getTerrainHeightMeters(camX, camZ) + 0.35;
+          camY = Math.max(minCamY, this.py);
+        }
 
         // 1. Terreno Voxel + Cielo Azul con Nubes Voxel
         renderVoxelTerrainAndSky(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz);
