@@ -461,16 +461,10 @@
         <span>PWR</span>
         <span id="sdLed" class="led sd-act" title="Flash / SD Activity"></span>
         <span>SPI</span>
-        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + COMANCHE 3D (v44)</span>
+        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + COMANCHE 3D (v45)</span>
       </div>
       <div class="top-hw-pills">
-        <button id="btnFollowCam" class="pill-btn" title="Alternar Vista Externa 3D Follow Cam (SELECT)">🎥 FOLLOW</button>
-        <button id="btnRcPad" class="pill-btn" title="Configurar Emisora TX16S USB/BT y Gamepad Bluetooth">🎮 RC/PAD</button>
-        <button id="btnRates" class="pill-btn active" title="Configurar Rates, PID y Físicas">⚙️ RATES</button>
-        <button id="btnPalette" class="pill-btn">🎨 IPS 60MHz</button>
-        <button id="btnAudio" class="pill-btn">🔇 SND</button>
-        <button id="btnGrid" class="pill-btn">SCAN</button>
-        <button id="btnFull" class="pill-btn">⛶</button>
+        <button id="btnPalette" class="pill-btn" title="Cambiar Modo de Pantalla SPI / IPS / 1-Bit">🎨 IPS 60MHz</button>
       </div>
     </header>
 
@@ -1532,14 +1526,19 @@
       };
     }
 
-    // Construye un circuito de 15 Gates orientados perpendicularmente a la tangente de vuelo
+    // Construye un circuito de 15 Gates orientados perpendicularmente a la tangente de vuelo (con altura 3D variable por puerta)
     function buildOrientedCircuit(id, name, shortCode, lineCol565, palIdx, uvList) {
       const n = uvList.length;
-      const pts = uvList.map(([u, v]) => uvToWorld(u, v));
-      const isCompact = WORLD_W_M <= 2000.0;
-      const gateY = isCompact ? 9.0 : 12.0;
-      const gateW = isCompact ? 12.0 : 18.0;
-      const gateH = isCompact ? 9.0 : 12.0;
+      const pts = uvList.map(item => {
+        const p = uvToWorld(item[0], item[1]);
+        p.altMul = item.length > 2 ? item[2] : 1.0;
+        return p;
+      });
+      const isUltraCompact = WORLD_W_M <= 800.0;
+      const isCompact      = WORLD_W_M <= 2000.0;
+      const baseGateY = isUltraCompact ? 6.8 : (isCompact ? 9.0 : 12.0);
+      const gateW     = isUltraCompact ? 9.6 : (isCompact ? 12.0 : 18.0);
+      const gateH     = isUltraCompact ? 7.2 : (isCompact ? 9.0 : 12.0);
       const gates = [];
       for (let i = 0; i < n; i++) {
         const cur = pts[i];
@@ -1554,7 +1553,7 @@
         // Vector lateral derecho perpendicular a la tangente: (nx, nz) = (tz, -tx)
         gates.push({
           x: cur.x,
-          y: gateY,
+          y: Math.max(4.5, Math.round(baseGateY * cur.altMul * 10) / 10),
           z: cur.z,
           w: gateW,
           h: gateH,
@@ -1583,33 +1582,51 @@
       return { id, name, shortCode, lineCol565, palIdx, uvList, gates, splinePts };
     }
 
-    // Coordenadas normalizadas (u, v) de los 3 Circuitos de 15 Gates sobre el valle de Chorobobo
+    // 5 Circuitos de 15 Gates (con variaciones de altitud 3D [u, v, altMul] para cruces, puentes y slalom freestyle)
     const CHOROBOBO_CIRCUIT_DEFS = [
-      // 1. CIRCUITO ROJO (15 Gates): Óvalo central por la Pista A.I.A Chorobobo y los tablones centrales
+      // 1. C1 ROJO PISTA (15 Gates): Óvalo rápido por la Pista A.I.A Chorobobo y tablones centrales
       {
         id: 'rojo', name: 'C1 ROJO PISTA', shortCode: 'C1', lineCol565: rgb565(235, 52, 48), palIdx: 4,
         uvList: [
-          [0.575, 0.362], [0.532, 0.348], [0.488, 0.334], [0.442, 0.320], [0.402, 0.318],
-          [0.412, 0.365], [0.436, 0.418], [0.462, 0.468], [0.492, 0.502], [0.542, 0.506],
-          [0.592, 0.510], [0.642, 0.510], [0.658, 0.472], [0.656, 0.415], [0.618, 0.382]
+          [0.575, 0.362, 1.00], [0.532, 0.348, 0.90], [0.488, 0.334, 0.85], [0.442, 0.320, 1.00], [0.402, 0.318, 1.25],
+          [0.412, 0.365, 1.10], [0.436, 0.418, 0.85], [0.462, 0.468, 0.95], [0.492, 0.502, 1.20], [0.542, 0.506, 1.35],
+          [0.592, 0.510, 1.15], [0.642, 0.510, 0.95], [0.658, 0.472, 0.85], [0.656, 0.415, 1.05], [0.618, 0.382, 1.00]
         ]
       },
-      // 2. CIRCUITO MORADO (15 Gates): Circuito medio hasta la laguna oeste, PDVSA Etanol y borde sur del bosque
+      // 2. C2 AZUL OCHO (15 Gates): Circuito en '8' con cruce central a doble altura (puente alto + paso bajo entre galpones)
       {
-        id: 'morado', name: 'C2 MORADO VALLE', shortCode: 'C2', lineCol565: rgb565(190, 58, 235), palIdx: 10,
+        id: 'azul_ocho', name: 'C2 AZUL OCHO 8', shortCode: 'C2', lineCol565: rgb565(45, 195, 255), palIdx: 5,
         uvList: [
-          [0.545, 0.352], [0.455, 0.325], [0.352, 0.305], [0.268, 0.340], [0.214, 0.388],
-          [0.174, 0.478], [0.215, 0.525], [0.315, 0.545], [0.415, 0.562], [0.515, 0.582],
-          [0.610, 0.595], [0.680, 0.568], [0.692, 0.475], [0.665, 0.408], [0.605, 0.376]
+          [0.548, 0.372, 0.85], [0.505, 0.345, 0.80], [0.452, 0.328, 1.05], [0.408, 0.352, 1.35], [0.415, 0.412, 1.15],
+          [0.458, 0.428, 0.85], [0.508, 0.405, 0.72], [0.558, 0.382, 0.90], [0.608, 0.362, 1.25], [0.642, 0.402, 1.45],
+          [0.635, 0.465, 1.20], [0.588, 0.488, 0.95], [0.538, 0.455, 1.30], [0.508, 0.405, 1.65], [0.528, 0.385, 1.10]
         ]
       },
-      // 3. CIRCUITO NARANJA (15 Gates): Gran circuito largo por los meandros del Río Turbio y recta sur
+      // 3. C3 VERDE PARK (15 Gates): Slalom técnico compacto de Freestyle entre hangares, galpones y arboledas centrales
       {
-        id: 'naranja', name: 'C3 NARANJA RIO', shortCode: 'C3', lineCol565: rgb565(248, 132, 28), palIdx: 9,
+        id: 'verde_park', name: 'C3 VERDE PARK', shortCode: 'C3', lineCol565: rgb565(48, 232, 96), palIdx: 3,
         uvList: [
-          [0.550, 0.335], [0.544, 0.215], [0.522, 0.102], [0.462, 0.082], [0.392, 0.148],
-          [0.318, 0.215], [0.242, 0.278], [0.135, 0.312], [0.068, 0.392], [0.145, 0.468],
-          [0.285, 0.495], [0.425, 0.518], [0.560, 0.538], [0.665, 0.508], [0.642, 0.405]
+          [0.552, 0.376, 0.78], [0.525, 0.365, 0.75], [0.495, 0.388, 1.15], [0.468, 0.368, 0.75], [0.442, 0.392, 1.40],
+          [0.455, 0.428, 0.80], [0.485, 0.412, 0.72], [0.512, 0.445, 1.55], [0.545, 0.432, 0.82], [0.575, 0.458, 1.25],
+          [0.605, 0.435, 0.85], [0.585, 0.405, 0.75], [0.612, 0.378, 1.35], [0.588, 0.352, 0.90], [0.568, 0.365, 0.80]
+        ]
+      },
+      // 4. C4 MORADO VALLE (15 Gates): Circuito medio con olas de altitud hasta la laguna oeste y planta de etanol
+      {
+        id: 'morado', name: 'C4 MORADO VALLE', shortCode: 'C4', lineCol565: rgb565(190, 58, 235), palIdx: 10,
+        uvList: [
+          [0.545, 0.352, 0.95], [0.455, 0.325, 1.25], [0.352, 0.305, 0.85], [0.268, 0.340, 1.35], [0.214, 0.388, 0.90],
+          [0.174, 0.478, 1.40], [0.215, 0.525, 0.85], [0.315, 0.545, 1.30], [0.415, 0.562, 0.80], [0.515, 0.582, 1.45],
+          [0.610, 0.595, 1.10], [0.680, 0.568, 0.85], [0.692, 0.475, 1.25], [0.665, 0.408, 0.95], [0.605, 0.376, 0.90]
+        ]
+      },
+      // 5. C5 NARANJA RIO (15 Gates): Gran circuito largo de resistencia por los meandros del Río Turbio y recta sur
+      {
+        id: 'naranja', name: 'C5 NARANJA RIO', shortCode: 'C5', lineCol565: rgb565(248, 132, 28), palIdx: 9,
+        uvList: [
+          [0.550, 0.335, 1.00], [0.544, 0.215, 1.25], [0.522, 0.102, 0.90], [0.462, 0.082, 1.35], [0.392, 0.148, 0.85],
+          [0.318, 0.215, 1.20], [0.242, 0.278, 0.90], [0.135, 0.312, 1.40], [0.068, 0.392, 1.00], [0.145, 0.468, 0.85],
+          [0.285, 0.495, 1.30], [0.425, 0.518, 0.95], [0.560, 0.538, 1.25], [0.665, 0.508, 1.00], [0.642, 0.405, 0.90]
         ]
       }
     ];
@@ -1618,7 +1635,7 @@
       buildOrientedCircuit(d.id, d.name, d.shortCode, d.lineCol565, d.palIdx, d.uvList)
     );
 
-    // Modos de circuito: 0 = C1 Rojo, 1 = C2 Morado, 2 = C3 Naranja, 3 = SIN GATES (Vuelo Libre)
+    // Modos de circuito: 0..4 = C1..C5, 5 = SIN GATES (Vuelo Libre)
     const TOTAL_CIRCUIT_MODES = CHOROBOBO_CIRCUITS.length + 1;
     let currentCircuitIdx = 0;
     let CIRCUIT_GATES = CHOROBOBO_CIRCUITS[0].gates;
@@ -1661,9 +1678,7 @@
       playTone(840, 0.05);
     }
 
-    // 5 Mapas / Temas con Cielo Azul + Nubes Voxel:
-    // - #1: CHOROBOBO HD 1.5X1KM (Escala compacta 1/4: 0.73m x 0.98m por voxel -> 4x más resolución de terreno)
-    // - #2: CHOROBOBO LR 6X4KM   (Escala real completa 6x4 km: 2.93m x 3.91m por voxel para Long-Range)
+    // 6 Mapas / Escenarios (incluyendo 4 mapas compactos de Freestyle de 550m-700m + Chorobobo HD 1.5km + LR 6km):
     const TERRAIN_THEMES = [
       {
         id: 'chorobobo_hd',
@@ -1680,6 +1695,65 @@
         hillCol:    [42, 78, 38]
       },
       {
+        id: 'chorobobo_park',
+        name: 'CHORO PARK 650M',
+        isChorobobo: true,
+        worldW: 650.0,
+        worldH: 440.0,
+        skyZenith:  [38, 88, 182],
+        skyHorizon: [162, 198, 230],
+        cloudCol:   [248, 250, 254],
+        fogCol:     rgb565(162, 198, 230),
+        baseA:      [114, 98, 78],
+        baseB:      [98, 84, 68],
+        hillCol:    [42, 78, 38]
+      },
+      {
+        id: 'bando_arena',
+        name: 'BANDO ARENA 550M',
+        isChorobobo: false,
+        procStyle:  'bando',
+        worldW: 550.0,
+        worldH: 380.0,
+        skyZenith:  [46, 82, 148],
+        skyHorizon: [176, 192, 210],
+        cloudCol:   [240, 242, 246],
+        fogCol:     rgb565(176, 192, 210),
+        baseA:      [92, 96, 102],
+        baseB:      [76, 80, 86],
+        hillCol:    [118, 102, 76]
+      },
+      {
+        id: 'bosque_slalom',
+        name: 'BOSQUE SLALOM 600M',
+        isChorobobo: false,
+        procStyle:  'forest',
+        worldW: 600.0,
+        worldH: 420.0,
+        skyZenith:  [34, 88, 180],
+        skyHorizon: [152, 196, 226],
+        cloudCol:   [248, 250, 252],
+        fogCol:     rgb565(152, 196, 226),
+        baseA:      [42, 96, 44],
+        baseB:      [52, 110, 50],
+        hillCol:    [92, 138, 58]
+      },
+      {
+        id: 'dunas_sunset',
+        name: 'DUNAS SUNSET 700M',
+        isChorobobo: false,
+        procStyle:  'dunes',
+        worldW: 700.0,
+        worldH: 480.0,
+        skyZenith:  [44, 66, 136],
+        skyHorizon: [226, 168, 114],
+        cloudCol:   [252, 224, 190],
+        fogCol:     rgb565(218, 164, 114),
+        baseA:      [136, 102, 62],
+        baseB:      [120, 88, 52],
+        hillCol:    [176, 132, 76]
+      },
+      {
         id: 'chorobobo',
         name: 'CHOROBOBO LR 6X4KM',
         isChorobobo: true,
@@ -1692,48 +1766,6 @@
         baseA:      [114, 98, 78],
         baseB:      [98, 84, 68],
         hillCol:    [42, 78, 38]
-      },
-      {
-        id: 'campo',
-        name: 'CAMPO INAV 1.5KM',
-        isChorobobo: false,
-        worldW: 1500.0,
-        worldH: 1000.0,
-        skyZenith:  [48, 96, 178],
-        skyHorizon: [168, 200, 228],
-        cloudCol:   [246, 248, 252],
-        fogCol:     rgb565(168, 200, 228),
-        baseA:      [76, 98, 44],
-        baseB:      [88, 110, 50],
-        hillCol:    [122, 114, 62]
-      },
-      {
-        id: 'pradera',
-        name: 'PRADERA VERDE 1.5KM',
-        isChorobobo: false,
-        worldW: 1500.0,
-        worldH: 1000.0,
-        skyZenith:  [36, 88, 180],
-        skyHorizon: [155, 195, 225],
-        cloudCol:   [248, 250, 252],
-        fogCol:     rgb565(155, 195, 225),
-        baseA:      [38, 92, 42],
-        baseB:      [46, 106, 48],
-        hillCol:    [86, 134, 58]
-      },
-      {
-        id: 'atardecer',
-        name: 'ATARDECER DORADO',
-        isChorobobo: false,
-        worldW: 1500.0,
-        worldH: 1000.0,
-        skyZenith:  [42, 68, 135],
-        skyHorizon: [222, 168, 118],
-        cloudCol:   [252, 225, 192],
-        fogCol:     rgb565(215, 165, 118),
-        baseA:      [96, 78, 44],
-        baseB:      [112, 90, 50],
-        hillCol:    [152, 116, 64]
       }
     ];
     let currentThemeIdx = 0;
@@ -1760,7 +1792,7 @@
       currentThemeIdx = ((themeIdx % TERRAIN_THEMES.length) + TERRAIN_THEMES.length) % TERRAIN_THEMES.length;
       const theme = TERRAIN_THEMES[currentThemeIdx];
 
-      // Actualizar dimensiones físicas del mundo y resolución por voxel (1.5x1 km HD vs 6x4 km LR)
+      // Actualizar dimensiones físicas del mundo y resolución por voxel (550m Freestyle vs 1.5km HD vs 6km LR)
       WORLD_W_M   = theme.worldW || 1500.0;
       WORLD_H_M   = theme.worldH || 1000.0;
       MAP_SCALE_X = MAP_W / WORLD_W_M;
@@ -1791,7 +1823,7 @@
         }
       }
 
-      // Si el tema es CHOROBOBO (HD 1.5x1km o LR 6x4km) y la foto satelital ya está disponible, usarla en PSRAM
+      // Si el tema usa la ortofoto de CHOROBOBO (HD 1.5km, PARK 650m o LR 6x4km) y ya está disponible, usarla en PSRAM
       if (theme.isChorobobo && choroDecodedImg) {
         if (!choroBakedInPsram) {
           bakeChoroboboToPsram(choroDecodedImg);
@@ -1801,23 +1833,44 @@
 
       choroBakedInPsram = false;
 
-      // 2. Generador procedural para los mapas sintéticos (CAMPO, PRADERA, ATARDECER)
+      // 2. Generador procedural especializado para los mapas compactos de Freestyle (BANDO ARENA, BOSQUE SLALOM, DUNAS SUNSET)
       const TWO_PI_W = (2 * Math.PI) / MAP_W;
       const TWO_PI_H = (2 * Math.PI) / MAP_H;
+      const style = theme.procStyle || 'forest';
 
       for (let mz = 0; mz < MAP_H; mz++) {
         const zOff = mz << MAP_SHIFT_X;
         const wz = (mz - SPAWN_MZ) / MAP_SCALE_Z;
         const cosZ3 = Math.cos(mz * TWO_PI_H * 6);
+        const edgeZ = mz < 48 ? mz / 48.0 : (mz > MAP_H - 49 ? (MAP_H - 1 - mz) / 48.0 : 1.0);
 
         for (let mx = 0; mx < MAP_W; mx++) {
           const wx = (mx - SPAWN_MX) / MAP_SCALE_X;
-          const wave1 = Math.sin(mx * TWO_PI_W * 9) * cosZ3;
-          const wave2 = Math.sin((mx + mz) * TWO_PI_W * 15) * 0.5;
-          let rawH = Math.max(2, (wave1 + wave2 + 0.65) * 14); // 0.25m a 4.0m (en unidades de 0.125m)
+          const edgeX = mx < 48 ? mx / 48.0 : (mx > MAP_W - 49 ? (MAP_W - 1 - mx) / 48.0 : 1.0);
+          const edgeW = Math.min(edgeX, edgeZ);
+
+          let rawH = 2.0;
+          if (style === 'bando') {
+            // Bando Arena: explanada industrial central plana (h=2) rodeada de taludes/berms de contención suaves
+            const radNorm = Math.hypot(wx / (WORLD_W_M * 0.36), wz / (WORLD_H_M * 0.36));
+            if (radNorm > 0.72) {
+              const berm = Math.sin( Math.min(1.0, (radNorm - 0.72) / 0.28) * Math.PI );
+              rawH = 2.0 + berm * 28.0 * edgeW;
+            }
+          } else if (style === 'dunes') {
+            // Dunas Sunset: dunas suaves y bowls para carving a baja altura
+            const d1 = Math.sin(mx * TWO_PI_W * 8 + Math.sin(mz * TWO_PI_H * 4) * 1.4);
+            const d2 = Math.cos(mz * TWO_PI_H * 7 - mx * TWO_PI_W * 4) * 0.6;
+            rawH = 2.0 + Math.max(0, (d1 + d2 + 0.75) * 16.5) * edgeW;
+          } else {
+            // Bosque Slalom: colinas verdes suaves con cauce de arroyo serpenteante
+            const wave1 = Math.sin(mx * TWO_PI_W * 9) * cosZ3;
+            const wave2 = Math.sin((mx + mz) * TWO_PI_W * 15) * 0.5;
+            rawH = 2.0 + Math.max(0, (wave1 + wave2 + 0.65) * 14.0) * edgeW;
+          }
 
           const distSpawn = Math.hypot(wx, wz);
-          if (distSpawn < 55) rawH = 2 + (rawH - 2) * Math.max(0, (distSpawn - 25) / 30);
+          if (distSpawn < 42) rawH = 2 + (rawH - 2) * Math.max(0, (distSpawn - 18) / 24);
 
           voxHeight[zOff + mx] = Math.max(0, Math.min(64, Math.round(rawH))); // Máximo 64 unidades = 8.0 metros
         }
@@ -1826,6 +1879,7 @@
       for (let mz = 0; mz < MAP_H; mz++) {
         const zOff = mz << MAP_SHIFT_X;
         const zNext = ((mz + 2) & MAP_MASK_Z) << MAP_SHIFT_X;
+        const riverCenterMx = SPAWN_MX + Math.round(Math.sin(mz * TWO_PI_H * 3.0) * 180);
         for (let mx = 0; mx < MAP_W; mx++) {
           const h  = voxHeight[zOff + mx];
           const hR = voxHeight[zOff + ((mx + 2) & MAP_MASK_X)];
@@ -1834,14 +1888,34 @@
           const shade = Math.max(0.70, Math.min(1.26, 1.0 + slope * 0.04));
 
           const fieldStripe = ((mx >> 5) + ((mz >> 5) & 1)) & 1;
-          const isPath = ((mx & 63) === 0) || ((mz & 63) === 0);
+          const isGridLine  = ((mx & 63) < 2) || ((mz & 63) < 2);
           const base = fieldStripe ? theme.baseA : theme.baseB;
           const tHill = Math.min(1.0, h / 32.0);
 
           let r = base[0] * (1 - tHill) + theme.hillCol[0] * tHill;
           let g = base[1] * (1 - tHill) + theme.hillCol[1] * tHill;
           let b = base[2] * (1 - tHill) + theme.hillCol[2] * tHill;
-          if (isPath) { r += 24; g += 18; b += 8; }
+
+          if (style === 'bando') {
+            // Pistas de concreto, líneas de seguridad amarillas/naranjas y zonas verdes exteriores
+            if (h <= 4 && isGridLine) {
+              r = 195; g = 162; b = 58;
+            } else if (h > 8) {
+              r = 68; g = 96; b = 46;
+            }
+          } else if (style === 'forest') {
+            // Arroyo turquesa serpenteante y senderos de tierra
+            const distRiver = Math.abs(mx - riverCenterMx);
+            if (distRiver < 14 && h <= 6) {
+              r = 38; g = 118; b = 142;
+            } else if (distRiver < 22 && h <= 8) {
+              r = 132; g = 114, b = 82;
+            } else if (isGridLine) {
+              r += 22; g += 16; b += 8;
+            }
+          } else if (isGridLine) {
+            r += 24; g += 18; b += 8;
+          }
 
           voxColor[zOff + mx] = rgb565(clampByte(r * shade), clampByte(g * shade), clampByte(b * shade));
         }
@@ -2217,8 +2291,9 @@
       const gates = circuit.gates;
       const baseCol = circuit.palIdx; // 4 = Rojo, 10 = Morado, 9 = Naranja
 
-      // 1. Camino de Puntos en el Piso (Spline Catmull-Rom entre las Gates, estilo luces guía)
-      if (projPoint320 && circuit.splinePts) {
+      // 1. Camino de Puntos en el Piso (Spline Catmull-Rom entre las Gates, estilo luces guía; activable desde el menú [WORLD])
+      const showPath = (typeof fcProfile === 'undefined' || fcProfile.showSplinePath === undefined) ? 1 : fcProfile.showSplinePath;
+      if (showPath && projPoint320 && circuit.splinePts) {
         const sPts = circuit.splinePts;
         const nGates = gates.length;
         const prevGate = (activeGate - 1 + nGates) % nGates;
@@ -2412,7 +2487,7 @@
       }
     })();
 
-    // Definición de Edificios Low-Poly en coordenadas UV de Chorobobo y Árboles en linderos
+    // Definición de Edificios Low-Poly en coordenadas UV de Chorobobo / Freestyle Park y Árboles en linderos
     const BUILDING_UV_DEFS = [
       // Hangar y Caseta de la Pista A.I.A Chorobobo
       { u: 0.562, v: 0.388, w: 14, d:  9, h: 4.8, roofH: 2.0, yaw:  0.26, wallL: rgb565(220, 218, 210), wallD: rgb565(155, 154, 148), roofCol: rgb565(185, 62, 44) },
@@ -2420,6 +2495,11 @@
       // Galpones agrícolas centrales y Casa de Hacienda
       { u: 0.468, v: 0.382, w: 16, d: 10, h: 5.0, roofH: 2.2, yaw: -0.15, wallL: rgb565(225, 212, 186), wallD: rgb565(162, 148, 126), roofCol: rgb565(172, 68, 42) },
       { u: 0.478, v: 0.398, w: 10, d:  8, h: 3.8, roofH: 1.8, yaw: -0.15, wallL: rgb565(232, 226, 212), wallD: rgb565(168, 160, 148), roofCol: rgb565(188, 74, 46) },
+      // Naves centrales adicionales para Slalom Freestyle / Bando Arena
+      { u: 0.512, v: 0.362, w: 12, d:  7, h: 4.4, roofH: 1.7, yaw:  0.10, wallL: rgb565(208, 214, 220), wallD: rgb565(146, 152, 160), roofCol: rgb565(64, 124, 168) },
+      { u: 0.528, v: 0.418, w: 13, d:  8, h: 4.6, roofH: 1.9, yaw: -0.22, wallL: rgb565(226, 218, 202), wallD: rgb565(158, 150, 136), roofCol: rgb565(182, 72, 42) },
+      { u: 0.492, v: 0.432, w: 11, d:  7, h: 4.2, roofH: 1.6, yaw:  0.32, wallL: rgb565(212, 216, 218), wallD: rgb565(148, 152, 156), roofCol: rgb565(88, 132, 96) },
+      { u: 0.576, v: 0.422, w: 12, d:  8, h: 4.5, roofH: 1.8, yaw: -0.18, wallL: rgb565(222, 210, 192), wallD: rgb565(156, 144, 128), roofCol: rgb565(174, 64, 44) },
       // Galpones sector oeste / Planta Etanol
       { u: 0.305, v: 0.415, w: 18, d: 11, h: 5.5, roofH: 2.2, yaw:  0.05, wallL: rgb565(204, 210, 216), wallD: rgb565(142, 148, 156), roofCol: rgb565(125, 136, 148) },
       { u: 0.285, v: 0.432, w: 12, d:  9, h: 4.5, roofH: 1.8, yaw:  0.05, wallL: rgb565(212, 208, 198), wallD: rgb565(148, 144, 136), roofCol: rgb565(168, 64, 42) },
@@ -2646,8 +2726,10 @@
         count++;
       }
 
-      // 2. Recolectar árboles cercanos dentro del frustum
-      for (let i = 0; i < WORLD_TREES.length && count < MAX_VIS_OBJS; i++) {
+      // 2. Recolectar árboles cercanos dentro del frustum según la densidad configurada en el menú [WORLD]
+      const treeDensity = (typeof fcProfile !== 'undefined' && fcProfile.treeDensity !== undefined) ? fcProfile.treeDensity : 1.0;
+      const activeTreeLimit = Math.round(WORLD_TREES.length * treeDensity);
+      for (let i = 0; i < activeTreeLimit && count < MAX_VIS_OBJS; i++) {
         const tr = WORLD_TREES[i];
         const dx = tr.x - camX, dz = tr.z - camZ;
         const cz = dx * cFx + dz * cFz;
@@ -3516,18 +3598,18 @@
       }
       if (hwInput.justPressed('B') || hwInput.justPressed('R3')) {
         craft.chaseCam = !craft.chaseCam;
-        const btnFollow = document.getElementById('btnFollowCam');
-        if (btnFollow) btnFollow.classList.toggle('active', craft.chaseCam);
+        fpvDroneSim.chaseCam = craft.chaseCam;
+        fpvWingSim.chaseCam  = craft.chaseCam;
         showToast(craft.chaseCam ? 'VISTA: FOLLOW 3D' : 'VISTA: FPV CABINA');
       }
       if (capTouch.justTapped && capTouch.ly64 <= 12) {
         if (capTouch.lx128 < 42) {
           selectChoroboboCircuit(currentCircuitIdx + 1, craft, false);
         } else if (capTouch.lx128 < 86) {
-          // Tocar el centro superior abre directamente el configurador de Rates/Físicas
+          // Tocar el centro superior abre directamente el Menú Unificado en la pestaña [WORLD]
           rgOverlayOpen = true;
           rgTuningOpen = true;
-          rgTuningTab = activeRomId === 'fpv_wing' ? 1 : 0;
+          rgTuningTab = 0;
           playTone(680, 0.04);
         } else {
           const nextId = activeRomId === 'fpv_drone' ? 'fpv_wing' : 'fpv_drone';
@@ -3561,8 +3643,14 @@
       { name: 'EDGE 540 3D', hasRudder: 1, pitchRate: 320, rollRate: 430, yawRate: 190, rudderRoll: 0.18, expo: 0.45, wingLoad: 0.82, maxThrustAcc: 25.0, cgOffset: -0.02, tipStall: 1.3, thrHold: 1 }
     ];
 
+    const WIND_DIR_NAMES = ['AUTO VALLE', 'NORTE (+Z)', 'ESTE (+X)', 'SUR (-Z)', 'OESTE (-X)'];
+    const WIND_DIR_RADS  = [1.12, Math.PI * 0.5, 0.0, -Math.PI * 0.5, Math.PI];
+
     const fcProfile = {
       windScale: 1.0,
+      windDirMode: 0,     // 0 = AUTO VALLE, 1 = NORTE, 2 = ESTE, 3 = SUR, 4 = OESTE
+      treeDensity: 1.0,   // 1.0 = 100%, 0.5 = 50%, 0.0 = OFF
+      showSplinePath: 1,  // 1 = ON (luces guía en el piso), 0 = OFF
       dronePresetIdx: 0,
       wingPresetIdx: 0,
       drone: { ...DRONE_PRESETS[0] },
@@ -3678,8 +3766,11 @@
         aeroEnv.failsafeTimer = Math.max(0, aeroEnv.failsafeTimer - dt);
       }
 
-      // 1. Brisa del valle de Chorobobo (ENE -> WSW con deriva lenta de dirección + cizalladura por altura)
-      const windDir = 1.12 + 0.28 * Math.sin(t * 0.09) + 0.12 * Math.cos(t * 0.23);
+      // 1. Dirección y velocidad del viento (configurable en [WORLD]: AUTO VALLE o rumbo cardinal fijo + cizalladura)
+      const dirMode = fcProfile.windDirMode || 0;
+      const windDir = dirMode === 0
+        ? (1.12 + 0.28 * Math.sin(t * 0.09) + 0.12 * Math.cos(t * 0.23))
+        : (WIND_DIR_RADS[dirMode] + 0.08 * Math.sin(t * 0.14));
       const shear   = Math.min(1.85, 0.72 + 0.28 * Math.log(1.0 + agl * 0.35));
       const baseSpd = (3.8 + 0.9 * Math.sin(t * 0.17)) * shear * wScale;
 
@@ -4583,12 +4674,12 @@
     function launchRom(romId) {
       blinkSdLed();
       if (romId === 'fc_tuning') {
-        if (activeRomId !== 'fpv_drone' && activeRomId !== 'fpv_wing') activeRomId = 'fpv_drone';
+        if (activeRomId !== 'fpv_drone' && activeRomId !== 'fpv_wing') activeRomId = 'fpv_wing';
         osState = 'ingame';
         rgOverlayOpen = true;
         rgTuningOpen = true;
-        rgTuningTab = activeRomId === 'fpv_wing' ? 1 : 0;
-        setFaceLabels('MODEL', 'DEF', 'FLY', 'STEP+', 'UP/DN:PARAM | L/R:AJUSTAR | B:VOLAR');
+        rgTuningTab = 0;
+        setFaceLabels('TAB', 'DEF', 'FLY', 'STEP+', 'Y/SELECT:PESTAÑA | UP/DN:ITEM | L/R:AJUSTAR | B:VOLAR');
         playTone(820, 0.08);
         return;
       }
@@ -4790,7 +4881,8 @@
     }
 
     // =========================================================================
-    // CONFIGURADOR INTERACTIVO BETAFLIGHT / INAV DE RATES, PID, FÍSICAS Y RC/PAD
+    // MENÚ UNIFICADO CONGRUENTE 320x240 EN 4 PESTAÑAS: [WORLD] | [WING] | [DRONE] | [RC/PAD]
+    // Todo se controla desde dentro de la app (Mapa, Circuito, Viento, Árboles, Vista, Audio, Rates y RC)
     // =========================================================================
     function resetRcInputDefaults() {
       rcInputConfig.mapMode = 0;
@@ -4805,61 +4897,122 @@
       rcInputConfig.trimRol = 0.0;
     }
 
+    function resetWorldDefaults() {
+      fcProfile.windScale = 1.0;
+      fcProfile.windDirMode = 0;
+      fcProfile.treeDensity = 1.0;
+      fcProfile.showSplinePath = 1;
+      fpvDroneSim. propwash = 1.0;
+    }
+
     function adjustTuningParameter(tab, row, dir) {
       playTone(dir > 0 ? 690 : 540, 0.025);
+      const activeSim = activeRomId === 'fpv_wing' ? fpvWingSim : fpvDroneSim;
+
       if (tab === 0) {
-        const d = fcProfile.drone;
+        // Pestaña 0 [WORLD]: Aeronave, Mapa, Circuito, Cámara, Viento (Fuerza y Dirección), Árboles, Spline y Sonido
         if (row === 0) {
-          applyDronePreset(fcProfile.dronePresetIdx + dir);
-          showToast(`PRESET: ${d.name}`);
+          const keepCam = activeSim.chaseCam;
+          const nextId = activeRomId === 'fpv_drone' ? 'fpv_wing' : 'fpv_drone';
+          activeRomId = nextId;
+          if (nextId === 'fpv_drone') {
+            fpvDroneSim.chaseCam = keepCam;
+            fpvDroneSim.reset();
+            showToast('AERONAVE: FPV DRONE 5"');
+          } else {
+            fpvWingSim.chaseCam = keepCam;
+            fpvWingSim.reset();
+            showToast('AERONAVE: ALA FIJA FPV');
+          }
         } else if (row === 1) {
-          d.rcRate = Math.max(200, Math.min(960, d.rcRate + dir * 20));
-          d.centerSens = Math.min(d.rcRate - 40, Math.max(70, Math.round(d.rcRate * 0.30)));
+          generateGentleVoxelMap(currentThemeIdx + dir);
+          showToast(`MAPA: ${TERRAIN_THEMES[currentThemeIdx].name}`);
         } else if (row === 2) {
-          d.yawRate = Math.max(100, Math.min(600, d.yawRate + dir * 20));
+          selectChoroboboCircuit(currentCircuitIdx + dir, activeSim, true);
         } else if (row === 3) {
-          d.expo = Math.max(0.0, Math.min(0.85, Math.round((d.expo + dir * 0.04) * 100) / 100));
+          activeSim.chaseCam = !activeSim.chaseCam;
+          fpvDroneSim.chaseCam = activeSim.chaseCam;
+          fpvWingSim.chaseCam  = activeSim.chaseCam;
+          showToast(activeSim.chaseCam ? 'VISTA: FOLLOW 3D MODERNO' : 'VISTA: CABINA FPV');
         } else if (row === 4) {
-          d.massKg = Math.max(0.35, Math.min(0.95, Math.round((d.massKg + dir * 0.04) * 100) / 100));
-        } else if (row === 5) {
-          d.maxThrustAcc = Math.max(20.0, Math.min(48.0, Math.round((d.maxThrustAcc + dir * 2.0) * 10) / 10));
-        } else if (row === 6) {
-          d.camTilt = Math.max(5, Math.min(45, d.camTilt + dir * 3));
-        } else if (row === 7) {
-          d.airMode = d.airMode ? 0 : 1;
-        } else if (row === 8) {
           fcProfile.windScale = Math.max(0.0, Math.min(2.0, Math.round((fcProfile.windScale + dir * 0.2) * 10) / 10));
-          d.propwash = fcProfile.windScale;
+          fcProfile.drone.propwash = fcProfile.windScale;
+          showToast(`VIENTO: ${Math.round(fcProfile.windScale * 100)}%`);
+        } else if (row === 5) {
+          const nDirs = WIND_DIR_NAMES.length;
+          fcProfile.windDirMode = (((fcProfile.windDirMode || 0) + dir) % nDirs + nDirs) % nDirs;
+          showToast(`RUMBO VIENTO: ${WIND_DIR_NAMES[fcProfile.windDirMode]}`);
+        } else if (row === 6) {
+          const densities = [0.0, 0.5, 1.0];
+          let curIdx = fcProfile.treeDensity <= 0.1 ? 0 : (fcProfile.treeDensity < 0.8 ? 1 : 2);
+          curIdx = ((curIdx + dir) % 3 + 3) % 3;
+          fcProfile.treeDensity = densities[curIdx];
+          showToast(`ARBOLES: ${Math.round(fcProfile.treeDensity * 100)}%`);
+        } else if (row === 7) {
+          fcProfile.showSplinePath = fcProfile.showSplinePath ? 0 : 1;
+          showToast(fcProfile.showSplinePath ? 'CAMINO GUIA: ON' : 'CAMINO GUIA: OFF');
+        } else if (row === 8) {
+          soundEnabled = !soundEnabled;
+          showToast(soundEnabled ? 'AUDIO: ACTIVADO' : 'AUDIO: SILENCIADO');
         }
       } else if (tab === 1) {
+        // Pestaña 1 [WING]: Modelo de Ala/Avión, Modo de Vuelo, Rates, Rudder, Expo, Carga Alar, Motor y Modo de Gas
         const w = fcProfile.wing;
         if (row === 0) {
           applyWingPreset(fcProfile.wingPresetIdx + dir);
           showToast(`${w.name} (${w.hasRudder ? 'CON RUDDER' : 'SIN RUDDER'})`);
         } else if (row === 1) {
-          w.pitchRate = Math.max(90, Math.min(420, w.pitchRate + dir * 15));
+          const modes = ['MANU', 'ACRO', 'HOR'];
+          const nextIdx = ((modes.indexOf(fpvWingSim.mode) + dir) % modes.length + modes.length) % modes.length;
+          fpvWingSim.mode = modes[nextIdx];
+          showToast(`MODO ALA: ${fpvWingSim.mode}`);
         } else if (row === 2) {
-          w.rollRate = Math.max(120, Math.min(540, w.rollRate + dir * 20));
+          w.pitchRate = Math.max(90, Math.min(420, w.pitchRate + dir * 15));
         } else if (row === 3) {
+          w.rollRate = Math.max(120, Math.min(540, w.rollRate + dir * 20));
+        } else if (row === 4) {
           w.yawRate = Math.max(0, Math.min(240, w.yawRate + dir * 15));
           w.hasRudder = w.yawRate > 0 ? 1 : 0;
           if (w.hasRudder && !w.rudderRoll) w.rudderRoll = 0.30;
           showToast(w.hasRudder ? `RUDDER ACTIVO: ${w.yawRate} D/S` : 'ALA VOLANTE: SIN RUDDER');
-        } else if (row === 4) {
-          w.expo = Math.max(0.0, Math.min(0.80, Math.round((w.expo + dir * 0.04) * 100) / 100));
         } else if (row === 5) {
-          w.wingLoad = Math.max(0.65, Math.min(1.50, Math.round((w.wingLoad + dir * 0.05) * 100) / 100));
+          w.expo = Math.max(0.0, Math.min(0.80, Math.round((w.expo + dir * 0.04) * 100) / 100));
         } else if (row === 6) {
-          w.maxThrustAcc = Math.max(11.0, Math.min(30.0, Math.round((w.maxThrustAcc + dir * 1.5) * 10) / 10));
+          w.wingLoad = Math.max(0.65, Math.min(1.50, Math.round((w.wingLoad + dir * 0.05) * 100) / 100));
         } else if (row === 7) {
+          w.maxThrustAcc = Math.max(11.0, Math.min(30.0, Math.round((w.maxThrustAcc + dir * 1.5) * 10) / 10));
+        } else if (row === 8) {
           w.thrHold = w.thrHold ? 0 : 1;
           if (rcInputConfig.thrMode === 2 || rcInputConfig.thrMode === 3) rcInputConfig.thrMode = 0;
           showToast(w.thrHold ? 'THR ALA: FIJO (STICK IZQ)' : 'THR ALA: DIRECTO (RESORTE)');
+        }
+      } else if (tab === 2) {
+        // Pestaña 2 [DRONE]: Preset, Modo de Vuelo, Rates P/R y Yaw, Expo, Masa, Potencia, Tilt de Cámara y AirMode
+        const d = fcProfile.drone;
+        if (row === 0) {
+          applyDronePreset(fcProfile.dronePresetIdx + dir);
+          showToast(`PRESET: ${d.name}`);
+        } else if (row === 1) {
+          fpvDroneSim.mode = fpvDroneSim.mode === 'ACRO' ? 'HOR' : 'ACRO';
+          showToast(`MODO DRON: ${fpvDroneSim.mode}`);
+        } else if (row === 2) {
+          d.rcRate = Math.max(200, Math.min(960, d.rcRate + dir * 20));
+          d.centerSens = Math.min(d.rcRate - 40, Math.max(70, Math.round(d.rcRate * 0.30)));
+        } else if (row === 3) {
+          d.yawRate = Math.max(100, Math.min(600, d.yawRate + dir * 20));
+        } else if (row === 4) {
+          d.expo = Math.max(0.0, Math.min(0.85, Math.round((d.expo + dir * 0.04) * 100) / 100));
+        } else if (row === 5) {
+          d.massKg = Math.max(0.35, Math.min(0.95, Math.round((d.massKg + dir * 0.04) * 100) / 100));
+        } else if (row === 6) {
+          d.maxThrustAcc = Math.max(20.0, Math.min(48.0, Math.round((d.maxThrustAcc + dir * 2.0) * 10) / 10));
+        } else if (row === 7) {
+          d.camTilt = Math.max(5, Math.min(45, d.camTilt + dir * 3));
         } else if (row === 8) {
-          fcProfile.windScale = Math.max(0.0, Math.min(2.0, Math.round((fcProfile.windScale + dir * 0.2) * 10) / 10));
+          d.airMode = d.airMode ? 0 : 1;
         }
       } else {
-        // Pestaña 2: Configuración de Emisora TX16S (USB-C / ELRS BT) y Gamepad Bluetooth (Android / Windows)
+        // Pestaña 3 [RC/PAD]: Mapeo de Emisora TX16S / Gamepad BT, Modo Throttle, Deadzone, Inversión, Calibrar y Launcher
         if (row === 0) {
           rcInputConfig.mapMode = ((rcInputConfig.mapMode + dir) % RC_MAP_NAMES.length + RC_MAP_NAMES.length) % RC_MAP_NAMES.length;
           showToast(`MAP: ${RC_MAP_NAMES[rcInputConfig.mapMode]}`);
@@ -4880,22 +5033,132 @@
           calibrateControllerCenter();
           showToast('STICKS CENTRADOS OK');
         } else if (row === 8) {
-          resetRcInputDefaults();
-          showToast('RC/PAD RESET OK');
+          rgTuningOpen = false;
+          rgOverlayOpen = false;
+          osState = 'launcher';
+          setFaceLabels('TEMA', 'MENU', 'WING', 'RUN', 'TOUCH/DPAD/STICK:NAV | A:RUN');
+          showToast('RETRO-GO LAUNCHER');
         }
+      }
+    }
+
+    function renderWorldMinimapPanel320(gx0, gy0, gw, gh) {
+      // Panel Derecho en 320x240 para [WORLD]: Radar Táctico Cenital (Mapa + Edificios + Circuito + Aeronave + Vector Viento)
+      for (let y = gy0; y <= gy0 + gh; y++) {
+        vram565.fill(rgb565(10, 18, 28), y * DISP_W + gx0, y * DISP_W + gx0 + gw);
+        setPx320(gx0, y, C565.CYAN);
+        setPx320(gx0 + gw, y, C565.CYAN);
+      }
+      for (let x = gx0; x <= gx0 + gw; x++) {
+        setPx320(x, gy0, C565.CYAN);
+        setPx320(x, gy0 + gh, C565.CYAN);
+      }
+
+      const sizeLbl = WORLD_W_M >= 1000 ? `${(WORLD_W_M / 1000).toFixed(1)}X${(WORLD_H_M / 1000).toFixed(1)}KM` : `${Math.round(WORLD_W_M)}X${Math.round(WORLD_H_M)}M`;
+      drawInavText320(`MAP ${sizeLbl}`, gx0 + 4, gy0 + 4, C565.CYAN);
+
+      // Área del radar top-down (x: gx0+4 .. gx0+gw-4, y: gy0+18 .. gy0+112)
+      const rx0 = gx0 + 4, ry0 = gy0 + 18, rw = gw - 8, rh = 92;
+      const rcx = rx0 + (rw >> 1), rcy = ry0 + (rh >> 1);
+      const mapBg = TERRAIN_THEMES[currentThemeIdx].isChorobobo ? rgb565(36, 48, 32) : rgb565(24, 38, 30);
+      for (let y = ry0; y <= ry0 + rh; y++) {
+        vram565.fill(mapBg, y * DISP_W + rx0, y * DISP_W + rx0 + rw);
+        setPx320(rx0, y, C565.GREY);
+        setPx320(rx0 + rw, y, C565.GREY);
+      }
+      for (let x = rx0; x <= rx0 + rw; x++) {
+        setPx320(x, ry0, C565.GREY);
+        setPx320(x, ry0 + rh, C565.GREY);
+      }
+      // Cruz central (0,0) de referencia
+      for (let d = -3; d <= 3; d++) {
+        setPx320(rcx + d, rcy, C565.GREY);
+        setPx320(rcx, rcy + d, C565.GREY);
+      }
+
+      // Escala de conversión de metros del mundo a píxeles del radar
+      const spanX = WORLD_W_M * 0.46;
+      const spanZ = WORLD_H_M * 0.46;
+      const scaleX = (rw * 0.46) / spanX;
+      const scaleZ = (rh * 0.46) / spanZ;
+
+      // 1. Dibujar edificios como pequeños bloques en el radar
+      for (let i = 0; i < WORLD_BUILDINGS.length; i++) {
+        const b = WORLD_BUILDINGS[i];
+        const bx = Math.round(rcx + b.x * scaleX);
+        const by = Math.round(rcy - b.z * scaleZ);
+        if (bx > rx0 + 1 && bx < rx0 + rw - 1 && by > ry0 + 1 && by < ry0 + rh - 1) {
+          setPx320(bx, by, C565.ORANGE);
+          setPx320(bx + 1, by, C565.ORANGE);
+        }
+      }
+
+      // 2. Dibujar trazado Spline y las 15 puertas del circuito activo
+      const activeSim = activeRomId === 'fpv_wing' ? fpvWingSim : fpvDroneSim;
+      if (!isFreeFlightNoGates()) {
+        const circuit = CHOROBOBO_CIRCUITS[currentCircuitIdx];
+        const sPts = circuit.splinePts;
+        for (let i = 0; i < sPts.length; i++) {
+          const sp = sPts[i];
+          const sx = Math.round(rcx + sp.x * scaleX);
+          const sy = Math.round(rcy - sp.z * scaleZ);
+          if (sx > rx0 && sx < rx0 + rw && sy > ry0 && sy < ry0 + rh) {
+            setPx320(sx, sy, circuit.lineCol565);
+          }
+        }
+        const gates = circuit.gates;
+        for (let i = 0; i < gates.length; i++) {
+          const g = gates[i];
+          const gx = Math.round(rcx + g.x * scaleX);
+          const gy = Math.round(rcy - g.z * scaleZ);
+          if (gx > rx0 + 1 && gx < rx0 + rw - 1 && gy > ry0 + 1 && gy < ry0 + rh - 1) {
+            const isAct = (i === activeSim.activeGate);
+            const gCol = isAct ? C565.GREEN : C565.WHITE;
+            setPx320(gx, gy, gCol);
+            if (isAct) {
+              setPx320(gx - 1, gy, gCol); setPx320(gx + 1, gy, gCol);
+              setPx320(gx, gy - 1, gCol); setPx320(gx, gy + 1, gCol);
+            }
+          }
+        }
+      }
+
+      // 3. Dibujar posición y rumbo actual de la aeronave
+      const ax = Math.max(rx0 + 3, Math.min(rx0 + rw - 3, Math.round(rcx + activeSim.px * scaleX)));
+      const ay = Math.max(ry0 + 3, Math.min(ry0 + rh - 3, Math.round(rcy - activeSim.pz * scaleZ)));
+      const hLen = Math.hypot(activeSim.fx, activeSim.fz) || 1.0;
+      const hx = activeSim.fx / hLen, hz = activeSim.fz / hLen;
+      drawOutlinedLine320(ax, ay, Math.round(ax + hx * 6), Math.round(ay - hz * 6), C565.GOLD);
+      drawInavCircleDot320(ax, ay, 2, C565.WHITE);
+
+      // 4. Indicador inferior de Viento en vivo (velocidad en KM/H + flecha de dirección)
+      const windMs  = Math.hypot(aeroEnv.windX, aeroEnv.windZ);
+      const windKmh = Math.round(windMs * 3.6);
+      drawInavText320(`WND:${windKmh}KMH`, gx0 + 4, gy0 + 114, C565.GOLD);
+      drawInavText320(isFreeFlightNoGates() ? 'FREE FLY' : `${CHOROBOBO_CIRCUITS[currentCircuitIdx].shortCode}:15 GATE`, gx0 + 4, gy0 + 131, C565.GREEN);
+
+      // Rosa de viento en la esquina inferior derecha del panel
+      const wcx = gx0 + gw - 16, wcy = gy0 + 126;
+      drawInavCircleDot320(wcx, wcy, 9, rgb565(24, 36, 54));
+      if (windMs > 0.2) {
+        const wxN = aeroEnv.windX / windMs, wzN = aeroEnv.windZ / windMs;
+        drawOutlinedLine320(wcx - Math.round(wxN * 6), wcy + Math.round(wzN * 6), wcx + Math.round(wxN * 7), wcy - Math.round(wzN * 7), C565.CYAN);
+        setPx320(wcx + Math.round(wxN * 7), wcy - Math.round(wzN * 7), C565.GOLD);
       }
     }
 
     function updateAndRenderTuningMenu(dt) {
       if (navCooldown > 0) navCooldown -= dt;
       const numRows = 9;
+      const numTabs = 4; // 0 = [WORLD], 1 = [WING], 2 = [DRONE], 3 = [RC/PAD]
 
       // Interacción táctil directa sobre la pantalla IPS 320x240 (128x64 lógicos)
       if (capTouch.justTapped) {
         if (capTouch.ly64 <= 10) {
-          if (capTouch.lx128 < 34) { rgTuningTab = 0; playTone(640, 0.03); }
-          else if (capTouch.lx128 < 68) { rgTuningTab = 1; playTone(640, 0.03); }
-          else if (capTouch.lx128 < 103) { rgTuningTab = 2; playTone(640, 0.03); }
+          if (capTouch.lx128 < 29)      { rgTuningTab = 0; playTone(640, 0.03); }
+          else if (capTouch.lx128 < 52) { rgTuningTab = 1; playTone(640, 0.03); }
+          else if (capTouch.lx128 < 78) { rgTuningTab = 2; playTone(640, 0.03); }
+          else if (capTouch.lx128 < 107){ rgTuningTab = 3; playTone(640, 0.03); }
           else { rgTuningOpen = false; rgOverlayOpen = false; playTone(520, 0.03); return; }
         } else if (capTouch.ly64 >= 11 && capTouch.ly64 <= 53 && capTouch.lx128 <= 82) {
           const clickedRow = Math.floor((capTouch.ly64 - 11) / 4.7);
@@ -4911,8 +5174,9 @@
           if (capTouch.lx128 < 34) adjustTuningParameter(rgTuningTab, rgTuningCursor, -1);
           else if (capTouch.lx128 < 68) adjustTuningParameter(rgTuningTab, rgTuningCursor, 1);
           else if (capTouch.lx128 < 98) {
-            if (rgTuningTab === 0) applyDronePreset(fcProfile.dronePresetIdx);
+            if (rgTuningTab === 0) resetWorldDefaults();
             else if (rgTuningTab === 1) applyWingPreset(fcProfile.wingPresetIdx);
+            else if (rgTuningTab === 2) applyDronePreset(fcProfile.dronePresetIdx);
             else resetRcInputDefaults();
             showToast('DEFAULTS RESTORED');
           } else {
@@ -4925,9 +5189,9 @@
         capTouch.justTapped = false;
       }
 
-      // En la pestaña [RC/PAD] (tab 2) dejamos libres los sticks analógicos para poder probarlos en las barras PWM sin mover el cursor
-      const navY = rgTuningTab === 2 ? 0 : (isRadioThrottleActive() ? hwInput.ry : hwInput.ly);
-      const navX = rgTuningTab === 2 ? 0 : hwInput.lx;
+      // En la pestaña [RC/PAD] (tab 3) dejamos libres los sticks analógicos para poder probarlos en las barras PWM sin mover el cursor
+      const navY = rgTuningTab === 3 ? 0 : (isRadioThrottleActive() ? hwInput.ry : hwInput.ly);
+      const navX = rgTuningTab === 3 ? 0 : hwInput.lx;
 
       if (navCooldown <= 0) {
         if (navY < -0.45 || hwInput.justPressed('DOWN')) {
@@ -4948,14 +5212,15 @@
       }
 
       if (hwInput.justPressed('Y') || hwInput.justPressed('SELECT')) {
-        rgTuningTab = (rgTuningTab + 1) % 3;
+        rgTuningTab = (rgTuningTab + 1) % numTabs;
         playTone(640, 0.03);
       }
       if (hwInput.justPressed('X')) {
-        if (rgTuningTab === 0) applyDronePreset(fcProfile.dronePresetIdx);
+        if (rgTuningTab === 0) resetWorldDefaults();
         else if (rgTuningTab === 1) applyWingPreset(fcProfile.wingPresetIdx);
+        else if (rgTuningTab === 2) applyDronePreset(fcProfile.dronePresetIdx);
         else calibrateControllerCenter();
-        showToast(rgTuningTab === 2 ? 'STICKS CENTRADOS' : 'PRESET RESET');
+        showToast(rgTuningTab === 3 ? 'STICKS CENTRADOS' : 'VALORES POR DEFECTO');
         playTone(580, 0.04);
       }
       if (hwInput.justPressed('B')) {
@@ -4965,49 +5230,65 @@
         return;
       }
 
-      // Fondo semitransparente oscuro sobre el framebuffer 320x240
+      // Fondo oscuro sobre el framebuffer 320x240
       fbRect(2, 2, 124, 60, true, 0);
       fbRect(2, 2, 124, 60, false, 5);
       fbRect(2, 2, 124, 8, true, 8);
 
-      // Pestañas superiores: [DRONE] | [WING] | [RC/PAD] | [FLY]
-      fbRect(4, 3, 30, 6, true, rgTuningTab === 0 ? 2 : 8);
-      fbDrawText('DRONE', 7, 4, rgTuningTab === 0 ? 0 : 1);
+      // 4 Pestañas superiores + Botón [FLY]: [WORLD] | [WING] | [DRONE] | [RC/PAD] | [FLY]
+      fbRect(4, 3, 24, 6, true, rgTuningTab === 0 ? 3 : 8);
+      fbDrawText('WORLD', 6, 4, rgTuningTab === 0 ? 0 : 1);
 
-      fbRect(36, 3, 30, 6, true, rgTuningTab === 1 ? 3 : 8);
-      fbDrawText('WING', 41, 4, rgTuningTab === 1 ? 0 : 1);
+      fbRect(30, 3, 21, 6, true, rgTuningTab === 1 ? 2 : 8);
+      fbDrawText('WING', 33, 4, rgTuningTab === 1 ? 0 : 1);
 
-      fbRect(68, 3, 33, 6, true, rgTuningTab === 2 ? 5 : 8);
-      fbDrawText('RC/PAD', 71, 4, rgTuningTab === 2 ? 0 : 1);
+      fbRect(53, 3, 24, 6, true, rgTuningTab === 2 ? 5 : 8);
+      fbDrawText('DRONE', 55, 4, rgTuningTab === 2 ? 0 : 1);
 
-      fbRect(103, 3, 21, 6, true, 4);
-      fbDrawText('FLY', 107, 4, 1);
+      fbRect(79, 3, 27, 6, true, rgTuningTab === 3 ? 9 : 8);
+      fbDrawText('RC/PAD', 81, 4, rgTuningTab === 3 ? 0 : 1);
+
+      fbRect(108, 3, 16, 6, true, 4);
+      fbDrawText('FLY', 110, 4, 1);
 
       // Lista de 9 parámetros configurables en columna izquierda (nativa en 320x240 usando OSD ROM)
       const d = fcProfile.drone;
       const w = fcProfile.wing;
+      const activeSim = activeRomId === 'fpv_wing' ? fpvWingSim : fpvDroneSim;
       const mapShort = ['AUTO', 'TX16S AETR', 'PAD MODE2', 'RC TAER', 'ANDROID BT'][rcInputConfig.mapMode];
       const thrShort = ['AUTO(W:FIJO)', 'RADIO 0-100', 'FIJO (INC)', 'SPRING DIR'][rcInputConfig.thrMode];
+      const treeLbl  = fcProfile.treeDensity >= 0.9 ? '100% (ALTA)' : (fcProfile.treeDensity >= 0.4 ? '50% (MEDIA)' : 'OFF (LIMPIO)');
+
       const labels = rgTuningTab === 0 ? [
-        `PSET:${d.name}`,
-        `P/R :${d.rcRate} D/S`,
-        `YAW :${d.yawRate} D/S`,
-        `EXPO:${Math.round(d.expo * 100)}%`,
-        `MASS:${Math.round(d.massKg * 1000)}G`,
-        `PWR :${Math.round(d.maxThrustAcc)}M/S2`,
-        `TILT:${d.camTilt} DEG`,
-        `AIRM:${d.airMode ? 'ON (BF)' : 'OFF'}`,
-        `WIND:${Math.round(fcProfile.windScale * 100)}%`
+        `SIM :${activeRomId === 'fpv_wing' ? 'ALA FIJA FPV' : 'FPV DRONE 5"'}`,
+        `MAPA:${TERRAIN_THEMES[currentThemeIdx].name.slice(0, 17)}`,
+        `CIRC:${getActiveCircuitLabel().slice(0, 17)}`,
+        `VIEW:${activeSim.chaseCam ? 'FOLLOW 3D' : 'FPV CABINA'}`,
+        `WIND:${Math.round(fcProfile.windScale * 100)}% (${Math.round(Math.hypot(aeroEnv.windX, aeroEnv.windZ) * 3.6)}KMH)`,
+        `WDIR:${WIND_DIR_NAMES[fcProfile.windDirMode || 0]}`,
+        `TREE:${treeLbl}`,
+        `PATH:${fcProfile.showSplinePath ? 'LUCES GUIA ON' : 'OFF (LIMPIO)'}`,
+        `SND :${soundEnabled ? 'AUDIO ON' : 'AUDIO MUTE'}`
       ] : (rgTuningTab === 1 ? [
         `TYPE:${w.name}`,
+        `MODO:${fpvWingSim.mode} (WING)`,
         `PIT :${w.pitchRate} D/S`,
         `ROL :${w.rollRate} D/S`,
         `RUDD:${w.hasRudder && w.yawRate > 0 ? w.yawRate + ' D/S' : 'OFF (WING)'}`,
         `EXPO:${Math.round(w.expo * 100)}%`,
         `LOAD:${Math.round(w.wingLoad * 100)}%`,
         `PWR :${Math.round(w.maxThrustAcc)}M/S2`,
-        `THRL:${w.thrHold ? 'FIJO (INC)' : 'RESORTE'}`,
-        `WIND:${Math.round(fcProfile.windScale * 100)}%`
+        `THRL:${w.thrHold ? 'FIJO (INC)' : 'RESORTE'}`
+      ] : (rgTuningTab === 2 ? [
+        `PSET:${d.name}`,
+        `MODO:${fpvDroneSim.mode} (QUAD)`,
+        `P/R :${d.rcRate} D/S`,
+        `YAW :${d.yawRate} D/S`,
+        `EXPO:${Math.round(d.expo * 100)}%`,
+        `MASS:${Math.round(d.massKg * 1000)}G`,
+        `PWR :${Math.round(d.maxThrustAcc)}M/S2`,
+        `TILT:${d.camTilt} DEG`,
+        `AIRM:${d.airMode ? 'ON (BF)' : 'OFF'}`
       ] : [
         `MAP :${mapShort}`,
         `THR :${thrShort}`,
@@ -5017,8 +5298,8 @@
         `INVP:${rcInputConfig.invPit > 0 ? 'NORM' : 'INVERT'}`,
         `INVR:${rcInputConfig.invRol > 0 ? 'NORM' : 'INVERT'}`,
         `CENT:A=CALIBRAR`,
-        `DEF :A=RESET RC`
-      ]);
+        `EXIT:A=LAUNCHER`
+      ]));
 
       for (let i = 0; i < numRows; i++) {
         const py320 = 42 + i * 17;
@@ -5031,7 +5312,9 @@
         drawInavText320((isSel ? '>' : ' ') + labels[i], 12, py320, isSel ? C565.GOLD : C565.WHITE);
       }
 
-      if (rgTuningTab === 2) {
+      if (rgTuningTab === 0) {
+        renderWorldMinimapPanel320(206, 42, 104, 148);
+      } else if (rgTuningTab === 3) {
         // Panel Derecho en 320x240 para [RC/PAD]: Monitor de Canales PWM (1000..2000 us) estilo Betaflight Receiver
         const gx0 = 206, gy0 = 42, gw = 104, gh = 148;
         for (let y = gy0; y <= gy0 + gh; y++) {
@@ -5081,7 +5364,8 @@
         drawInavText320(`A0:${a0} A1:${a1}`, gx0 + 4, gy0 + 112, C565.CYAN);
         drawInavText320(`A2:${a2} A3:${a3}`, gx0 + 4, gy0 + 128, C565.CYAN);
       } else {
-        // Panel Derecho en 320x240: Gráfica en vivo de la Curva SuperExpo / Actual Rates (x: 210..308, y: 44..144)
+        // Panel Derecho en 320x240 para [WING] (tab 1) y [DRONE] (tab 2): Gráfica en vivo de la Curva SuperExpo / Actual Rates
+        const isDroneTab = (rgTuningTab === 2);
         const gx0 = 210, gy0 = 44, gw = 98, gh = 96;
         const gcx = gx0 + (gw >> 1), gcy = gy0 + (gh >> 1);
         for (let y = gy0; y <= gy0 + gh; y++) {
@@ -5096,11 +5380,10 @@
           setPx320(x, gcy, C565.GREY);
         }
 
-        // Trazar curva de Rates de -1.0 a +1.0 en píxeles nativos 320x240
-        const maxRateRef = rgTuningTab === 0 ? 960.0 : 540.0;
-        const curMaxRate = rgTuningTab === 0 ? d.rcRate : w.rollRate;
-        const curCenter  = rgTuningTab === 0 ? d.centerSens : w.rollRate * (1.0 - w.expo);
-        const curExpo    = rgTuningTab === 0 ? d.expo : w.expo;
+        const maxRateRef = isDroneTab ? 960.0 : 540.0;
+        const curMaxRate = isDroneTab ? d.rcRate : w.rollRate;
+        const curCenter  = isDroneTab ? d.centerSens : w.rollRate * (1.0 - w.expo);
+        const curExpo    = isDroneTab ? d.expo : w.expo;
 
         let prevPy = gcy;
         for (let px = 0; px <= gw; px++) {
@@ -5126,7 +5409,7 @@
 
         drawInavText320('EXPO CURVE', 218, 47, C565.CYAN);
         drawInavText320(`${Math.abs(liveRateDeg)}D/S`, 216, 148, C565.GOLD);
-        drawInavText320(rgTuningTab === 0 ? `TWR:${(d.maxThrustAcc / 9.81).toFixed(1)}:1` : `VS:${(8.8 * Math.sqrt(w.wingLoad)).toFixed(1)}M/S`, 216, 166, C565.WHITE);
+        drawInavText320(isDroneTab ? `TWR:${(d.maxThrustAcc / 9.81).toFixed(1)}:1` : `VS:${(8.8 * Math.sqrt(w.wingLoad)).toFixed(1)}M/S`, 216, 166, C565.WHITE);
         drawInavText320('MOVE R-STICK!', 208, 184, C565.GREEN);
       }
 
@@ -5142,94 +5425,8 @@
     }
 
     function updateAndRenderRetroGoOverlay(dt) {
-      if (rgTuningOpen) {
-        updateAndRenderTuningMenu(dt);
-        return;
-      }
-      if (navCooldown > 0) navCooldown -= dt;
-
-      if (capTouch.justTapped && capTouch.ly64 >= 12 && capTouch.ly64 <= 59) {
-        const idx = Math.floor((capTouch.ly64 - 12) / 5.2);
-        if (idx >= 0 && idx < RG_OVERLAY_ITEMS.length) {
-          rgOverlayCursor = idx;
-          hwInput.btn.A = true;
-        }
-      }
-
-      const navY = isRadioThrottleActive() ? hwInput.ry : (Math.abs(hwInput.ly) > Math.abs(hwInput.ry) ? hwInput.ly : hwInput.ry);
-      if (navCooldown <= 0) {
-        if (navY < -0.45 || hwInput.justPressed('DOWN') || hwInput.justPressed('SELECT')) {
-          rgOverlayCursor = (rgOverlayCursor + 1) % RG_OVERLAY_ITEMS.length;
-          navCooldown = 0.16;
-          playTone(500, 0.025);
-        } else if (navY > 0.45 || hwInput.justPressed('UP')) {
-          rgOverlayCursor = (rgOverlayCursor - 1 + RG_OVERLAY_ITEMS.length) % RG_OVERLAY_ITEMS.length;
-          navCooldown = 0.16;
-          playTone(500, 0.025);
-        }
-      }
-
-      if (hwInput.justPressed('B')) {
-        rgOverlayOpen = false;
-        return;
-      }
-
-      if (hwInput.justPressed('A')) {
-        hwInput.btn.A = false;
-        playTone(740, 0.05);
-        const activeSim = activeRomId === 'fpv_wing' ? fpvWingSim : fpvDroneSim;
-        if (rgOverlayCursor === 0) {
-          rgOverlayOpen = false;
-        } else if (rgOverlayCursor === 1) {
-          rgTuningOpen = true;
-          rgTuningTab = activeRomId === 'fpv_wing' ? 1 : 0;
-        } else if (rgOverlayCursor === 2) {
-          selectChoroboboCircuit(0, activeSim, true);
-          rgOverlayOpen = false;
-        } else if (rgOverlayCursor === 3) {
-          selectChoroboboCircuit(1, activeSim, true);
-          rgOverlayOpen = false;
-        } else if (rgOverlayCursor === 4) {
-          selectChoroboboCircuit(2, activeSim, true);
-          rgOverlayOpen = false;
-        } else if (rgOverlayCursor === 5) {
-          selectChoroboboCircuit(3, activeSim, false);
-          rgOverlayOpen = false;
-        } else if (rgOverlayCursor === 6) {
-          const nextId = activeRomId === 'fpv_drone' ? 'fpv_wing' : 'fpv_drone';
-          launchRom(nextId);
-          showToast(nextId === 'fpv_drone' ? 'SIM: FPV DRONE' : 'SIM: FIXED-WING');
-        } else if (rgOverlayCursor === 7) {
-          generateGentleVoxelMap(currentThemeIdx + 1);
-          showToast(TERRAIN_THEMES[currentThemeIdx].name);
-          rgOverlayOpen = false;
-        } else if (rgOverlayCursor === 8) {
-          rgOverlayOpen = false;
-          osState = 'launcher';
-          setFaceLabels('TEMA', 'RATES', 'WING', 'RUN', 'TOUCH/DPAD/STICK:NAV | A:RUN');
-        }
-        return;
-      }
-
-      fbRect(10, 3, 108, 58, true, 0);
-      fbRect(10, 3, 108, 58, false, 2);
-      fbRect(10, 3, 108, 8, true, 4);
-      fbDrawText('INAV FPV MENU // GATES', 20, 5, 1);
-
-      for (let i = 0; i < RG_OVERLAY_ITEMS.length; i++) {
-        const y = 13 + i * 5.2;
-        const iy = Math.round(y);
-        const isCurrentGateOpt = (i >= 2 && i <= 5) && ((i - 2) === currentCircuitIdx);
-        const prefix = isCurrentGateOpt ? '*' : ' ';
-        const itemLabel = i === 7 ? `MAP:${TERRAIN_THEMES[currentThemeIdx].name}` : RG_OVERLAY_ITEMS[i];
-        if (i === rgOverlayCursor) {
-          fbRect(13, iy - 1, 102, 5, true, 2);
-          fbDrawText('>' + prefix + itemLabel, 14, iy, 0);
-        } else {
-          const col = isCurrentGateOpt ? 3 : (i === 1 ? 5 : 1);
-          fbDrawText(' ' + prefix + itemLabel, 14, iy, col);
-        }
-      }
+      // Todo el menú dentro de la app es ahora 100% congruente en resolución nativa 320x240 con 4 pestañas
+      updateAndRenderTuningMenu(dt);
     }
 
     // CARTUCHO 3: ILI9341V SPI + FT6336 TOUCH + ADC DIAGNOSTIC
@@ -5282,73 +5479,15 @@
     /***************************************************************************
      * 8. BUCLE PRINCIPAL DE SISTEMA RETRO-GO (CON SIMULADOR SPI DMA ILI9341V)
      ***************************************************************************/
-    document.getElementById('btnFollowCam').addEventListener('click', (e) => {
-      const craft = activeRomId === 'fpv_drone' ? fpvDroneSim : fpvWingSim;
-      craft.chaseCam = !craft.chaseCam;
-      fpvDroneSim.chaseCam = craft.chaseCam;
-      fpvWingSim.chaseCam  = craft.chaseCam;
-      e.currentTarget.classList.toggle('active', craft.chaseCam);
-      showToast(craft.chaseCam ? 'VISTA: FOLLOW 3D' : 'VISTA: FPV CABINA');
-      playTone(660, 0.04);
-    });
-
-    document.getElementById('btnRcPad').addEventListener('click', () => {
-      if (osState !== 'ingame') {
-        osState = 'ingame';
-        if (activeRomId !== 'fpv_drone' && activeRomId !== 'fpv_wing') activeRomId = 'fpv_drone';
-      }
-      if (rgOverlayOpen && rgTuningOpen && rgTuningTab === 2) {
-        rgTuningOpen = false;
-        rgOverlayOpen = false;
-      } else {
-        rgOverlayOpen = true;
-        rgTuningOpen = true;
-        rgTuningTab = 2;
-      }
-      playTone(720, 0.04);
-    });
-
-    document.getElementById('btnRates').addEventListener('click', () => {
-      if (osState !== 'ingame') {
-        osState = 'ingame';
-        if (activeRomId !== 'fpv_drone' && activeRomId !== 'fpv_wing') activeRomId = 'fpv_drone';
-      }
-      if (rgOverlayOpen && rgTuningOpen) {
-        rgTuningOpen = false;
-        rgOverlayOpen = false;
-      } else {
-        rgOverlayOpen = true;
-        rgTuningOpen = true;
-        rgTuningTab = activeRomId === 'fpv_wing' ? 1 : 0;
-      }
-      playTone(680, 0.04);
-    });
-
-    document.getElementById('btnPalette').addEventListener('click', (e) => {
-      paletteIdx = (paletteIdx + 1) % SPI_MODES.length;
-      const m = SPI_MODES[paletteIdx];
-      e.currentTarget.textContent = `🎨 ${m.name}`;
-      showToast(m.name);
-    });
-
-    document.getElementById('btnAudio').addEventListener('click', (e) => {
-      soundEnabled = !soundEnabled;
-      e.currentTarget.textContent = soundEnabled ? '🔊 SND' : '🔇 SND';
-      e.currentTarget.classList.toggle('active', soundEnabled);
-    });
-
-    document.getElementById('btnGrid').addEventListener('click', (e) => {
-      const c = document.getElementById('oledContainer');
-      c.classList.toggle('pixel-grid');
-      e.currentTarget.classList.toggle('active', c.classList.contains('pixel-grid'));
-    });
-
-    document.getElementById('btnFull').addEventListener('click', async () => {
-      try {
-        if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
-        else await document.exitFullscreen();
-      } catch (_) {}
-    });
+    const btnPaletteEl = document.getElementById('btnPalette');
+    if (btnPaletteEl) {
+      btnPaletteEl.addEventListener('click', (e) => {
+        paletteIdx = (paletteIdx + 1) % SPI_MODES.length;
+        const m = SPI_MODES[paletteIdx];
+        e.currentTarget.textContent = `🎨 ${m.name}`;
+        showToast(m.name);
+      });
+    }
 
     let lastTime = performance.now();
     let fpsFrames = 0;
@@ -5374,8 +5513,7 @@
               rgTuningOpen = false;
             } else {
               rgOverlayOpen = true;
-              rgTuningOpen = false;
-              rgOverlayCursor = 0;
+              rgTuningOpen = true;
             }
             playTone(600, 0.04);
           }
