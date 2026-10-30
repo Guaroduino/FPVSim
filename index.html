@@ -472,7 +472,7 @@
         <span>PWR</span>
         <span id="sdLed" class="led sd-act" title="Flash / SD Activity"></span>
         <span>SPI</span>
-        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + MINI OSD (v33)</span>
+        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + RSSI/LINK (v34)</span>
       </div>
       <div class="top-hw-pills">
         <button id="btnRcPad" class="pill-btn" title="Configurar Emisora TX16S USB/BT y Gamepad Bluetooth">🎮 RC/PAD</button>
@@ -2453,6 +2453,46 @@
       drawOutlinedLine320(x + 1, y + 6, x + 5, y + 6);
     }
 
+    // Icono de Antena RSSI compacto (7x6 px: 3 barras de señal escalonadas) en 320x240
+    function drawRssiIcon320(x, y, col565 = 0xFFFF) {
+      drawOutlinedLine320(x,     y + 4, x,     y + 6, col565);
+      drawOutlinedLine320(x + 2, y + 2, x + 2, y + 6, col565);
+      drawOutlinedLine320(x + 4, y,     x + 4, y + 6, col565);
+    }
+
+    // Generador entero Xorshift32 de nieve analógica 5.8GHz y bandas de pérdida de sincronismo (0 divisiones flotantes)
+    let fpvStaticSeed = 0x9E3779B9;
+    function applyFpvLinkStatic320(rssiPct) {
+      if (rssiPct >= 38) return;
+      const loss = 38 - (rssiPct | 0); // 1..38
+      let s = fpvStaticSeed | 1;
+
+      // 1. Nieve de radiofrecuencia proporcional a la caída de RSSI en el borde del mapa
+      const snowDots = loss * 42;
+      for (let i = 0; i < snowDots; i++) {
+        s ^= s << 13; s ^= s >>> 17; s ^= s << 5;
+        const idx = (s >>> 0) % (DISP_W * DISP_H);
+        const gray = (s & 1) ? 0xFFFF : 0x39E7;
+        vram565[idx] = gray;
+        if (idx + 1 < DISP_W * DISP_H && (s & 4)) vram565[idx + 1] = 0x0000;
+      }
+
+      // 2. Líneas horizontales de desgarro (Sync Tear) cuando RSSI baja de 24%
+      if (rssiPct < 24) {
+        const tearLines = (24 - (rssiPct | 0)) >> 2;
+        for (let b = 0; b <= tearLines; b++) {
+          s ^= s << 13; s ^= s >>> 17; s ^= s << 5;
+          const rowY = (s >>> 0) % DISP_H;
+          const rowOff = rowY * DISP_W;
+          for (let x = 0; x < DISP_W; x += 2) {
+            s ^= s << 13; s ^= s >>> 17; s ^= s << 5;
+            vram565[rowOff + x] = (s & 2) ? 0xBDF7 : 0x18E3;
+          }
+        }
+      }
+      fpvStaticSeed = s;
+    }
+
     // Renderizador completo del OSD estilo INAV con tipografía compacta nativa 5x7 en 320x240
     function renderInavOsd320({
       callsign, modeLabel, spdMs, thrPct, altM, vario,
@@ -2462,6 +2502,9 @@
     }) {
       const WHITE = 0xFFFF;
       const GREEN_DOT = rgb565(120, 245, 120);
+
+      // Si el RSSI cae cerca del borde del mapa (<38%), inyectar nieve analógica 5.8GHz antes del OSD
+      applyFpvLinkStatic320(aeroEnv.rssiPct);
 
       // 1. HORIZONTE ARTIFICIAL INAV (9 círculos finos proyectados en 3D usando la misma base R0, H0 del Voxel)
       const phi = Math.atan2(cRy, cUy);
@@ -2527,7 +2570,7 @@
       drawOsdSmall320(compassStr, 160 - ((compassStr.length * 5) >> 1), 6, WHITE);
       drawOsdSmall320(callStr,    160 - ((callStr.length * 5) >> 1),   16, WHITE);
 
-      // 5. ESQUINA SUPERIOR DERECHA (Satélites + HDOP) Y ESQUINA SUPERIOR IZQUIERDA (Viento INAV)
+      // 5. ESQUINA SUPERIOR DERECHA (Satélites + HDOP) Y ESQUINA SUPERIOR IZQUIERDA (Viento + RSSI INAV)
       drawOsdSmall320('SAT 12',   282, 8,  WHITE);
       drawOsdSmall320('HDOP 1.2', 272, 18, WHITE);
 
@@ -2543,6 +2586,21 @@
       drawOutlinedLine320(wx0 + sW * 4, wy0 - cW * 4, wx0 + sW * 1 - cW * 3, wy0 - cW * 1 - sW * 3, WHITE);
       drawOutlinedLine320(wx0 + sW * 4, wy0 - cW * 4, wx0 + sW * 1 + cW * 3, wy0 - cW * 1 + sW * 3, WHITE);
       drawOsdSmall320(`W${String(windSpdKmh).padStart(2, ' ')}K`, 20, 8, WHITE);
+
+      // Indicador RSSI (%) y nivel de enlace hacia el borde del mapa
+      const rssiVal = Math.round(aeroEnv.rssiPct);
+      const rssiCol = rssiVal < 15 ? C565.RED : (rssiVal < 35 ? C565.ORANGE : WHITE);
+      drawRssiIcon320(8, 19, rssiCol);
+      drawOsdSmall320(`RSSI ${String(rssiVal).padStart(2, ' ')}%`, 16, 19, rssiCol);
+      drawOsdSmall320(`${aeroEnv.rssiDbm}DBM`, 8, 29, rssiCol);
+
+      // Alertas centrales de Pérdida Aerodinámica (!STALL!) y Límite de Mapa (!LOW RSSI! / !FAILSAFE RTH!)
+      if (aeroEnv.failsafeTimer > 0) {
+        drawOsdSmall320('!FAILSAFE RTH - LIMITE MAPA!', 90, 70, C565.RED);
+      } else if (rssiVal < 32 && ((Math.floor(flightTimeSec * 5) & 1) === 0)) {
+        const warnStr = rssiVal < 15 ? `!LINK CRITICO ${rssiVal}%!` : `!LOW RSSI ${rssiVal}%!`;
+        drawOsdSmall320(warnStr, 160 - ((warnStr.length * 5) >> 1), 70, rssiCol);
+      }
       if (aeroEnv.stallWarn) {
         drawOsdSmall320('!STALL!', 142, 82, C565.RED);
       }
@@ -2770,7 +2828,11 @@
       turbRoll: 0,
       turbYaw: 0,
       airSpd: 0,
-      stallWarn: false
+      stallWarn: false,
+      rssiPct: 99,
+      rssiDbm: -50,
+      edgeRatio: 0,
+      failsafeTimer: 0
     };
 
     function updateAeroEnvironment(px, py, pz, groundH, dt) {
@@ -2778,6 +2840,42 @@
       const t = aeroEnv.time;
       const agl = Math.max(0.2, py - groundH);
       const wScale = fcProfile.windScale;
+
+      // 0. Modelo de Enlace RF (RSSI % y dBm) que cae casi a 0% al llegar al borde del mapa (WORLD_W_M x WORLD_D_M)
+      const halfW = WORLD_W_M * 0.47;
+      const halfD = WORLD_D_M * 0.47;
+      const normX = Math.abs(px) / halfW;
+      const normZ = Math.abs(pz) / halfD;
+      const edgeRatio = Math.max(normX, normZ, Math.hypot(normX, normZ) * 0.76);
+      aeroEnv.edgeRatio = edgeRatio;
+
+      // Atenuación por zona de Fresnel a baja altura lejos de base + fluctuación RF rápida
+      const lowAltPenalty = (edgeRatio > 0.30 && agl < 7.0) ? (1.0 - agl / 7.0) * 8.5 * edgeRatio : 0.0;
+      const rfFlutter = (Math.sin(t * 13.7 + px * 0.11) * 1.4 + Math.cos(t * 23.1 + pz * 0.13) * 1.1) * Math.min(1.5, edgeRatio + 0.2);
+
+      let rawRssi;
+      if (edgeRatio <= 0.20) {
+        rawRssi = 99.0 - edgeRatio * 20.0; // 99% a 95% cerca del centro
+      } else if (edgeRatio <= 0.72) {
+        const u = (edgeRatio - 0.20) / 0.52;
+        rawRssi = 95.0 - u * 55.0; // Cae de 95% a 40% en zona media
+      } else {
+        const u = Math.min(1.12, (edgeRatio - 0.72) / 0.26);
+        rawRssi = 40.0 * (1.0 - u * 0.96); // Cae de 40% hasta ~1%..0% en el borde del mapa
+      }
+      aeroEnv.rssiPct = Math.max(0, Math.min(99, Math.round(rawRssi - lowAltPenalty + rfFlutter)));
+      aeroEnv.rssiDbm = Math.round(-48 - (99 - aeroEnv.rssiPct) * 0.72);
+
+      // Si llega al borde del mapa con RSSI crítico (<= 3%), activa Failsafe RTH automático hacia el centro (0,0)
+      if (aeroEnv.rssiPct <= 3 || edgeRatio >= 0.98) {
+        if (aeroEnv.failsafeTimer <= 0) {
+          showToast('FAILSAFE RTH: BORDE DEL MAPA!');
+          playTone(340, 0.12);
+        }
+        aeroEnv.failsafeTimer = 2.0;
+      } else if (aeroEnv.failsafeTimer > 0) {
+        aeroEnv.failsafeTimer = Math.max(0, aeroEnv.failsafeTimer - dt);
+      }
 
       // 1. Brisa del valle de Chorobobo (ENE -> WSW con deriva lenta de dirección + cizalladura por altura)
       const windDir = 1.12 + 0.28 * Math.sin(t * 0.09) + 0.12 * Math.cos(t * 0.23);
@@ -2923,7 +3021,15 @@
         const tYaw         = evalActualRateRad(hwInput.lx, Math.min(140, cfg.yawRate * 0.55), cfg.yawRate, cfg.expo * 0.75);
 
         let tPitch = ratePitchCmd, tRoll = rateRollCmd;
-        if (this.mode !== 'ACRO') {
+        if (aeroEnv.failsafeTimer > 0) {
+          // Failsafe en borde del mapa para el Dron: frena y regresa suavemente hacia el centro (0, 0)
+          const toHomeX = -this.px, toHomeZ = -this.pz;
+          const homeDist = Math.hypot(toHomeX, toHomeZ) || 1.0;
+          const dirHomeF = (toHomeX * this.fx + toHomeZ * this.fz) / homeDist;
+          const dirHomeR = (toHomeX * this.rx + toHomeZ * this.rz) / homeDist;
+          tPitch = ((dirHomeF * 18.0 * DEG2RAD) - curPitch) * 4.5;
+          tRoll  = ((dirHomeR * 22.0 * DEG2RAD) - curRoll)  * 4.5;
+        } else if (this.mode !== 'ACRO') {
           // Modo HORIZON estilo Betaflight con zona central flotante y balanceo real sobre el colchón de aire
           const stickMag = Math.max(Math.abs(hwInput.rx), Math.abs(hwInput.ry));
           const acroBlend = Math.max(0, (stickMag - 0.45) / 0.55);
@@ -3260,8 +3366,8 @@
           thr = evalRcThrottle(0.42);
           this.thrLatch = thr;
         }
-        if (this.launchTimer > 0) {
-          thr = Math.max(thr, 0.58); // Empuje de ascenso automático durante el segundo de lanzamiento a mano
+        if (this.launchTimer > 0 || aeroEnv.failsafeTimer > 0) {
+          thr = Math.max(thr, 0.58); // Empuje automático durante lanzamiento a mano o Failsafe RTH
         }
         if (hwInput.btn.A) thr = Math.min(1.0, thr + 0.38);
         this.thrCmd = thr;
@@ -3354,7 +3460,22 @@
         const noseDownAngle = Math.asin(Math.max(-0.99, Math.min(0.99, -this.fy)));
         const bankRightAngle = Math.atan2(-this.ry, Math.max(0.15, this.uy));
 
-        if (this.launchTimer > 0) {
+        if (aeroEnv.failsafeTimer > 0) {
+          // Failsafe RTH INAV en el borde del mapa: vira automáticamente de regreso al centro (0, 0)
+          const toHomeX = -this.px, toHomeZ = -this.pz;
+          const homeCross = toHomeX * this.rx + toHomeZ * this.rz;
+          const homeDot   = toHomeX * this.fx + toHomeZ * this.fz;
+          const homeBearing = Math.atan2(homeCross, homeDot);
+          const desiredBank = Math.max(-0.72, Math.min(0.72, homeBearing * 1.4));
+          const desiredNoseDown = (this.py - groundH < 24.0 ? -12.0 : -4.0) * DEG2RAD;
+          const tPitch = (desiredNoseDown - noseDownAngle) * 4.2 + coordTurnPitch * 0.6;
+          const tRoll  = (desiredBank - bankRightAngle) * 4.8;
+          const tYaw   = coordTurnYaw + weathervaneYaw;
+          const gain   = Math.min(1.0, 12.0 * dt);
+          this.pitchRate += (tPitch - this.pitchRate) * gain;
+          this.rollRate  += (tRoll  - this.rollRate)  * gain;
+          this.yawRate   += (tYaw   - this.yawRate)   * gain;
+        } else if (this.launchTimer > 0) {
           // Fase INAV NAV_LAUNCH: mantiene alas niveladas y ascenso limpio de +11° tras lanzarlo con la mano
           const targetNoseDown = -11.0 * DEG2RAD;
           const tPitch = (targetNoseDown - noseDownAngle) * 5.5;
@@ -3555,7 +3676,7 @@
 
         renderInavOsd320({
           callsign: fcProfile.wing.name.slice(0, 11),
-          modeLabel: this.launchTimer > 0 ? 'LAUNCH' : this.mode,
+          modeLabel: aeroEnv.failsafeTimer > 0 ? 'FS RTH' : (this.launchTimer > 0 ? 'LAUNCH' : this.mode),
           spdMs: this.spd,
           thrPct: this.thrCmd * 100,
           altM: this.py,
