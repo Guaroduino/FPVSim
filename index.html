@@ -10,19 +10,19 @@
   <title>RETRO-GO // ESP32-S3 + 2.8" ILI9341V IPS 320x240 RGB565 v10</title>
   <style>
     :root {
-      --case-main: #222530;
-      --case-dark: #15171e;
-      --bezel-black: #08090c;
-      --rg-red: #e53935;
-      --rg-gold: #ffb300;
-      --rg-cyan: #00e5ff;
-      --rg-green: #00e676;
-      --btn-a: #d32f2f;
-      --btn-b: #f57c00;
-      --btn-x: #1976d2;
-      --btn-y: #388e3c;
-      --text: #eceff4;
-      --muted: #9aa5b4;
+      --case-main: #2d3037;
+      --case-dark: #1e2025;
+      --bezel-black: #0e1013;
+      --rg-red: #e60012;
+      --rg-gold: #f5b000;
+      --rg-cyan: #009be6;
+      --rg-green: #1ac85c;
+      --btn-a: #e60012;
+      --btn-b: #f2b705;
+      --btn-x: #0078e8;
+      --btn-y: #18b24e;
+      --text: #f2f4f8;
+      --muted: #98a1ae;
     }
 
     * {
@@ -43,21 +43,21 @@
       inset: 0;
       background: var(--case-dark);
       color: var(--text);
-      font-family: 'JetBrains Mono', 'Consolas', monospace;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
       touch-action: none;
     }
 
-    /* Fullscreen Edge-to-Edge Console Shell on Mobile */
+    /* Fullscreen Edge-to-Edge Console Shell on Mobile — Nintendo Switch Dark Matte */
     .retrogo-shell {
       width: 100%;
       height: 100%;
       container-type: size;
-      background: linear-gradient(180deg, #2b2f3d 0%, #1e212b 55%, #15171f 100%);
+      background: #272a30;
       padding: env(safe-area-inset-top, 6px) 2.2vw env(safe-area-inset-bottom, 8px);
       display: flex;
       flex-direction: column;
       justify-content: space-between;
-      gap: 0.8dvh;
+      gap: 0.7dvh;
     }
 
     /* Only constrain width on large desktop PC monitors with mouse */
@@ -66,28 +66,30 @@
         display: flex;
         justify-content: center;
         align-items: center;
-        background: #090a0e;
+        background: #121316;
       }
       .retrogo-shell {
         max-width: 460px;
         max-height: 920px;
-        padding: 10px 12px;
-        border: 3px solid #3c4254;
-        border-radius: 28px;
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.9);
+        padding: 12px 14px;
+        border: 2px solid #3c4049;
+        border-radius: 32px;
+        box-shadow: 0 24px 64px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.08);
       }
     }
 
-    /* 1. Top Status Bar */
+    /* 1. Top Status Bar — Clean Matte Console Header */
     .shell-top-bar {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 0.7dvh 2vw;
-      background: #14161d;
-      border: 1px solid #313646;
-      border-radius: 8px;
-      font-size: clamp(0.65rem, 2.3cqw, 1.05rem);
+      padding: 0.6dvh 2.2vw;
+      background: #1d1f24;
+      border: 1px solid #343841;
+      border-radius: 999px;
+      font-size: clamp(0.62rem, 2.1cqw, 0.92rem);
+      font-weight: 700;
+      letter-spacing: 0.4px;
       flex-shrink: 0;
     }
 
@@ -95,20 +97,29 @@
       display: flex;
       align-items: center;
       gap: 1.2cqw;
+      color: #c8d0dc;
+    }
+
+    .nin-badge {
+      background: var(--rg-red);
+      color: #fff;
+      padding: 1px 6px;
+      border-radius: 999px;
+      font-size: 0.9em;
+      font-weight: 800;
+      letter-spacing: 0.6px;
     }
 
     .led {
-      width: clamp(7px, 1.8cqw, 12px);
-      height: clamp(7px, 1.8cqw, 12px);
+      width: clamp(6px, 1.5cqw, 9px);
+      height: clamp(6px, 1.5cqw, 9px);
       border-radius: 50%;
       background: var(--rg-green);
-      box-shadow: 0 0 6px var(--rg-green);
     }
 
     .led.sd-act {
       background: var(--rg-gold);
-      box-shadow: 0 0 6px var(--rg-gold);
-      opacity: 0.3;
+      opacity: 0.25;
       transition: opacity 0.08s;
     }
 
@@ -122,31 +133,32 @@
     }
 
     .pill-btn {
-      background: #232734;
-      color: var(--text);
-      border: 1.5px solid #404659;
-      border-radius: 6px;
-      padding: 0.5dvh 2cqw;
+      background: #2c3038;
+      color: #e4e8f0;
+      border: 1px solid #434854;
+      border-radius: 999px;
+      padding: 0.45dvh 2.2cqw;
       font-family: inherit;
-      font-size: clamp(0.64rem, 2.2cqw, 1rem);
+      font-size: clamp(0.6rem, 2cqw, 0.88rem);
       font-weight: 700;
+      letter-spacing: 0.3px;
       cursor: pointer;
+      transition: background 0.12s, border-color 0.12s;
     }
 
-    .pill-btn.active {
-      border-color: var(--rg-gold);
-      color: var(--rg-gold);
+    .pill-btn:active, .pill-btn.active {
+      background: var(--rg-red);
+      border-color: var(--rg-red);
+      color: #fff;
     }
 
-    /* 2. Retro-Go Screen Lens (128x64 Native 1-Bit OLED) */
+    /* 2. Screen Bezel — Clean Nintendo Handheld Lens */
     .screen-lens {
       background: var(--bezel-black);
-      border: 3px solid #141720;
-      border-radius: 12px 12px 20px 12px;
-      padding: 0.7dvh 2cqw 0.8dvh;
-      box-shadow:
-        inset 0 0 18px rgba(0, 0, 0, 1),
-        0 2px 0 rgba(255, 255, 255, 0.08);
+      border: 2px solid #1a1c21;
+      border-radius: 14px;
+      padding: 0.7dvh 1.8cqw;
+      box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.85), 0 1px 0 rgba(255, 255, 255, 0.06);
       display: flex;
       flex-direction: column;
       gap: 0.4dvh;
@@ -157,25 +169,12 @@
       display: none;
     }
 
-    .rg-stripe {
-      display: inline-flex;
-      gap: 3px;
-      align-items: center;
-    }
-
-    .rg-stripe i {
-      width: clamp(9px, 2.2cqw, 15px);
-      height: clamp(3px, 0.8cqw, 5px);
-      display: inline-block;
-      border-radius: 1px;
-    }
-
     .oled-container {
       width: min(100%, 46cqh);
       aspect-ratio: 4 / 3;
       margin: 0 auto;
-      background: #040609;
-      border: 2px solid #2b3344;
+      background: #08090c;
+      border: 1px solid #252932;
       border-radius: 6px;
       position: relative;
       overflow: hidden;
@@ -191,38 +190,11 @@
       display: block;
     }
 
-    .oled-container.pixel-grid::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background-image:
-        linear-gradient(to bottom, rgba(0, 0, 0, 0.18) 50%, transparent 50%);
-      background-size: 100% 2px;
-      pointer-events: none;
-    }
-
     .lens-branding {
       display: none;
     }
 
-    .rg-logo-text {
-      font-size: clamp(0.75rem, 2.8cqw, 1.25rem);
-      font-weight: 900;
-      font-style: italic;
-      letter-spacing: 1px;
-      color: #d8dee9;
-    }
-
-    .rg-logo-text span {
-      color: var(--rg-red);
-    }
-
-    .rg-sub-status {
-      font-size: clamp(0.58rem, 2cqw, 0.92rem);
-      color: var(--rg-gold);
-    }
-
-    /* 3. UPPER CONTROLS: DUAL ANALOG JOYSTICKS (WITH L3 / R3 INTEGRATED) */
+    /* 3. UPPER CONTROLS: DUAL ANALOG JOYSTICKS (JOY-CON MATTE STYLE) */
     .upper-joysticks-section {
       flex: 1.08;
       min-height: 0;
@@ -231,7 +203,7 @@
       gap: 2.5cqw;
       align-items: center;
       justify-items: center;
-      padding: 0.4dvh 1cqw;
+      padding: 0.3dvh 1cqw;
     }
 
     .stick-unit {
@@ -241,7 +213,7 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 0.7dvh;
+      gap: 0.6dvh;
       position: relative;
     }
 
@@ -258,41 +230,42 @@
     }
 
     .btn-stick-click {
-      background: #1b1f2a;
-      border: 2px solid #48526a;
-      color: var(--rg-cyan);
-      border-radius: 8px;
-      padding: 0.6dvh 2.6cqw;
+      background: #1f2228;
+      border: 1.5px solid #3c414d;
+      color: #c2cad6;
+      border-radius: 999px;
+      padding: 0.45dvh 2.8cqw;
       font-family: inherit;
-      font-size: clamp(0.68rem, 2.5cqw, 1.1rem);
-      font-weight: 800;
-      box-shadow: 0 3px 0 #0c0e13;
+      font-size: clamp(0.62rem, 2.2cqw, 0.95rem);
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      box-shadow: 0 2px 0 #121418;
     }
 
     .btn-stick-click.pressed {
       transform: translateY(2px);
-      background: var(--rg-cyan);
-      color: #000;
+      background: var(--rg-red);
+      border-color: var(--rg-red);
+      color: #fff;
     }
 
     .stick-canvas {
       width: min(44cqw, 26.5cqh);
       height: min(44cqw, 26.5cqh);
       aspect-ratio: 1 / 1;
-      background: radial-gradient(circle at center, #1a1f2b 0%, #0b0d13 100%);
-      border: 3px solid #3f485e;
+      background: radial-gradient(circle at center, #1c1f26 0%, #121419 100%);
+      border: 2.5px solid #373c47;
       border-radius: 50%;
       touch-action: none;
       display: block;
-      box-shadow: inset 0 6px 20px rgba(0, 0, 0, 0.95), 0 3px 8px rgba(255, 255, 255, 0.07);
+      box-shadow: inset 0 5px 14px rgba(0, 0, 0, 0.85), 0 1px 0 rgba(255, 255, 255, 0.06);
     }
 
     .stick-canvas.engaged {
-      border-color: var(--rg-gold);
-      box-shadow: inset 0 6px 20px rgba(0,0,0,0.95), 0 0 16px rgba(255, 179, 0, 0.45);
+      border-color: #636b7d;
     }
 
-    /* 4. LOWER CONTROLS: [D-PAD LEFT] — [SELECT / MENU CENTER] — [4 DIAMOND BUTTONS RIGHT] */
+    /* 4. LOWER CONTROLS: [D-PAD LEFT] — [SELECT / + MENU CENTER] — [4 ABXY BUTTONS RIGHT] */
     .lower-controls-deck {
       flex: 1.05;
       min-height: 0;
@@ -302,9 +275,9 @@
       justify-items: center;
       gap: 1.5cqw;
       padding: 0.8dvh 1.5cqw 1dvh;
-      background: rgba(12, 14, 20, 0.42);
-      border-top: 1.5px solid rgba(255, 255, 255, 0.08);
-      border-radius: 20px;
+      background: #202329;
+      border: 1px solid #323640;
+      border-radius: 22px;
     }
 
     .hw-btn {
@@ -315,15 +288,15 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      transition: transform 0.04s;
+      transition: transform 0.04s, background 0.08s;
     }
 
     .hw-btn.pressed {
       transform: translateY(2px);
-      filter: brightness(1.3);
+      filter: brightness(1.18);
     }
 
-    /* Classic Cross D-Pad (Left Side) - Scaled to fill left zone */
+    /* Nintendo Matte Cross D-Pad (Left Side) */
     .dpad-cross {
       width: min(37cqw, 25cqh);
       height: min(37cqw, 25cqh);
@@ -332,81 +305,82 @@
 
     .dpad-arm {
       position: absolute;
-      background: linear-gradient(180deg, #323848 0%, #1d202b 100%);
-      border: 2.5px solid #4a5268;
-      color: #d0d8e8;
-      font-size: clamp(1rem, 4.2cqw, 1.9rem);
-      box-shadow: 0 4px 0 #090b10, 0 6px 12px rgba(0,0,0,0.55);
+      background: #2c3038;
+      border: 2px solid #414652;
+      color: #98a2b3;
+      font-size: clamp(0.85rem, 3.6cqw, 1.55rem);
+      box-shadow: 0 3px 0 #111317, 0 5px 10px rgba(0,0,0,0.45);
     }
 
     .dpad-arm.pressed {
-      background: #41495f;
-      color: var(--rg-gold);
-      border-color: var(--rg-gold);
+      background: #3b404b;
+      color: #fff;
+      border-color: #687082;
     }
 
     .dpad-up {
       top: 0; left: 33%; width: 34%; height: 36%;
-      border-radius: 18% 18% 0 0;
+      border-radius: 16% 16% 0 0;
       border-bottom: none;
     }
     .dpad-down {
       bottom: 0; left: 33%; width: 34%; height: 36%;
-      border-radius: 0 0 18% 18%;
+      border-radius: 0 0 16% 16%;
       border-top: none;
     }
     .dpad-left {
       top: 33%; left: 0; width: 36%; height: 34%;
-      border-radius: 18% 0 0 18%;
+      border-radius: 16% 0 0 16%;
       border-right: none;
     }
     .dpad-right {
       top: 33%; right: 0; width: 36%; height: 34%;
-      border-radius: 0 18% 18% 0;
+      border-radius: 0 16% 16% 0;
       border-left: none;
     }
     .dpad-center {
       position: absolute;
       top: 33%; left: 33%; width: 34%; height: 34%;
-      background: #242834;
+      background: #2c3038;
       pointer-events: none;
     }
     .dpad-center::after {
       content: "";
       position: absolute;
-      inset: 20%;
+      inset: 22%;
       border-radius: 50%;
-      background: radial-gradient(circle, #141720 20%, #292e3d 100%);
+      background: radial-gradient(circle, #1f2228 25%, #282c34 100%);
     }
 
-    /* Center 2 System Buttons (SELECT + START/MENU) */
+    /* Center 2 System Buttons (− SELECT & + MENU) */
     .center-sys-cluster {
       display: flex;
       flex-direction: column;
-      gap: 2.2cqh;
+      gap: 2cqh;
       align-items: center;
       justify-content: center;
       padding: 0 0.5cqw;
     }
 
     .btn-sys-pill {
-      width: clamp(74px, 19.5cqw, 140px);
-      height: clamp(36px, 5.4cqh, 62px);
-      background: #1a1e28;
-      border: 2.5px solid #4e566e;
+      width: clamp(72px, 19cqw, 134px);
+      height: clamp(34px, 5.1cqh, 56px);
+      background: #2b2f37;
+      border: 2px solid #434854;
       border-radius: 999px;
-      color: #dce3ef;
-      font-size: clamp(0.72rem, 2.5cqw, 1.18rem);
-      letter-spacing: 0.6px;
-      box-shadow: 0 4px 0 #0a0c10, 0 5px 10px rgba(0,0,0,0.45);
+      color: #d8dee8;
+      font-size: clamp(0.68rem, 2.3cqw, 1.05rem);
+      letter-spacing: 0.5px;
+      box-shadow: 0 3px 0 #111317, 0 4px 8px rgba(0,0,0,0.35);
     }
 
     .btn-sys-pill.menu-pill {
-      border-color: var(--rg-red);
-      color: var(--rg-gold);
+      background: var(--rg-red);
+      border-color: #ff3b47;
+      color: #ffffff;
     }
 
-    /* 4 Action Buttons in Classic Diamond (X Top, Y Left, A Right, B Bottom) - Scaled to fill right zone */
+    /* 4 Action Buttons in Classic Nintendo Diamond (X Top, Y Left, A Right, B Bottom) */
     .diamond-cluster {
       width: min(38cqw, 25.5cqh);
       height: min(38cqw, 25.5cqh);
@@ -418,22 +392,23 @@
       width: 36%;
       height: 36%;
       border-radius: 50%;
-      background: radial-gradient(circle at 35% 30%, #3d4356, #1d202b);
-      border: 3px solid #525a72;
-      color: #fff;
-      font-size: clamp(0.95rem, 3.8cqw, 1.75rem);
+      background: #2c3038;
+      border: 2.5px solid #494f5c;
+      color: #ffffff;
+      font-size: clamp(0.92rem, 3.6cqw, 1.65rem);
       line-height: 1;
-      box-shadow: 0 5px 0 #090b10, 0 6px 12px rgba(0,0,0,0.6);
+      box-shadow: 0 4px 0 #111317, 0 5px 10px rgba(0,0,0,0.5);
     }
 
     .btn-diamond small {
-      font-size: clamp(0.54rem, 1.95cqw, 0.9rem);
-      color: #d4dce8;
+      font-size: clamp(0.5rem, 1.8cqw, 0.82rem);
+      color: #b0b8c5;
       font-weight: 700;
       margin-top: 2px;
+      letter-spacing: 0.3px;
     }
 
-    /* Posiciones del Diamante en porcentaje: X arriba, Y izquierda, A derecha, B abajo */
+    /* Posiciones del Diamante con acento limpio estilo SNES/Switch */
     .btn-diamond.pos-top {
       top: 0; left: 32%;
       border-color: var(--btn-x);
@@ -444,6 +419,7 @@
     }
     .btn-diamond.pos-right {
       top: 32%; right: 0;
+      background: #342629;
       border-color: var(--btn-a);
     }
     .btn-diamond.pos-bottom {
@@ -457,28 +433,22 @@
     <!-- 1. Top Hardware Bar -->
     <header class="shell-top-bar">
       <div class="led-cluster">
+        <span class="nin-badge">S3</span>
         <span class="led" title="Power ON"></span>
-        <span>PWR</span>
         <span id="sdLed" class="led sd-act" title="Flash / SD Activity"></span>
-        <span>SPI</span>
-        <span style="color:#828c9e;margin-left:3px;">S3 N16R8 + COMANCHE 3D (v56)</span>
+        <span style="color:#a6b0bf;">N16R8 • 320×240 IPS</span>
       </div>
       <div class="top-hw-pills">
-        <a href="hardware.html" class="pill-btn" style="text-decoration:none;display:inline-flex;align-items:center;" title="Ver Guía y Diagrama de Conexiones ESP32-S3 N16R8">🔌 PINOUT</a>
-        <button id="btnPalette" class="pill-btn" title="Cambiar Modo de Pantalla SPI / IPS / 1-Bit">🎨 IPS 60MHz</button>
+        <button id="btnSound" class="pill-btn" title="Activar / Silenciar Sintetizador de Audio Físico I2S">🔇 AUDIO</button>
+        <button id="btnBleMp" class="pill-btn" title="Multijugador Bluetooth BLE / Pestaña Local (ESP32-S3 NimBLE)">📡 BLE MP</button>
+        <a href="hardware.html" class="pill-btn" style="text-decoration:none;display:inline-flex;align-items:center;" title="Ver Guía y Diagrama de Conexiones ESP32-S3 N16R8">PINOUT</a>
+        <button id="btnPalette" class="pill-btn" title="Cambiar Modo de Pantalla SPI / IPS / 1-Bit">IPS 60MHz</button>
       </div>
     </header>
 
-    <!-- 2. Retro-Go 2.8" 320x240 IPS RGB565 ILI9341V + Capacitive Touch Screen Lens -->
+    <!-- 2. 2.8" 320x240 IPS RGB565 ILI9341V + Capacitive Touch Screen Lens -->
     <section class="screen-lens">
       <div class="lens-header">
-        <div class="rg-stripe">
-          <i style="background:#e53935"></i>
-          <i style="background:#ffb300"></i>
-          <i style="background:#00e676"></i>
-          <i style="background:#00e5ff"></i>
-          <span style="margin-left:4px;">2.8" IPS 320×240 RGB565 (ILI9341V + TOUCH)</span>
-        </div>
         <span id="uiFpsBattery">60FPS | DMA 60MHz</span>
       </div>
 
@@ -487,7 +457,6 @@
       </div>
 
       <div class="lens-branding">
-        <div class="rg-logo-text">RETRO<span>-GO</span> <small style="font-size:0.55em;color:#8b9bb4;font-style:normal;">ILI9341V + FT6336</small></div>
         <div id="uiHintBar" class="rg-sub-status">TOUCH/DPAD/STICK:NAV | A:RUN | MENU:OSD</div>
       </div>
     </section>
@@ -497,7 +466,7 @@
       <div class="stick-unit">
         <div class="stick-top-row">
           <span id="readoutLeft" class="stick-adc-label">L:2048,2048</span>
-          <button class="hw-btn btn-stick-click" data-btn="L3">L3 CLICK</button>
+          <button class="hw-btn btn-stick-click" data-btn="L3">L3 STICK</button>
         </div>
         <canvas id="stickLeft" class="stick-canvas" width="200" height="200"></canvas>
       </div>
@@ -505,7 +474,7 @@
       <div class="stick-unit">
         <div class="stick-top-row">
           <span id="readoutRight" class="stick-adc-label">R:2048,2048</span>
-          <button class="hw-btn btn-stick-click" data-btn="R3">R3 CLICK</button>
+          <button class="hw-btn btn-stick-click" data-btn="R3">R3 STICK</button>
         </div>
         <canvas id="stickRight" class="stick-canvas" width="200" height="200"></canvas>
       </div>
@@ -522,10 +491,10 @@
         <div class="dpad-center"></div>
       </div>
 
-      <!-- Center: 2 System Buttons (SELECT & MENU/START) -->
+      <!-- Center: 2 System Buttons (− SELECT & + MENU) -->
       <div class="center-sys-cluster">
-        <button class="hw-btn btn-sys-pill" data-btn="SELECT">SELECT</button>
-        <button class="hw-btn btn-sys-pill menu-pill" data-btn="MENU">★ MENU</button>
+        <button class="hw-btn btn-sys-pill" data-btn="SELECT">− SELECT</button>
+        <button class="hw-btn btn-sys-pill menu-pill" data-btn="MENU">+ MENU</button>
       </div>
 
       <!-- Right: 4 Action Buttons in Diamond Layout (X Top, Y Left, A Right, B Bottom) -->
@@ -827,28 +796,11 @@
     };
 
     function fbDrawText(str, x, y, color = 1) {
-      const s = String(str).toUpperCase();
       const c = resolveColor565(color);
-      let cx = Math.round(x * SCALE_X);
-      const cy = Math.round(y * SCALE_Y);
-      for (let i = 0; i < s.length; i++) {
-        const g = FONT_3X5[s[i]];
-        if (g) {
-          for (let r = 0; r < 5; r++) {
-            const b = g[r];
-            for (let col = 0; col < 3; col++) {
-              if (b & (4 >> col)) {
-                const px = cx + col * 2;
-                const py = cy + r * 3;
-                for (let dy = 0; dy < 3; dy++) {
-                  fbSetPixel320(px, py + dy, c);
-                  fbSetPixel320(px + 1, py + dy, c);
-                }
-              }
-            }
-          }
-        }
-        cx += 10;
+      const px = Math.round(x * SCALE_X);
+      const py = Math.round(y * SCALE_Y);
+      if (typeof drawInavText320 === 'function') {
+        drawInavText320(str, px, py, c);
       }
     }
 
@@ -866,10 +818,184 @@
     }
 
     /***************************************************************************
-     * 2. AUDIO SINTETIZADO RETRO-GO
+     * 2. SINTETIZADOR DE AUDIO FÍSICO CONTINUO (I2S / LEDC) + MULTIJUGADOR BLE
      ***************************************************************************/
     let audioCtx = null;
     let soundEnabled = false;
+
+    // Nodos persistentes del sintetizador físico (0 allocs por frame, paridad con 2 canales hardware + ruido filtrado)
+    const physSynth = {
+      ready: false,
+      osc1: null,
+      osc2: null,
+      gain1: null,
+      gain2: null,
+      noiseNode: null,
+      noiseFilter: null,
+      noiseGain: null,
+      varioTimer: 0.0
+    };
+
+    function initPhysicalSynth() {
+      if (physSynth.ready) return;
+      try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+
+        physSynth.osc1  = audioCtx.createOscillator();
+        physSynth.osc2  = audioCtx.createOscillator();
+        physSynth.gain1 = audioCtx.createGain();
+        physSynth.gain2 = audioCtx.createGain();
+
+        physSynth.osc1.type = 'sawtooth';
+        physSynth.osc2.type = 'triangle';
+        physSynth.osc1.frequency.value = 180;
+        physSynth.osc2.frequency.value = 240;
+        physSynth.gain1.gain.value = 0.0;
+        physSynth.gain2.gain.value = 0.0;
+
+        physSynth.osc1.connect(physSynth.gain1);
+        physSynth.osc2.connect(physSynth.gain2);
+        physSynth.gain1.connect(audioCtx.destination);
+        physSynth.gain2.connect(audioCtx.destination);
+        physSynth.osc1.start();
+        physSynth.osc2.start();
+
+        // Buffer circular estático de 1 segundo de ruido blanco para viento, agua, spray, derrape y grava
+        const sr = audioCtx.sampleRate || 44100;
+        const nBuf = audioCtx.createBuffer(1, sr, sr);
+        const data = nBuf.getChannelData(0);
+        let lfsr = 0xACE1;
+        for (let i = 0; i < sr; i++) {
+          lfsr ^= (lfsr << 13); lfsr ^= (lfsr >> 17); lfsr ^= (lfsr << 5);
+          data[i] = ((lfsr & 0xFFFF) / 32768.0) - 1.0;
+        }
+        physSynth.noiseNode = audioCtx.createBufferSource();
+        physSynth.noiseNode.buffer = nBuf;
+        physSynth.noiseNode.loop = true;
+
+        physSynth.noiseFilter = audioCtx.createBiquadFilter();
+        physSynth.noiseFilter.type = 'bandpass';
+        physSynth.noiseFilter.frequency.value = 800;
+        physSynth.noiseFilter.Q.value = 1.4;
+
+        physSynth.noiseGain = audioCtx.createGain();
+        physSynth.noiseGain.gain.value = 0.0;
+
+        physSynth.noiseNode.connect(physSynth.noiseFilter);
+        physSynth.noiseFilter.connect(physSynth.noiseGain);
+        physSynth.noiseGain.connect(audioCtx.destination);
+        physSynth.noiseNode.start();
+
+        physSynth.ready = true;
+      } catch (_) {}
+    }
+
+    function updatePhysicalSynthAudio(dt) {
+      if (!soundEnabled || !physSynth.ready || !audioCtx) return;
+      if (osState !== 'ingame' || rgOverlayOpen || activeRomId === 'hwtest') {
+        physSynth.gain1.gain.value = 0.0;
+        physSynth.gain2.gain.value = 0.0;
+        physSynth.noiseGain.gain.value = 0.0;
+        return;
+      }
+
+      if (activeRomId === 'fpv_drone') {
+        const rpmAvg = fpvDroneSim.motorRpm || 0.35;
+        const diffRpm = Math.abs(fpvDroneSim.mRpm[0] - fpvDroneSim.mRpm[2]) + Math.abs(fpvDroneSim.mRpm[1] - fpvDroneSim.mRpm[3]);
+        physSynth.osc1.type = 'sawtooth';
+        physSynth.osc2.type = 'square';
+        physSynth.osc1.frequency.value = 165 + rpmAvg * 640;
+        physSynth.osc2.frequency.value = 172 + rpmAvg * 665 + diffRpm * 140;
+        physSynth.gain1.gain.value = 0.022 + rpmAvg * 0.028;
+        physSynth.gain2.gain.value = 0.012 + Math.min(0.025, diffRpm * 0.04);
+        physSynth.noiseFilter.frequency.value = 520 + Math.min(2200, fpvDroneSim.spd * 75);
+        physSynth.noiseGain.gain.value = Math.min(0.032, (fpvDroneSim.spd / 32.0) * 0.025);
+      } else if (activeRomId === 'fpv_wing') {
+        const rpm = fpvWingSim.motorRpm || 0.0;
+        physSynth.osc1.type = 'sawtooth';
+        physSynth.osc2.type = 'triangle';
+        physSynth.osc1.frequency.value = 130 + rpm * 520;
+        physSynth.osc2.frequency.value = 260 + rpm * 1040;
+        physSynth.gain1.gain.value = rpm > 0.03 ? (0.012 + rpm * 0.026) : 0.0;
+        physSynth.gain2.gain.value = rpm > 0.03 ? (0.008 + rpm * 0.016) : 0.0;
+        const stallNoise = aeroEnv.stallWarn ? 0.038 : 0.0;
+        physSynth.noiseFilter.frequency.value = aeroEnv.stallWarn ? 220 : (440 + fpvWingSim.spd * 62);
+        physSynth.noiseGain.gain.value = Math.min(0.040, (fpvWingSim.spd / 28.0) * 0.022 + stallNoise);
+        // Variómetro acústico cuando sube en térmica (vy > +1.2 m/s)
+        physSynth.varioTimer -= dt;
+        if (fpvWingSim.vy > 1.2 && physSynth.varioTimer <= 0) {
+          physSynth.varioTimer = Math.max(0.14, 0.42 - fpvWingSim.vy * 0.05);
+          playTone(Math.min(1480, 740 + fpvWingSim.vy * 95), 0.045, 'sine', 0.025);
+        }
+      } else if (activeRomId === 'rc_sailboat') {
+        const spdRatio = Math.min(1.0, rcSailboatSim.spd / 4.2);
+        const luff = (rcSailboatSim.mainLuffing || rcSailboatSim.inIrons) ? 1.0 : 0.0;
+        physSynth.osc1.type = 'sine';
+        physSynth.osc2.type = 'triangle';
+        physSynth.osc1.frequency.value = 95 + spdRatio * 90 + (luff ? Math.sin(aeroEnv.time * 34.0) * 28 : 0);
+        physSynth.osc2.frequency.value = 140 + Math.abs(rcSailboatSim.heelAngle) * 110;
+        physSynth.gain1.gain.value = 0.006 + spdRatio * 0.012 + luff * 0.010;
+        physSynth.gain2.gain.value = 0.004 + spdRatio * 0.008;
+        physSynth.noiseFilter.frequency.value = luff ? (320 + Math.sin(aeroEnv.time * 28.0) * 110) : (480 + spdRatio * 950);
+        physSynth.noiseGain.gain.value = 0.010 + spdRatio * 0.028 + luff * 0.018;
+      } else if (activeRomId === 'rc_boat' && typeof rcBoatSim !== 'undefined') {
+        const thr = Math.abs(rcBoatSim.thrCmd);
+        const spdRatio = Math.min(1.0, rcBoatSim.spd / 22.0);
+        const airBoost = rcBoatSim.airborne ? 1.32 : 1.0;
+        physSynth.osc1.type = 'sawtooth';
+        physSynth.osc2.type = 'square';
+        physSynth.osc1.frequency.value = (145 + thr * 560 + spdRatio * 220) * airBoost;
+        physSynth.osc2.frequency.value = (290 + thr * 1120) * airBoost;
+        physSynth.gain1.gain.value = 0.012 + thr * 0.028;
+        physSynth.gain2.gain.value = 0.008 + thr * 0.018;
+        physSynth.noiseFilter.frequency.value = 680 + spdRatio * 1450;
+        physSynth.noiseGain.gain.value = rcBoatSim.airborne ? 0.008 : (0.010 + spdRatio * 0.036);
+      } else if (activeRomId === 'rc_car') {
+        const spdRatio = Math.min(1.0, rcCarSim.spd / 18.0);
+        const slip = rcCarSim.slipDeg >= 15 && !rcCarSim.airborne ? Math.min(1.0, (rcCarSim.slipDeg - 12) / 30.0) : 0.0;
+        physSynth.osc1.type = 'sawtooth';
+        physSynth.osc2.type = 'sine';
+        physSynth.osc1.frequency.value = 110 + spdRatio * 460 + Math.abs(rcCarSim.thrCmd) * 120;
+        physSynth.osc2.frequency.value = slip > 0 ? (920 + slip * 480 + Math.sin(aeroEnv.time * 48.0) * 65) : (220 + spdRatio * 920);
+        physSynth.gain1.gain.value = 0.012 + spdRatio * 0.024;
+        physSynth.gain2.gain.value = slip > 0 ? (0.014 + slip * 0.024) : (0.006 + spdRatio * 0.012);
+        physSynth.noiseFilter.frequency.value = rcCarSim.onTrack ? (1200 + slip * 1100) : 420;
+        physSynth.noiseGain.gain.value = slip * 0.028 + (!rcCarSim.onTrack ? spdRatio * 0.026 : 0.0);
+      } else if (activeRomId === 'rc_crawler' && typeof rcCrawlerSim !== 'undefined') {
+        const spdRatio = Math.min(1.0, rcCrawlerSim.spd / 6.0);
+        const gearMul  = rcCrawlerSim.lowGear ? 1.55 : 1.0;
+        const load     = Math.min(1.0, Math.abs(rcCrawlerSim.thrCmd) + Math.abs(rcCrawlerSim.pitchRad) * 1.2);
+        physSynth.osc1.type = 'sawtooth';
+        physSynth.osc2.type = 'triangle';
+        physSynth.osc1.frequency.value = 68 + (spdRatio * 190 + Math.abs(rcCrawlerSim.thrCmd) * 110) * gearMul;
+        physSynth.osc2.frequency.value = 136 + (spdRatio * 380 + load * 95) * gearMul;
+        physSynth.gain1.gain.value = 0.012 + load * 0.024;
+        physSynth.gain2.gain.value = 0.008 + spdRatio * 0.016;
+        physSynth.noiseFilter.frequency.value = 260 + spdRatio * 350;
+        physSynth.noiseGain.gain.value = spdRatio * 0.020;
+      }
+    }
+
+    function toggleSoundSynth() {
+      soundEnabled = !soundEnabled;
+      if (soundEnabled) {
+        initPhysicalSynth();
+        playTone(880, 0.06);
+      } else if (physSynth.ready) {
+        physSynth.gain1.gain.value = 0.0;
+        physSynth.gain2.gain.value = 0.0;
+        physSynth.noiseGain.gain.value = 0.0;
+      }
+      const btnSnd = document.getElementById('btnSound');
+      if (btnSnd) {
+        btnSnd.textContent = soundEnabled ? '🔊 AUDIO ON' : '🔇 AUDIO';
+        btnSnd.classList.toggle('active', soundEnabled);
+      }
+      if (typeof showToast === 'function') {
+        showToast(soundEnabled ? 'AUDIO SINTETIZADO I2S: ON' : 'AUDIO: SILENCIADO');
+      }
+    }
 
     function playTone(freq = 600, dur = 0.05, type = 'square', vol = 0.04) {
       if (!soundEnabled) return;
@@ -887,6 +1013,158 @@
         gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + dur);
         osc.stop(audioCtx.currentTime + dur + 0.01);
       } catch (_) {}
+    }
+
+    // =========================================================================
+    // MULTIJUGADOR BLUETOOTH BLE 20-BYTE GATT PACKET (ESP32-S3 NimBLE + WebBluetooth + Local)
+    // =========================================================================
+    const BLE_SIM_CODE = { fpv_wing: 0, fpv_drone: 1, rc_sailboat: 2, rc_boat: 3, rc_car: 4, rc_crawler: 5 };
+    const BLE_CODE_SIM = ['fpv_wing', 'fpv_drone', 'rc_sailboat', 'rc_boat', 'rc_car', 'rc_crawler'];
+
+    const bleMp = {
+      enabled: true,
+      txBuf: new Uint8Array(20),
+      txView: null,
+      channel: null,
+      bleChar: null,
+      bleConnected: false,
+      txTimer: 0.0,
+      peerActive: false,
+      peerLastRx: 0.0,
+      peerSimId: 'rc_sailboat',
+      peerPreset: 0,
+      px: 0.0, py: 0.0, pz: 0.0,
+      vx: 0.0, vz: 0.0,
+      yaw: 0.0, pitch: 0.0, roll: 0.0,
+      spd: 0.0, aux: 0.0
+    };
+    bleMp.txView = new DataView(bleMp.txBuf.buffer);
+
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        bleMp.channel = new BroadcastChannel('fpvsim_s3_ble_mp');
+        bleMp.channel.onmessage = (ev) => {
+          if (ev.data && ev.data.byteLength === 20) {
+            onBleMpPacketReceived(new DataView(ev.data));
+          }
+        };
+      }
+    } catch (_) {}
+
+    function onBleMpPacketReceived(dv) {
+      if (dv.getUint8(0) !== 0xA5) return;
+      const simCode = dv.getUint8(1);
+      bleMp.peerSimId  = BLE_CODE_SIM[simCode] || 'fpv_wing';
+      bleMp.peerPreset = dv.getUint8(2);
+      const newPx = dv.getInt16(4, true)  * 0.05;
+      const newPy = dv.getInt16(6, true)  * 0.05;
+      const newPz = dv.getInt16(8, true)  * 0.05;
+      const dtRx  = Math.max(0.02, Math.min(0.25, (performance.now() - bleMp.peerLastRx) * 0.001));
+      bleMp.vx    = (newPx - bleMp.px) / dtRx;
+      bleMp.vz    = (newPz - bleMp.pz) / dtRx;
+      bleMp.px    = newPx;
+      bleMp.py    = newPy;
+      bleMp.pz    = newPz;
+      bleMp.yaw   = dv.getInt16(10, true) * 0.001;
+      bleMp.pitch = dv.getInt16(12, true) * 0.001;
+      bleMp.roll  = dv.getInt16(14, true) * 0.001;
+      bleMp.spd   = dv.getUint16(16, true) * 0.01;
+      bleMp.aux   = dv.getInt16(18, true) * 0.001;
+      bleMp.peerLastRx = performance.now();
+      bleMp.peerActive = true;
+    }
+
+    async function connectWebBluetoothPeer() {
+      if (!navigator.bluetooth) {
+        showToast('BLE LOCAL ACTIVO (ABRE OTRA PESTAÑA)');
+        return;
+      }
+      try {
+        showToast('BUSCANDO ESP32-S3 BLE...');
+        const dev = await navigator.bluetooth.requestDevice({
+          filters: [{ services: [0xFFE0] }, { namePrefix: 'ESP32' }, { namePrefix: 'FPVSim' }],
+          optionalServices: [0xFFE0]
+        });
+        const srv = await dev.gatt.connect();
+        const svc = await srv.getPrimaryService(0xFFE0);
+        const chr = await svc.getCharacteristic(0xFFE1);
+        await chr.startNotifications();
+        chr.addEventListener('characteristicvaluechanged', (e) => {
+          if (e.target.value && e.target.value.byteLength >= 20) {
+            onBleMpPacketReceived(e.target.value);
+          }
+        });
+        bleMp.bleChar = chr;
+        bleMp.bleConnected = true;
+        const btnBle = document.getElementById('btnBleMp');
+        if (btnBle) {
+          btnBle.textContent = '📡 BLE OK';
+          btnBle.classList.add('active');
+        }
+        showToast('CONECTADO A ESP32-S3 BLE!');
+        playTone(960, 0.08);
+      } catch (_) {
+        showToast('SYNC LOCAL ACTIVO (2 PESTAÑAS)');
+      }
+    }
+
+    function stepAndBroadcastBleMp(dt) {
+      if (!bleMp.enabled) return;
+      if (bleMp.peerActive) {
+        if (performance.now() - bleMp.peerLastRx > 3000) {
+          bleMp.peerActive = false;
+        } else {
+          bleMp.px += bleMp.vx * dt * 0.5;
+          bleMp.pz += bleMp.vz * dt * 0.5;
+        }
+      }
+      bleMp.txTimer += dt;
+      if (bleMp.txTimer < 0.05) return; // 20 Hz GATT Notification rate
+      bleMp.txTimer = 0.0;
+
+      const sim = getActiveSimObject();
+      if (!sim) return;
+      const dv = bleMp.txView;
+      dv.setUint8(0, 0xA5);
+      dv.setUint8(1, BLE_SIM_CODE[activeRomId] || 0);
+      dv.setUint8(2, sim.presetIdx || 0);
+      dv.setUint8(3, 0);
+      dv.setInt16(4,  Math.max(-32767, Math.min(32767, Math.round(sim.px * 20.0))), true);
+      dv.setInt16(6,  Math.max(-32767, Math.min(32767, Math.round(sim.py * 20.0))), true);
+      dv.setInt16(8,  Math.max(-32767, Math.min(32767, Math.round(sim.pz * 20.0))), true);
+      const yawVal = sim.yaw !== undefined ? sim.yaw : Math.atan2(sim.fx || 0, sim.fz || 1);
+      const pitVal = sim.suspPitch !== undefined ? sim.suspPitch : (sim.wavePitch || sim.pitchRad || 0);
+      const rolVal = sim.heelAngle !== undefined ? sim.heelAngle : (sim.suspRoll  || sim.rollRad  || 0);
+      dv.setInt16(10, Math.round(yawVal * 1000.0), true);
+      dv.setInt16(12, Math.round(pitVal * 1000.0), true);
+      dv.setInt16(14, Math.round(rolVal * 1000.0), true);
+      dv.setUint16(16, Math.min(65535, Math.round((sim.spd || 0) * 100.0)), true);
+      dv.setInt16(18, Math.round((sim.boomAngle || sim.steerAngle || 0) * 1000.0), true);
+
+      if (bleMp.channel) {
+        try { bleMp.channel.postMessage(bleMp.txBuf.buffer.slice(0)); } catch (_) {}
+      }
+      if (bleMp.bleConnected && bleMp.bleChar) {
+        try { bleMp.bleChar.writeValueWithoutResponse(bleMp.txBuf); } catch (_) {}
+      }
+    }
+
+    function renderRemoteBlePlayer320(projPoint320, projLine) {
+      if (!bleMp.enabled || !bleMp.peerActive || bleMp.peerSimId !== activeRomId) return;
+      const pTag = projPoint320(bleMp.px, bleMp.py + 2.4, bleMp.pz);
+      if (pTag && pTag.sx > 8 && pTag.sx < DISP_W - 8 && pTag.sy > 8 && pTag.sy < DISP_H - 8) {
+        drawInavCircleDot320(pTag.sx, pTag.sy, 3, C565.CYAN);
+        drawOsdSmall320('P2 BLE', pTag.sx - 14, pTag.sy - 10, C565.CYAN);
+      }
+      const cY = Math.cos(bleMp.yaw), sY = Math.sin(bleMp.yaw);
+      const nose = projPoint320(bleMp.px + sY * 1.8, bleMp.py + 0.4, bleMp.pz + cY * 1.8);
+      const tail = projPoint320(bleMp.px - sY * 1.8, bleMp.py + 0.4, bleMp.pz - cY * 1.8);
+      const lft  = projPoint320(bleMp.px - cY * 1.2, bleMp.py + 0.4, bleMp.pz + sY * 1.2);
+      const rgt  = projPoint320(bleMp.px + cY * 1.2, bleMp.py + 0.4, bleMp.pz - sY * 1.2);
+      if (nose && tail && lft && rgt) {
+        fillTriangle320(nose, rgt, lft, C565.CYAN);
+        fillTriangle320(tail, lft, rgt, C565.MAGENTA);
+      }
     }
 
     /***************************************************************************
@@ -1057,51 +1335,55 @@
     function drawThumbstickWell(ctxG, canvasEl, x, y, active, clicked, label, holdLevel = -1) {
       const w = canvasEl.width, h = canvasEl.height;
       const cx = w * 0.5, cy = h * 0.5, maxR = w * 0.36;
-      const capR = w * 0.21;
+      const capR = w * 0.22;
       ctxG.clearRect(0, 0, w, h);
 
-      ctxG.strokeStyle = active ? 'rgba(255, 179, 0, 0.5)' : 'rgba(154, 165, 180, 0.22)';
-      ctxG.lineWidth = 2;
+      // Anillos guía sutiles estilo Nintendo Pro Controller
+      ctxG.strokeStyle = active ? 'rgba(230, 0, 18, 0.42)' : 'rgba(152, 161, 174, 0.16)';
+      ctxG.lineWidth = 1.5;
       ctxG.beginPath(); ctxG.arc(cx, cy, maxR, 0, Math.PI * 2); ctxG.stroke();
-      ctxG.beginPath(); ctxG.arc(cx, cy, maxR * 0.52, 0, Math.PI * 2); ctxG.stroke();
+      ctxG.beginPath(); ctxG.arc(cx, cy, maxR * 0.50, 0, Math.PI * 2); ctxG.stroke();
 
       ctxG.beginPath();
-      ctxG.moveTo(cx - maxR, cy); ctxG.lineTo(cx + maxR, cy);
-      ctxG.moveTo(cx, cy - maxR); ctxG.lineTo(cx, cy + maxR);
+      ctxG.moveTo(cx - maxR * 0.85, cy); ctxG.lineTo(cx + maxR * 0.85, cy);
+      ctxG.moveTo(cx, cy - maxR * 0.85); ctxG.lineTo(cx, cy + maxR * 0.85);
       ctxG.stroke();
 
-      // Si el modo de acelerador fijo/incremental (Throttle Hold) está activo en Ala Fija, dibujar la barra del nivel fijado
+      // Si el modo de acelerador fijo/incremental (Throttle Hold) está activo, dibujar indicador limpio
       if (holdLevel >= 0) {
         const hy = cy - (holdLevel * 2.0 - 1.0) * maxR;
-        ctxG.strokeStyle = '#00e676';
-        ctxG.lineWidth = 3;
+        ctxG.strokeStyle = '#1ac85c';
+        ctxG.lineWidth = 2.5;
         ctxG.beginPath();
-        ctxG.moveTo(cx - maxR * 0.72, hy);
-        ctxG.lineTo(cx + maxR * 0.72, hy);
+        ctxG.moveTo(cx - maxR * 0.68, hy);
+        ctxG.lineTo(cx + maxR * 0.68, hy);
         ctxG.stroke();
-        ctxG.fillStyle = '#00e676';
-        ctxG.font = 'bold 11px monospace';
+        ctxG.fillStyle = '#98a1ae';
+        ctxG.font = '700 10px sans-serif';
         ctxG.textAlign = 'center';
-        ctxG.fillText(`HOLD ${Math.round(holdLevel * 100)}%`, cx, h - 10);
+        ctxG.fillText(`THR ${Math.round(holdLevel * 100)}%`, cx, h - 10);
       }
 
       const kx = cx + x * maxR;
       const ky = cy - y * maxR;
 
-      ctxG.strokeStyle = '#5c6375';
-      ctxG.lineWidth = 10;
+      // Eje central del stick
+      ctxG.strokeStyle = '#383d48';
+      ctxG.lineWidth = 11;
       ctxG.lineCap = 'round';
       ctxG.beginPath(); ctxG.moveTo(cx, cy); ctxG.lineTo(kx, ky); ctxG.stroke();
 
-      ctxG.fillStyle = clicked ? '#e53935' : (active ? '#3e4454' : '#2b303c');
+      // Capuchón cóncavo mate estilo Joy-Con
+      ctxG.fillStyle = clicked ? '#e60012' : (active ? '#343944' : '#282c34');
       ctxG.beginPath(); ctxG.arc(kx, ky, capR, 0, Math.PI * 2); ctxG.fill();
-      ctxG.lineWidth = 3;
-      ctxG.strokeStyle = clicked ? '#ffb300' : (active ? '#00e5ff' : '#586178');
+      ctxG.lineWidth = 2.5;
+      ctxG.strokeStyle = clicked ? '#ff6b75' : (active ? '#e60012' : '#454b58');
       ctxG.stroke();
 
-      ctxG.beginPath(); ctxG.arc(kx, ky, capR * 0.62, 0, Math.PI * 2);
-      ctxG.lineWidth = 2;
-      ctxG.strokeStyle = 'rgba(255,255,255,0.22)';
+      // Anillo cóncavo interior del pulgar
+      ctxG.beginPath(); ctxG.arc(kx, ky, capR * 0.66, 0, Math.PI * 2);
+      ctxG.lineWidth = 1.5;
+      ctxG.strokeStyle = 'rgba(255, 255, 255, 0.16)';
       ctxG.stroke();
 
       canvasEl.classList.toggle('engaged', active || clicked);
@@ -3193,15 +3475,39 @@
 
     // =========================================================================
     // ROM DE CARACTERES OSD ESTILO CHIP MAX7456 (PRE-BORDEADOS 2-BIT)
-    // - OSD_SMALL_ROM (5x7 px: núcleo 3x5 1:1 nativo en 320x240 + borde negro 1px, ~4.3 KB)
+    // - OSD_SMALL_ROM (5x7 px: núcleo 3x5 1:1 nativo en 320x240 + borde negro 1px)
     //   usado en el OSD de vuelo para máxima visibilidad y nitidez real en el panel IPS 2.8".
-    // - OSD_CHAR_ROM  (8x12 px: usado en las tablas del menú de configuración).
+    // - OSD_CHAR_ROM  (7x9 px: núcleo pixel-art 5x7 real estilo Nintendo + borde 1px)
+    //   usado en menús, tarjetas, notificaciones y selectores.
     // Ambos se dibujan en 1 sola pasada lineal sin bucles vecinos por frame:
     //   0 = transparente, 1 = borde negro 0x0000, 2 = relleno blanco/color
     // =========================================================================
     const TICK_GLYPH = [2, 2, 0, 0, 0];
-    const OSD_GLYPH_W = 8;
-    const OSD_GLYPH_H = 12;
+    const FONT_5X7 = {
+      '0': [14,17,19,21,25,17,14], '1': [ 4,12, 4, 4, 4, 4,14], '2': [14,17, 1, 6, 8,16,31],
+      '3': [30, 1, 1,14, 1, 1,30], '4': [ 2, 6,10,18,31, 2, 2], '5': [31,16,30, 1, 1,17,14],
+      '6': [14,16,16,30,17,17,14], '7': [31, 1, 2, 4, 8, 8, 8], '8': [14,17,17,14,17,17,14],
+      '9': [14,17,17,15, 1, 1,14],
+      'A': [14,17,17,31,17,17,17], 'B': [30,17,17,30,17,17,30], 'C': [14,17,16,16,16,17,14],
+      'D': [30,17,17,17,17,17,30], 'E': [31,16,16,30,16,16,31], 'F': [31,16,16,30,16,16,16],
+      'G': [14,17,16,23,17,17,15], 'H': [17,17,17,31,17,17,17], 'I': [14, 4, 4, 4, 4, 4,14],
+      'J': [ 7, 2, 2, 2,18,18,12], 'K': [17,18,20,24,20,18,17], 'L': [16,16,16,16,16,16,31],
+      'M': [17,27,21,21,17,17,17], 'N': [17,25,21,19,17,17,17], 'O': [14,17,17,17,17,17,14],
+      'P': [30,17,17,30,16,16,16], 'Q': [14,17,17,17,21,18,13], 'R': [30,17,17,30,20,18,17],
+      'S': [15,16,16,14, 1, 1,30], 'T': [31, 4, 4, 4, 4, 4, 4], 'U': [17,17,17,17,17,17,14],
+      'V': [17,17,17,17,17,10, 4], 'W': [17,17,17,21,21,27,17], 'X': [17,17,10, 4,10,17,17],
+      'Y': [17,17,10, 4, 4, 4, 4], 'Z': [31, 1, 2, 4, 8,16,31],
+      ':': [ 0, 4, 4, 0, 4, 4, 0], '-': [ 0, 0, 0,31, 0, 0, 0], '/': [ 1, 2, 2, 4, 8, 8,16],
+      '.': [ 0, 0, 0, 0, 0, 6, 6], '+': [ 0, 4, 4,31, 4, 4, 0], '>': [16, 8, 4, 2, 4, 8,16],
+      '<': [ 2, 4, 8,16, 8, 4, 2], '%': [25,25, 2, 4, 8,19,19], '[': [14, 8, 8, 8, 8, 8,14],
+      ']': [14, 2, 2, 2, 2, 2,14], '*': [ 0,21,14,31,14,21, 0], '(': [ 2, 4, 8, 8, 8, 4, 2],
+      ')': [ 8, 4, 2, 2, 2, 4, 8], '|': [ 4, 4, 4, 4, 4, 4, 4], ',': [ 0, 0, 0, 0, 0, 4, 8],
+      '=': [ 0, 0,31, 0,31, 0, 0], '!': [ 4, 4, 4, 4, 4, 0, 4], '?': [14,17, 1, 6, 4, 0, 4],
+      '\'':[ 4, 4, 0, 0, 0, 0, 0], '"': [10,10, 0, 0, 0, 0, 0]
+    };
+
+    const OSD_GLYPH_W = 7;
+    const OSD_GLYPH_H = 9;
     const OSD_CHAR_ROM = new Uint8Array(128 * OSD_GLYPH_W * OSD_GLYPH_H);
 
     const OSD_SM_W = 5;
@@ -3211,25 +3517,26 @@
     (function buildMax7456CharacterRom() {
       for (let code = 32; code < 128; code++) {
         const ch = String.fromCharCode(code);
-        const g = ch === '\'' ? TICK_GLYPH : FONT_3X5[ch];
-        if (!g) continue;
 
         // 1. Glifo compacto nativo 5x7 (núcleo 3x5 1:1 en 320x240 + contorno negro 1px)
-        const smBase = code * (OSD_SM_W * OSD_SM_H);
-        for (let r = 0; r < 5; r++) {
-          const rowBits = g[r];
-          for (let c = 0; c < 3; c++) {
-            if ((rowBits >> (2 - c)) & 1) {
-              const px = 1 + c;
-              const py = 1 + r;
-              for (let oy = -1; oy <= 1; oy++) {
-                for (let ox = -1; ox <= 1; ox++) {
-                  const gx = px + ox, gy = py + oy;
-                  const idx = smBase + gy * OSD_SM_W + gx;
-                  if (ox === 0 && oy === 0) {
-                    OSD_SMALL_ROM[idx] = 2; // Relleno 1px nativo
-                  } else if (OSD_SMALL_ROM[idx] === 0) {
-                    OSD_SMALL_ROM[idx] = 1; // Borde negro 1px
+        const g35 = ch === '\'' ? TICK_GLYPH : FONT_3X5[ch];
+        if (g35) {
+          const smBase = code * (OSD_SM_W * OSD_SM_H);
+          for (let r = 0; r < 5; r++) {
+            const rowBits = g35[r];
+            for (let c = 0; c < 3; c++) {
+              if ((rowBits >> (2 - c)) & 1) {
+                const px = 1 + c;
+                const py = 1 + r;
+                for (let oy = -1; oy <= 1; oy++) {
+                  for (let ox = -1; ox <= 1; ox++) {
+                    const gx = px + ox, gy = py + oy;
+                    const idx = smBase + gy * OSD_SM_W + gx;
+                    if (ox === 0 && oy === 0) {
+                      OSD_SMALL_ROM[idx] = 2; // Relleno 1px nativo
+                    } else if (OSD_SMALL_ROM[idx] === 0) {
+                      OSD_SMALL_ROM[idx] = 1; // Borde negro 1px
+                    }
                   }
                 }
               }
@@ -3237,20 +3544,21 @@
           }
         }
 
-        // 2. Glifo 8x12 para el menú interactivo de configuración
-        const baseOff = code * (OSD_GLYPH_W * OSD_GLYPH_H);
-        for (let r = 0; r < 5; r++) {
-          const rowBits = g[r];
-          for (let c = 0; c < 3; c++) {
-            if ((rowBits >> (2 - c)) & 1) {
-              const px = 1 + c * 2;
-              const py = 1 + r * 2;
-              for (let oy = -1; oy <= 2; oy++) {
-                for (let ox = -1; ox <= 2; ox++) {
-                  const gx = px + ox, gy = py + oy;
-                  if (gx >= 0 && gx < OSD_GLYPH_W && gy >= 0 && gy < OSD_GLYPH_H) {
+        // 2. Glifo pixel-art 5x7 real (celda 7x9 con contorno 1px) estilo consola Nintendo
+        const g57 = FONT_5X7[ch];
+        if (g57) {
+          const baseOff = code * (OSD_GLYPH_W * OSD_GLYPH_H);
+          for (let r = 0; r < 7; r++) {
+            const rowBits = g57[r];
+            for (let c = 0; c < 5; c++) {
+              if ((rowBits >> (4 - c)) & 1) {
+                const px = 1 + c;
+                const py = 1 + r;
+                for (let oy = -1; oy <= 1; oy++) {
+                  for (let ox = -1; ox <= 1; ox++) {
+                    const gx = px + ox, gy = py + oy;
                     const idx = baseOff + gy * OSD_GLYPH_W + gx;
-                    if (ox >= 0 && ox <= 1 && oy >= 0 && oy <= 1) {
+                    if (ox === 0 && oy === 0) {
                       OSD_CHAR_ROM[idx] = 2;
                     } else if (OSD_CHAR_ROM[idx] === 0) {
                       OSD_CHAR_ROM[idx] = 1;
@@ -3264,8 +3572,9 @@
       }
     })();
 
-    // Dibuja texto de menú (8x12) en 1 sola pasada lineal
-    function drawInavText320(str, x320, y240, fg565 = 0xFFFF) {
+    // Dibuja texto pixel-art 5x7 real (celda 7x9, avance 6px) en 1 sola pasada lineal
+    // Si outline565 === -1 se omite el borde para texto plano limpio dentro de tarjetas UI
+    function drawInavText320(str, x320, y240, fg565 = 0xFFFF, outline565 = 0x0000) {
       const s = String(str).toUpperCase();
       let cx = (x320 | 0) - 1;
       const cy = (y240 | 0) - 1;
@@ -3280,16 +3589,137 @@
           const srcRow = baseOff + gy * OSD_GLYPH_W;
           for (let gx = 0; gx < OSD_GLYPH_W; gx++) {
             const v = OSD_CHAR_ROM[srcRow + gx];
-            if (v !== 0) {
+            if (v === 2) {
               const px = cx + gx;
-              if (px >= 0 && px < DISP_W) {
-                vram565[dstRow + px] = v === 1 ? 0x0000 : fg565;
-              }
+              if (px >= 0 && px < DISP_W) vram565[dstRow + px] = fg565;
+            } else if (v === 1 && outline565 >= 0) {
+              const px = cx + gx;
+              if (px >= 0 && px < DISP_W) vram565[dstRow + px] = outline565;
             }
           }
         }
-        cx += 8;
+        cx += 6;
       }
+    }
+
+    // =========================================================================
+    // SISTEMA VISUAL NINTENDO SWITCH DARK MATTE EN VRAM565 (320x240 NATIVO, 0 ALLOCS)
+    // =========================================================================
+    const NIN565 = {
+      BG:        rgb565(22, 24, 30),    // Fondo principal grafito mate
+      HEADER:    rgb565(30, 34, 42),    // Barra superior e inferior
+      CARD:      rgb565(34, 38, 48),    // Tarjeta normal
+      CARD_SEL:  rgb565(48, 56, 72),    // Tarjeta activa seleccionada
+      PANEL:     rgb565(25, 29, 37),    // Panel derecho de telemetría/radar
+      BORDER:    rgb565(56, 62, 76),    // Borde sutil de 1px
+      BORDER_HI: rgb565(235, 242, 250), // Borde activo nítido
+      RED:       rgb565(230, 0, 18),    // Rojo Nintendo (#E60012)
+      BLUE:      rgb565(0, 145, 240),   // Azul Nintendo Switch
+      GREEN:     rgb565(26, 200, 92),   // Verde Nintendo
+      GOLD:      rgb565(245, 182, 8),   // Ámbar / Dorado SNES
+      WHITE:     0xFFFF,
+      MUTED:     rgb565(150, 162, 180), // Texto secundario limpio
+      TRACK:     rgb565(18, 20, 25),    // Fondo de sliders
+      SHADOW:    rgb565(14, 16, 20)     // Sombra de texto 1px en tarjetas
+    };
+
+    function fillRect320(x, y, w, h, col565) {
+      const x0 = Math.max(0, x | 0);
+      const y0 = Math.max(0, y | 0);
+      const x1 = Math.min(DISP_W - 1, ((x + w) | 0) - 1);
+      const y1 = Math.min(DISP_H - 1, ((y + h) | 0) - 1);
+      if (x1 < x0 || y1 < y0) return;
+      for (let py = y0; py <= y1; py++) {
+        vram565.fill(col565, py * DISP_W + x0, py * DISP_W + x1 + 1);
+      }
+    }
+
+    // Tarjeta con esquinas redondeadas pixel-art de 2px y borde de 1px en vram565
+    function drawRoundedCard320(x, y, w, h, bg565, border565 = -1) {
+      const x0 = x | 0, y0 = y | 0, w0 = w | 0, h0 = h | 0;
+      if (w0 < 6 || h0 < 6) return;
+      for (let ry = 0; ry < h0; ry++) {
+        const py = y0 + ry;
+        if (py < 0 || py >= DISP_H) continue;
+        const inset = (ry === 0 || ry === h0 - 1) ? 2 : ((ry === 1 || ry === h0 - 2) ? 1 : 0);
+        const lx = Math.max(0, x0 + inset);
+        const rx = Math.min(DISP_W - 1, x0 + w0 - 1 - inset);
+        if (rx >= lx) {
+          vram565.fill(bg565, py * DISP_W + lx, py * DISP_W + rx + 1);
+          if (border565 >= 0) {
+            if (ry === 0 || ry === h0 - 1) {
+              vram565.fill(border565, py * DISP_W + lx, py * DISP_W + rx + 1);
+            } else if (ry === 1 || ry === h0 - 2) {
+              vram565[py * DISP_W + lx] = border565;
+              vram565[py * DISP_W + rx] = border565;
+            } else {
+              vram565[py * DISP_W + lx] = border565;
+              vram565[py * DISP_W + rx] = border565;
+            }
+          }
+        }
+      }
+    }
+
+    // Píldora redondeada con texto centrado (5x7 o 3x5 compacto)
+    function drawPillBadge320(x, y, w, h, bg565, textStr, fg565 = 0xFFFF, useSmall = false, border565 = -1) {
+      drawRoundedCard320(x, y, w, h, bg565, border565);
+      const s = String(textStr);
+      const charW = useSmall ? 5 : 6;
+      const textW = s.length * charW - 1;
+      const tx = (x | 0) + ((w - textW) >> 1);
+      const ty = (y | 0) + ((h - (useSmall ? 5 : 7)) >> 1);
+      if (useSmall) {
+        drawOsdSmall320(s, tx, ty, fg565);
+      } else {
+        drawInavText320(s, tx, ty, fg565, -1);
+      }
+    }
+
+    // Icono circular de botón estilo Nintendo (A)(B)(X)(Y) de 11x11 px + etiqueta al lado
+    function drawBtnPrompt320(x, y, btnChar, btnCol565, labelStr, labelCol565 = 0xFFFF) {
+      const cx = (x | 0) + 5, cy = (y | 0) + 5;
+      for (let dy = -5; dy <= 5; dy++) {
+        const py = cy + dy;
+        if (py < 0 || py >= DISP_H) continue;
+        const span = Math.abs(dy) === 5 ? 2 : (Math.abs(dy) === 4 ? 3 : (Math.abs(dy) === 3 ? 4 : 5));
+        const lx = Math.max(0, cx - span);
+        const rx = Math.min(DISP_W - 1, cx + span);
+        vram565.fill(btnCol565, py * DISP_W + lx, py * DISP_W + rx + 1);
+      }
+      drawOsdSmall320(btnChar, cx - 1, cy - 2, 0xFFFF);
+      if (labelStr) {
+        drawInavText320(labelStr, (x | 0) + 14, (y | 0) + 2, labelCol565, -1);
+      }
+    }
+
+    // Barra de progreso / slider horizontal limpia estilo consola
+    function drawSliderBar320(x, y, w, h, norm01, fillCol565) {
+      const clamped = Math.max(0.0, Math.min(1.0, norm01));
+      fillRect320(x, y, w, h, NIN565.TRACK);
+      const fw = Math.round(clamped * w);
+      if (fw > 0) fillRect320(x, y, fw, h, fillCol565);
+    }
+
+    // Notificación flotante Mini-Píldora (13px de alto) para avisos de Gates y ajustes sin tapar la vista
+    function renderNintendoToast320(msg) {
+      const s = String(msg).toUpperCase();
+      const isWarn = s.includes('FAILSAFE') || s.includes('CRITICO') || s.includes('BAJIO') || s.includes('DESCONECTADO');
+      const isOk   = s.includes('GATE') || s.includes('BOYA') || s.includes('LAP') || s.includes('OK') || s.includes('COMPLETADA');
+      const accentCol = isWarn ? NIN565.RED : (isOk ? NIN565.GREEN : NIN565.GOLD);
+
+      // Usamos fuente compacta 3x5 (5px/char) para que el aviso de Gate sea súper discreto y nítido
+      const textW = s.length * 5;
+      const pillW = Math.min(304, textW + 20);
+      const pillH = 13;
+      const px = 160 - (pillW >> 1);
+      // Si estamos en vuelo/juego sin menú abierto, lo ubicamos en y=26 (debajo de la brújula superior)
+      const py = rgOverlayOpen || osState !== 'ingame' ? 6 : 26;
+
+      drawRoundedCard320(px, py, pillW, pillH, NIN565.HEADER, NIN565.BORDER);
+      // Indicador lateral de color de 4x7 px dentro de la píldora
+      fillRect320(px + 4, py + 3, 4, 7, accentCol);
+      drawOsdSmall320(s, px + 12, py + 4, 0xFFFF);
     }
 
     // Dibuja texto OSD compacto (5x7 nativo 1:1 en 320x240) en 1 sola pasada lineal (100% real en ILI9341V)
@@ -3576,18 +4006,26 @@
       playTone(760, 0.04);
     }
 
-    const PLAYABLE_SIM_IDS = ['fpv_wing', 'fpv_drone', 'rc_sailboat', 'rc_car'];
+    const PLAYABLE_SIM_IDS = ['fpv_wing', 'fpv_drone', 'rc_sailboat', 'rc_boat', 'rc_car', 'rc_crawler'];
     const PLAYABLE_SIM_NAMES = {
       fpv_wing:    'ALA FIJA FPV',
       fpv_drone:   'FPV DRONE 5"',
       rc_sailboat: 'VELERO RC LOS',
-      rc_car:      'CARRO RC LOS'
+      rc_boat:     'LANCHA RC LOS',
+      rc_car:      'CARRO RC LOS',
+      rc_crawler:  'CRAWLER 4X4'
     };
+
+    function isLosSimId(id) {
+      return id === 'rc_sailboat' || id === 'rc_boat' || id === 'rc_car' || id === 'rc_crawler';
+    }
 
     function getActiveSimObject() {
       if (activeRomId === 'fpv_drone')   return fpvDroneSim;
       if (activeRomId === 'rc_sailboat') return rcSailboatSim;
+      if (activeRomId === 'rc_boat')     return rcBoatSim;
       if (activeRomId === 'rc_car')      return rcCarSim;
+      if (activeRomId === 'rc_crawler')  return rcCrawlerSim;
       return fpvWingSim;
     }
 
@@ -3632,8 +4070,8 @@
         }
         return true;
       }
-      // Toque directo en el indicador superior derecho [-ZOOM / +ZOOM] en Velero RC y Carro RC
-      if (capTouch.justTapped && (activeRomId === 'rc_sailboat' || activeRomId === 'rc_car') && capTouch.y240 >= 22 && capTouch.y240 <= 46 && capTouch.x320 >= 232) {
+      // Toque directo en el indicador superior derecho [-ZOOM / +ZOOM] en los 4 simuladores LOS
+      if (capTouch.justTapped && isLosSimId(activeRomId) && capTouch.y240 >= 22 && capTouch.y240 <= 46 && capTouch.x320 >= 232) {
         const zStep = capTouch.x320 >= 276 ? 0.25 : -0.25;
         fcProfile.losZoom = Math.max(0.50, Math.min(3.50, Math.round(((fcProfile.losZoom || 1.25) + zStep) * 100) / 100));
         showToast(`ZOOM CAMARA LOS: ${fcProfile.losZoom.toFixed(2)}X`);
@@ -3654,9 +4092,17 @@
           rcSailboatSim.presetIdx = (rcSailboatSim.presetIdx + 1) % SAIL_PRESETS.length;
           showToast(`VELERO: ${SAIL_PRESETS[rcSailboatSim.presetIdx].name}`);
           playTone(760, 0.04);
+        } else if (activeRomId === 'rc_boat') {
+          rcBoatSim.presetIdx = (rcBoatSim.presetIdx + 1) % RC_BOAT_PRESETS.length;
+          showToast(`LANCHA: ${RC_BOAT_PRESETS[rcBoatSim.presetIdx].name}`);
+          playTone(760, 0.04);
         } else if (activeRomId === 'rc_car') {
           rcCarSim.presetIdx = (rcCarSim.presetIdx + 1) % RC_CAR_PRESETS.length;
           showToast(`CARRO: ${RC_CAR_PRESETS[rcCarSim.presetIdx].name}`);
+          playTone(760, 0.04);
+        } else if (activeRomId === 'rc_crawler') {
+          rcCrawlerSim.presetIdx = (rcCrawlerSim.presetIdx + 1) % RC_CRAWLER_PRESETS.length;
+          showToast(`CRAWLER: ${RC_CRAWLER_PRESETS[rcCrawlerSim.presetIdx].name}`);
           playTone(760, 0.04);
         } else {
           cycleCraftFlightMode(craft);
@@ -3665,17 +4111,17 @@
       if (hwInput.justPressed('X')) {
         craft.reset();
         if (activeRomId === 'rc_sailboat') showToast('REGATA REINICIADA!');
+        else if (activeRomId === 'rc_boat') showToast('LANCHA EN MUELLE!');
         else if (activeRomId === 'rc_car') showToast('CARRO EN SALIDA!');
+        else if (activeRomId === 'rc_crawler') showToast('WINCH / CRAWLER OK!');
         else showToast(craft === fpvWingSim ? 'HAND LAUNCH! Z-84' : 'DRONE RESET');
         return true;
       }
       if (hwInput.justPressed('B') || hwInput.justPressed('R3')) {
-        if (activeRomId === 'rc_sailboat' || activeRomId === 'rc_car') {
+        if (isLosSimId(activeRomId)) {
           craft.camMode = (craft.camMode + 1) % 3;
           craft.chaseCam = (craft.camMode === 2);
-          const camNames = activeRomId === 'rc_sailboat'
-            ? ['VISTA: LOS MUELLE (AUTO-ZOOM)', 'VISTA: LOS MUELLE (WIDE)', 'VISTA: FOLLOW 3D VELERO']
-            : ['VISTA: LOS PODIO (AUTO-ZOOM)',  'VISTA: LOS PODIO (WIDE)',  'VISTA: CHASE 3D CARRO'];
+          const camNames = ['VISTA: LOS AUTO-ZOOM', 'VISTA: LOS ZOOM MANUAL', 'VISTA: CHASE 3D'];
           showToast(camNames[craft.camMode]);
         } else {
           craft.chaseCam = !craft.chaseCam;
@@ -3771,6 +4217,9 @@
       windCustom: false,
       wind: { ...WIND_PRESETS[3] },
       losZoom: 1.25,      // Zoom ajustable por el usuario en cámaras LOS (0.50x panorámico .. 3.50x teleobjetivo)
+      aiBots: 1,          // 1 = 2 Rivales IA activos en Regata / Pista, 0 = Solo
+      sailCourseIdx: 0,   // 0 = Triángulo Olímpico, 1 = Barlovento-Sotavento, 2 = Slalom Costero
+      carTrackIdx: 0,     // 0 = GP Mixto, 1 = Súper Óvalo 3 Saltos, 2 = Drift Park Gymkhana
       treeDensity: 1.0,   // 1.0 = 100%, 0.5 = 50%, 0.0 = OFF
       showSplinePath: 1,  // 1 = ON (luces guía en el piso), 0 = OFF
       dronePresetIdx: 0,
@@ -4747,14 +5196,104 @@
      *     - Física de Viento Aparente, Escota de Vela (Winch), Escora (Heel) y Quilla
      *     - Bahía de Regata con 6 Boyas 3D, Olas Sinusoidales LUT y Estela en V
      ***************************************************************************/
-    const SAIL_BUOYS = [
-      { x:   8.0, z:  -8.0, name: 'B1 START',     col: rgb565(255,  96,  24), topCol: C565.WHITE },
-      { x:  28.0, z:  34.0, name: 'B2 BARLOVENTO',col: rgb565(255, 215,  20), topCol: C565.RED   },
-      { x: -12.0, z:  44.0, name: 'B3 DESMARQUE', col: rgb565(255,  96,  24), topCol: C565.WHITE },
-      { x: -36.0, z:  10.0, name: 'B4 SOTAVENTO', col: rgb565(255, 215,  20), topCol: C565.RED   },
-      { x: -24.0, z: -12.0, name: 'B5 TRAVESIA',  col: rgb565(255,  96,  24), topCol: C565.WHITE },
-      { x:  24.0, z:  -4.0, name: 'B6 LLEGADA',   col: rgb565(255, 215,  20), topCol: C565.GREEN }
+    const SAIL_COURSES = [
+      {
+        name: 'TRIANGULO OLIMPICO',
+        buoys: [
+          { x:   8.0, z:  -8.0, name: 'B1 START',     col: rgb565(255,  96,  24), topCol: C565.WHITE },
+          { x:  28.0, z:  34.0, name: 'B2 BARLOVENTO',col: rgb565(255, 215,  20), topCol: C565.RED   },
+          { x: -12.0, z:  44.0, name: 'B3 DESMARQUE', col: rgb565(255,  96,  24), topCol: C565.WHITE },
+          { x: -36.0, z:  10.0, name: 'B4 SOTAVENTO', col: rgb565(255, 215,  20), topCol: C565.RED   },
+          { x: -24.0, z: -12.0, name: 'B5 TRAVESIA',  col: rgb565(255,  96,  24), topCol: C565.WHITE },
+          { x:  24.0, z:  -4.0, name: 'B6 LLEGADA',   col: rgb565(255, 215,  20), topCol: C565.GREEN }
+        ]
+      },
+      {
+        name: 'BARLOVENTO-SOTAVENTO',
+        buoys: [
+          { x:   0.0, z: -10.0, name: 'B1 SALIDA',     col: rgb565(255,  96,  24), topCol: C565.WHITE },
+          { x:   6.0, z:  46.0, name: 'B2 BARLOVENTO', col: rgb565(255, 215,  20), topCol: C565.RED   },
+          { x:  -8.0, z:  44.0, name: 'B3 OFFSET',     col: rgb565(255,  96,  24), topCol: C565.WHITE },
+          { x:  -6.0, z:  -8.0, name: 'B4 PUERTA IZQ', col: rgb565(255, 215,  20), topCol: C565.RED   },
+          { x:   6.0, z:  46.0, name: 'B5 BARLOVENTO2',col: rgb565(255,  96,  24), topCol: C565.WHITE },
+          { x:   8.0, z:  -8.0, name: 'B6 META POPA',  col: rgb565(255, 215,  20), topCol: C565.GREEN }
+        ]
+      },
+      {
+        name: 'SLALOM COSTERO',
+        buoys: [
+          { x: -28.0, z:  -6.0, name: 'B1 OESTE',     col: rgb565(255,  96,  24), topCol: C565.WHITE },
+          { x: -12.0, z:  26.0, name: 'B2 NOROESTE',  col: rgb565(255, 215,  20), topCol: C565.RED   },
+          { x:   4.0, z:  -4.0, name: 'B3 CENTRO SUR',col: rgb565(255,  96,  24), topCol: C565.WHITE },
+          { x:  20.0, z:  28.0, name: 'B4 NORESTE',   col: rgb565(255, 215,  20), topCol: C565.RED   },
+          { x:  38.0, z:   2.0, name: 'B5 ESTE',      col: rgb565(255,  96,  24), topCol: C565.WHITE },
+          { x:   0.0, z: -12.0, name: 'B6 META SUR',  col: rgb565(255, 215,  20), topCol: C565.GREEN }
+        ]
+      }
     ];
+    let SAIL_BUOYS = SAIL_COURSES[0].buoys;
+
+    function selectSailCourse(idx) {
+      fcProfile.sailCourseIdx = ((idx % SAIL_COURSES.length) + SAIL_COURSES.length) % SAIL_COURSES.length;
+      SAIL_BUOYS = SAIL_COURSES[fcProfile.sailCourseIdx].buoys;
+      if (typeof rcSailboatSim !== 'undefined') rcSailboatSim.activeBuoy = 0;
+      if (typeof rcBoatSim !== 'undefined') rcBoatSim.activeBuoy = 0;
+    }
+
+    // Pool estático de Spray 3D de espuma blanca en la proa del velero (16 partículas, 0 allocs)
+    const MAX_SAIL_SPRAY = 16;
+    const SAIL_SPRAY_X   = new Float32Array(MAX_SAIL_SPRAY);
+    const SAIL_SPRAY_Y   = new Float32Array(MAX_SAIL_SPRAY);
+    const SAIL_SPRAY_Z   = new Float32Array(MAX_SAIL_SPRAY);
+    const SAIL_SPRAY_VX  = new Float32Array(MAX_SAIL_SPRAY);
+    const SAIL_SPRAY_VY  = new Float32Array(MAX_SAIL_SPRAY);
+    const SAIL_SPRAY_VZ  = new Float32Array(MAX_SAIL_SPRAY);
+    const SAIL_SPRAY_AGE = new Float32Array(MAX_SAIL_SPRAY);
+    let sailSprayHead = 0;
+
+    // 2 Veleros Rivales IA en memoria estática (compiten boya por boya con bordos de ceñida y trimado de vela)
+    const SAIL_AI_BOATS = [
+      { name: 'AI1', px: -12.0, pz: -12.0, py: 0.0, yaw: 1.05, spd: 2.1, heel: 0.15, boom: 0.42, buoy: 0, hullCol: rgb565(24, 195, 225), stripeCol: C565.GOLD,  spdMul: 0.94 },
+      { name: 'AI2', px:  -4.0, pz: -13.0, py: 0.0, yaw: 1.15, spd: 2.0, heel: 0.14, boom: 0.44, buoy: 0, hullCol: rgb565(250, 175, 24), stripeCol: C565.GREEN, spdMul: 0.89 }
+    ];
+
+    function resetSailAiBoats() {
+      SAIL_AI_BOATS[0].px = -12.5; SAIL_AI_BOATS[0].pz = -11.5; SAIL_AI_BOATS[0].yaw = 1.05; SAIL_AI_BOATS[0].spd = 2.0; SAIL_AI_BOATS[0].buoy = 0;
+      SAIL_AI_BOATS[1].px =  -3.5; SAIL_AI_BOATS[1].pz = -12.5; SAIL_AI_BOATS[1].yaw = 1.15; SAIL_AI_BOATS[1].spd = 1.9; SAIL_AI_BOATS[1].buoy = 0;
+    }
+
+    function stepSailAiBoats(dt, trueWindX, trueWindZ) {
+      if (!fcProfile.aiBots) return;
+      const windSpd = Math.hypot(trueWindX, trueWindZ);
+      const windFromAng = Math.atan2(-trueWindX, -trueWindZ); // Rumbo de donde viene el viento
+      for (let i = 0; i < 2; i++) {
+        const b = SAIL_AI_BOATS[i];
+        const targetB = SAIL_BUOYS[b.buoy % SAIL_BUOYS.length];
+        const dx = targetB.x - b.px, dz = targetB.z - b.pz;
+        const dist = Math.hypot(dx, dz);
+        if (dist < 5.8) {
+          b.buoy = (b.buoy + 1) % SAIL_BUOYS.length;
+        }
+        let desYaw = Math.atan2(dx, dz);
+        // Si el rumbo directo a la boya entra en la zona muerta contra el viento (< 42°), hacer bordo de ceñida
+        let diffWind = Math.atan2(Math.sin(desYaw - windFromAng), Math.cos(desYaw - windFromAng));
+        if (windSpd > 0.3 && Math.abs(diffWind) < 0.74) {
+          const tackSign = (Math.floor((aeroEnv.time + i * 7.0) / 9.0) & 1) ? 1.0 : -1.0;
+          desYaw = windFromAng + tackSign * 0.76;
+          diffWind = tackSign * 0.76;
+        }
+        const yawErr = Math.atan2(Math.sin(desYaw - b.yaw), Math.cos(desYaw - b.yaw));
+        b.yaw += Math.max(-1.35, Math.min(1.35, yawErr * 1.8)) * dt;
+
+        const targetSpd = windSpd > 0.2 ? Math.min(3.8, (1.1 + windSpd * 0.34) * b.spdMul * (0.72 + 0.28 * Math.sin(Math.abs(diffWind)))) : 0.1;
+        b.spd += (targetSpd - b.spd) * Math.min(1.0, dt * 1.8);
+        b.px  += Math.sin(b.yaw) * b.spd * dt;
+        b.pz  += Math.cos(b.yaw) * b.spd * dt;
+        b.py   = getSailWaveHeight(b.px, b.pz, aeroEnv.time);
+        b.boom = Math.max(-1.35, Math.min(1.35, -diffWind * 0.55));
+        b.heel = Math.max(-0.45, Math.min(0.45, -Math.sin(diffWind) * 0.28 * Math.min(1.3, windSpd / 5.0)));
+      }
+    }
 
     // Buffer estático de estela en el agua (16 nodos, 0 allocs en bucle)
     const MAX_WAKE_PTS = 16;
@@ -4892,6 +5431,24 @@
       const C_JIB     = rgb565(238, 244, 252);
 
       let fc = 0;
+
+      // 0. Sombra 3D proyectada de las 2 velas y el casco sobre la superficie del agua (desplazada según el sol)
+      const C_WATER_SHAD = rgb565(8, 36, 78);
+      const bAngSh = sim.boomAngle;
+      const sSinSh = Math.sin(bAngSh), sCosSh = Math.cos(bAngSh);
+      function wpShadow(r, u, f) {
+        const wx = px + rx * r + fx * f - u * 0.48;
+        const wz = pz + rz * r + fz * f - u * 0.34;
+        return projPoint320(wx, py - 0.02, wz);
+      }
+      const shBow  = wpShadow(0.0, 0.1,  1.50);
+      const shMast = wpShadow(0.0, 0.2,  0.32);
+      const shTop  = wpShadow(0.0, 3.45, 0.25);
+      const shBoom = wpShadow(sSinSh * 1.55, 0.38, 0.32 - sCosSh * 1.55);
+      const shStn  = wpShadow(0.0, 0.1, -1.32);
+      fc = addCraftTri(fc, shMast, shTop, shBoom, C_WATER_SHAD);
+      fc = addCraftTri(fc, shBow, shTop, shMast, C_WATER_SHAD);
+      fc = addCraftTri(fc, shBow, shMast, shStn, C_WATER_SHAD);
 
       // 1. Quilla profunda y bulbo de plomo (visibles al escorar el casco)
       const kTopF = wp(0.00, -0.04,  0.12);
@@ -5058,8 +5615,11 @@
           const sy = pTop.sy | 0;
           if (sx < 3 || sx >= DISP_W - 3 || sy < 3 || sy >= DISP_H - 3) continue;
 
-          // Color según la altura instantánea de la ola en ese voxel fijo
-          const topCol = wy > 0.06 ? C_VOX_CREST : (wy > -0.02 ? C_VOX_MID : C_VOX_DEEP);
+          // Detectar manchas de ráfaga ("Catspaws") que viajan sobre el agua con el vector de viento real
+          const gustPhase = Math.sin((gx * aeroEnv.windX + gz * aeroEnv.windZ) * 0.065 - t * 2.6)
+                          * Math.cos((gx * 0.18 - gz * 0.14) - t * 1.2);
+          const isCatspaw = (fcProfile.wind.gustPct > 0.08 && gustPhase > 0.42);
+          const topCol = isCatspaw ? C565.CYAN : (wy > 0.06 ? C_VOX_CREST : (wy > -0.02 ? C_VOX_MID : C_VOX_DEEP));
           const pBase  = projPoint320(gx, -0.06, gz);
           const by     = pBase ? Math.max(sy + 1, Math.min(sy + 6, pBase.sy | 0)) : (sy + 2);
 
@@ -5137,6 +5697,50 @@
           if (pFlag) {
             drawInavCircleDot320(pFlag.sx, pFlag.sy, 2, C565.GOLD);
             drawOsdSmall320(`B${i + 1}`, Math.round(pFlag.sx) - 4, Math.round(pFlag.sy) - 10, C565.GOLD);
+          }
+        }
+      }
+
+      // 4. Partículas 3D de Spray de Espuma Blanca en la proa al cortar las olas
+      for (let i = 0; i < MAX_SAIL_SPRAY; i++) {
+        const age = SAIL_SPRAY_AGE[i];
+        if (age <= 0.0 || age > 0.55) continue;
+        const pt = projPoint320(SAIL_SPRAY_X[i], SAIL_SPRAY_Y[i], SAIL_SPRAY_Z[i]);
+        if (pt && pt.sx > 3 && pt.sx < DISP_W - 3 && pt.sy > 3 && pt.sy < DISP_H - 3) {
+          drawInavCircleDot320(pt.sx, pt.sy, age < 0.22 ? 2 : 1, age < 0.28 ? C565.WHITE : C565.CYAN);
+        }
+      }
+
+      // 5. Renderizar los 2 Veleros Rivales IA en la regata (si AI está activo)
+      renderRemoteBlePlayer320(projPoint320, projLine);
+      if (fcProfile.aiBots && sim === rcSailboatSim) {
+        for (let a = 0; a < 2; a++) {
+          const ab = SAIL_AI_BOATS[a];
+          const cY = Math.cos(ab.yaw), sY = Math.sin(ab.yaw);
+          const cH = Math.cos(ab.heel), sH = Math.sin(ab.heel);
+          const fx = sY, fz = cY;
+          const rx = cY * cH, ry = -sH, rz = -sY * cH;
+          const ux = cY * sH, uy =  cH, uz = -sY * sH;
+          function ap(r, u, f) {
+            return projPoint320(ab.px + rx * r + ux * u + fx * f, ab.py + ry * r + uy * u, ab.pz + rz * r + uz * u + fz * f);
+          }
+          const pBow  = ap( 0.00, 0.20,  1.45);
+          const pMidL = ap(-0.38, 0.16,  0.05);
+          const pMidR = ap( 0.38, 0.16,  0.05);
+          const pStnL = ap(-0.26, 0.15, -1.25);
+          const pStnR = ap( 0.26, 0.15, -1.25);
+          const pMastB = ap(0.00, 0.22,  0.28);
+          const pMastT = ap(0.00, 3.25,  0.22);
+          const sB = Math.sin(ab.boom), cB = Math.cos(ab.boom);
+          const pBoom  = ap(sB * 1.42, 0.36, 0.28 - cB * 1.42);
+          const pJibC  = ap(sB * 0.92, 0.38, 1.42 - cB * 0.92);
+          const pJibT  = ap(0.00, 2.50, 0.25);
+          if (pBow && pMidL && pMidR && pStnL && pStnR && pMastB && pMastT && pBoom) {
+            fillTri320(pBow.sx, pBow.sy, pMidL.sx, pMidL.sy, pMidR.sx, pMidR.sy, ab.hullCol);
+            fillQuad320(pMidL, pMidR, pStnR, pStnL, ab.hullCol);
+            fillTri320(pMastB.sx, pMastB.sy, pMastT.sx, pMastT.sy, pBoom.sx, pBoom.sy, C565.WHITE);
+            if (pJibC && pJibT) fillTri320(pBow.sx, pBow.sy, pJibT.sx, pJibT.sy, pJibC.sx, pJibC.sy, ab.stripeCol);
+            drawOsdSmall320(ab.name, Math.round(pMastT.sx) - 6, Math.round(pMastT.sy) - 9, ab.stripeCol);
           }
         }
       }
@@ -5324,6 +5928,8 @@
           WAKE_RING_Z[i] = this.pz;
           WAKE_RING_W[i] = 0.0;
         }
+        for (let i = 0; i < MAX_SAIL_SPRAY; i++) SAIL_SPRAY_AGE[i] = 0.0;
+        resetSailAiBoats();
         this.updateBasis();
       },
 
@@ -5608,7 +6214,32 @@
 
         this.updateBasis();
 
-        // 8. Registrar puntos de estela en V cada 0.07s
+        // 8A. Actualizar partículas 3D de Spray en proa y emitir espuma al cortar las olas con velocidad
+        for (let i = 0; i < MAX_SAIL_SPRAY; i++) {
+          if (SAIL_SPRAY_AGE[i] > 0.0) {
+            SAIL_SPRAY_AGE[i] += dt;
+            SAIL_SPRAY_X[i]   += SAIL_SPRAY_VX[i] * dt;
+            SAIL_SPRAY_Y[i]   += SAIL_SPRAY_VY[i] * dt;
+            SAIL_SPRAY_Z[i]   += SAIL_SPRAY_VZ[i] * dt;
+            SAIL_SPRAY_VY[i]  -= 6.5 * dt;
+          }
+        }
+        if (this.spd > 1.35 && (waveHFwd > 0.02 || Math.abs(this.pitchRate) > 0.18) && ((Math.floor(this.flightTime * 28) & 1) === 0)) {
+          const side = (sailSprayHead & 1) ? 1.0 : -1.0;
+          SAIL_SPRAY_X[sailSprayHead]   = this.px + fwdX * 1.42 + rgtX * (side * 0.18);
+          SAIL_SPRAY_Y[sailSprayHead]   = this.py + 0.18;
+          SAIL_SPRAY_Z[sailSprayHead]   = this.pz + fwdZ * 1.42 + rgtZ * (side * 0.18);
+          SAIL_SPRAY_VX[sailSprayHead]  = this.vx * 0.35 + rgtX * (side * (0.9 + this.spd * 0.45));
+          SAIL_SPRAY_VY[sailSprayHead]  = 1.25 + this.spd * 0.42;
+          SAIL_SPRAY_VZ[sailSprayHead]  = this.vz * 0.35 + rgtZ * (side * (0.9 + this.spd * 0.45));
+          SAIL_SPRAY_AGE[sailSprayHead] = 0.01;
+          sailSprayHead = (sailSprayHead + 1) & (MAX_SAIL_SPRAY - 1);
+        }
+
+        // 8B. Actualizar los 2 Veleros Rivales IA
+        stepSailAiBoats(dt, trueWindX, trueWindZ);
+
+        // 8C. Registrar puntos de estela en V cada 0.07s
         this.wakeTimer += dt;
         if (this.wakeTimer >= 0.07) {
           this.wakeTimer = 0.0;
@@ -5782,29 +6413,45 @@
      *     - Física de 4 Ruedas con Slip Angle (Drift), Suspensión 3D y 2 Saltos
      *     - Cronometraje por Vuelta (Lap Timer) con 12 Checkpoints y Pórtico de Meta
      ***************************************************************************/
-    const RC_TRACK_WPS = [
-      { x: -24.0, z: -12.0 }, // 0: Inicio Recta Principal (frente al podio elevado)
-      { x:   0.0, z: -12.0 }, // 1: Línea de Salida / Meta (START / FINISH)
-      { x:  24.0, z: -12.0 }, // 2: Frenada Curva 1
-      { x:  33.0, z:  -1.0 }, // 3: Curva 1 Parabólica Derecha
-      { x:  31.0, z:  15.0 }, // 4: Subida Este
-      { x:  16.0, z:  23.0 }, // 5: Recta Norte (Salto Meseta #1)
-      { x:  -1.0, z:  22.0 }, // 6: Entrada Infield
-      { x:   0.0, z:   5.0 }, // 7: Horquilla Central (Hairpin)
-      { x: -14.0, z:   6.0 }, // 8: Salida Infield
-      { x: -18.0, z:  22.0 }, // 9: Curva Noroeste
-      { x: -32.0, z:  14.0 }, // 10: Bajada Oeste (Salto Meseta #2)
-      { x: -32.0, z:  -3.0 }  // 11: Última Curva hacia Recta Principal
+    const RC_CAR_TRACKS = [
+      {
+        name: 'GP MIXTO (2 SALTOS)',
+        jumps: [{ x: 23.5, z: 19.0 }, { x: -32.0, z: 5.5 }],
+        wps: [
+          { x: -24.0, z: -12.0 }, { x:   0.0, z: -12.0 }, { x:  24.0, z: -12.0 }, { x:  33.0, z:  -1.0 },
+          { x:  31.0, z:  15.0 }, { x:  16.0, z:  23.0 }, { x:  -1.0, z:  22.0 }, { x:   0.0, z:   5.0 },
+          { x: -14.0, z:   6.0 }, { x: -18.0, z:  22.0 }, { x: -32.0, z:  14.0 }, { x: -32.0, z:  -3.0 }
+        ]
+      },
+      {
+        name: 'SUPER OVALO 3-JUMP',
+        jumps: [{ x: 18.0, z: -12.0 }, { x: 14.0, z: 22.0 }, { x: -18.0, z: 22.0 }],
+        wps: [
+          { x: -22.0, z: -12.0 }, { x:   0.0, z: -12.0 }, { x:  24.0, z: -12.0 }, { x:  35.0, z:  -4.0 },
+          { x:  35.0, z:  14.0 }, { x:  24.0, z:  22.0 }, { x:   0.0, z:  22.0 }, { x: -24.0, z:  22.0 },
+          { x: -35.0, z:  14.0 }, { x: -35.0, z:  -4.0 }, { x: -30.0, z: -10.0 }, { x: -26.0, z: -12.0 }
+        ]
+      },
+      {
+        name: 'DRIFT PARK GYMKHANA',
+        jumps: [],
+        wps: [
+          { x: -20.0, z: -12.0 }, { x:   0.0, z: -12.0 }, { x:  22.0, z: -12.0 }, { x:  32.0, z:   2.0 },
+          { x:  14.0, z:   4.0 }, { x:  28.0, z:  20.0 }, { x:   4.0, z:  24.0 }, { x:   2.0, z:   2.0 },
+          { x: -12.0, z:  22.0 }, { x: -30.0, z:  18.0 }, { x: -18.0, z:   2.0 }, { x: -32.0, z:  -6.0 }
+        ]
+      }
     ];
+    let RC_TRACK_WPS = RC_CAR_TRACKS[0].wps;
 
-    // Bordes 3D interior/exterior precalculados 1 sola vez al arrancar (0 allocs por frame) para que la pista se entienda al 100%
-    const RC_NUM_WPS    = RC_TRACK_WPS.length;
+    // Bordes 3D interior/exterior precalculados (0 allocs por frame)
+    const RC_NUM_WPS    = 12;
     const RC_EDGE_IN_X  = new Float32Array(RC_NUM_WPS);
     const RC_EDGE_IN_Z  = new Float32Array(RC_NUM_WPS);
     const RC_EDGE_OUT_X = new Float32Array(RC_NUM_WPS);
     const RC_EDGE_OUT_Z = new Float32Array(RC_NUM_WPS);
 
-    (function initRcTrackEdges() {
+    function rebuildRcTrackEdges() {
       const edgeHalfW = 4.35;
       for (let i = 0; i < RC_NUM_WPS; i++) {
         const prev = RC_TRACK_WPS[(i - 1 + RC_NUM_WPS) % RC_NUM_WPS];
@@ -5819,14 +6466,65 @@
         let tx = d1x + d2x, tz = d1z + d2z;
         const tLen = Math.hypot(tx, tz) || 1.0;
         tx /= tLen; tz /= tLen;
-        // Normal hacia adentro del circuito antihorario (-tz, tx)
         const nx = -tz, nz = tx;
         RC_EDGE_IN_X[i]  = curr.x + nx * edgeHalfW;
         RC_EDGE_IN_Z[i]  = curr.z + nz * edgeHalfW;
         RC_EDGE_OUT_X[i] = curr.x - nx * edgeHalfW;
         RC_EDGE_OUT_Z[i] = curr.z - nz * edgeHalfW;
       }
-    })();
+    }
+    rebuildRcTrackEdges();
+
+    function selectRcCarTrack(idx) {
+      fcProfile.carTrackIdx = ((idx % RC_CAR_TRACKS.length) + RC_CAR_TRACKS.length) % RC_CAR_TRACKS.length;
+      RC_TRACK_WPS = RC_CAR_TRACKS[fcProfile.carTrackIdx].wps;
+      rebuildRcTrackEdges();
+      if (activeWorldMapMode === 'rccar') generateRcCarTrackVoxelMap();
+      if (typeof rcCarSim !== 'undefined') rcCarSim.reset();
+    }
+
+    // Ring-buffer estático de marcas de caucho / derrape en el asfalto (24 trazos dobles, 0 allocs)
+    const MAX_SKID_SEGMENTS = 24;
+    const SKID_AX = new Float32Array(MAX_SKID_SEGMENTS);
+    const SKID_AZ = new Float32Array(MAX_SKID_SEGMENTS);
+    const SKID_BX = new Float32Array(MAX_SKID_SEGMENTS);
+    const SKID_BZ = new Float32Array(MAX_SKID_SEGMENTS);
+    const SKID_ON = new Uint8Array(MAX_SKID_SEGMENTS);
+    let skidHead = 0;
+
+    // 2 Carros RC Rivales IA en memoria estática
+    const CAR_AI_BOTS = [
+      { name: 'AI1', px: -12.0, pz: -10.5, py: 0.25, yaw: 1.57, spd: 10.0, wp: 1, laneOff: -1.3, bodyCol: rgb565(250, 115, 24), wingCol: C565.WHITE, spdMax: 14.5 },
+      { name: 'AI2', px: -15.0, pz: -13.5, py: 0.25, yaw: 1.57, spd:  9.5, wp: 1, laneOff:  1.3, bodyCol: rgb565(42,  215, 92), wingCol: C565.GOLD,  spdMax: 13.6 }
+    ];
+
+    function resetCarAiBots() {
+      CAR_AI_BOTS[0].px = -12.0; CAR_AI_BOTS[0].pz = -10.6; CAR_AI_BOTS[0].yaw = Math.PI * 0.5; CAR_AI_BOTS[0].spd = 0.0; CAR_AI_BOTS[0].wp = 1;
+      CAR_AI_BOTS[1].px = -14.5; CAR_AI_BOTS[1].pz = -13.4; CAR_AI_BOTS[1].yaw = Math.PI * 0.5; CAR_AI_BOTS[1].spd = 0.0; CAR_AI_BOTS[1].wp = 1;
+    }
+
+    function stepCarAiBots(dt) {
+      if (!fcProfile.aiBots) return;
+      for (let i = 0; i < 2; i++) {
+        const b = CAR_AI_BOTS[i];
+        const target = RC_TRACK_WPS[b.wp % RC_NUM_WPS];
+        const dx = target.x - b.px, dz = target.z - b.pz;
+        const dist = Math.hypot(dx, dz);
+        if (dist < 6.0) {
+          b.wp = (b.wp + 1) % RC_NUM_WPS;
+        }
+        const desYaw = Math.atan2(dx, dz);
+        const yawErr = Math.atan2(Math.sin(desYaw - b.yaw), Math.cos(desYaw - b.yaw));
+        b.yaw += Math.max(-3.6, Math.min(3.6, yawErr * 4.5)) * dt;
+
+        const turnBrake = Math.max(0.58, 1.0 - Math.abs(yawErr) * 0.45);
+        const targetSpd = b.spdMax * turnBrake;
+        b.spd += (targetSpd - b.spd) * Math.min(1.0, dt * 3.5);
+        b.px  += Math.sin(b.yaw) * b.spd * dt;
+        b.pz  += Math.cos(b.yaw) * b.spd * dt;
+        b.py   = getTerrainHeightMeters(b.px, b.pz) + 0.08;
+      }
+    }
 
     const RC_CAR_PRESETS = [
       { name: 'BUGGY 4WD',    topSpd: 16.5, accel: 21.0, grip: 1.10, driftSlip: 0.86, steerRate: 35.0, bodyCol: rgb565(32, 148, 250), wingCol: C565.GOLD  },
@@ -5867,16 +6565,15 @@
         }
       }
 
-      // 2 Mesetas de Salto (Tabletop Jumps) sobre el circuito:
-      // Salto #1 en el tramo Noreste (cerca de x=23.5, z=19) y Salto #2 en la bajada Oeste (cerca de x=-32, z=5.5)
+      // Mesetas de Salto (Tabletop Jumps) según la pista activa (0, 2 o 3 saltos)
       let jumpH = 0.0;
       if (minDist < 4.6) {
-        const dJ1 = Math.hypot(wx - 23.5, wz - 19.0);
-        const dJ2 = Math.hypot(wx + 32.0, wz - 5.5);
-        if (dJ1 < 4.5) {
-          jumpH = Math.cos((dJ1 / 4.5) * Math.PI * 0.5) * 1.15;
-        } else if (dJ2 < 4.5) {
-          jumpH = Math.cos((dJ2 / 4.5) * Math.PI * 0.5) * 1.15;
+        const jumps = RC_CAR_TRACKS[fcProfile.carTrackIdx || 0].jumps;
+        for (let j = 0; j < jumps.length; j++) {
+          const dJ = Math.hypot(wx - jumps[j].x, wz - jumps[j].z);
+          if (dJ < 4.5) {
+            jumpH = Math.max(jumpH, Math.cos((dJ / 4.5) * Math.PI * 0.5) * 1.18);
+          }
         }
       }
 
@@ -6009,6 +6706,19 @@
 
       let fc = 0;
 
+      // 0. Sombra 3D proyectada directamente sobre el asfalto (groundY) debajo del chasis:
+      //    Fundamental cuando el carro salta por las rampas para ver la altura exacta sobre la pista
+      const groundY = getTerrainHeightMeters(px, pz) + 0.03;
+      const shCos = Math.cos(sim.yaw), shSin = Math.sin(sim.yaw);
+      function wpGroundShadow(r, f) {
+        const wx = px + (shCos * r + shSin * f) * S;
+        const wz = pz + (-shSin * r + shCos * f) * S;
+        return projPoint320(wx, groundY, wz);
+      }
+      const shFL = wpGroundShadow(-0.56,  0.98), shFR = wpGroundShadow( 0.56,  0.98);
+      const shRL = wpGroundShadow(-0.56, -0.98), shRR = wpGroundShadow( 0.56, -0.98);
+      fc = addCraftQuad(fc, shFL, shFR, shRR, shRL, rgb565(14, 18, 24));
+
       // 1. Chasis y Carrocería principal
       const noseL = wp(-0.42, 0.14,  1.05), noseR = wp( 0.42, 0.14,  1.05);
       const hoodL = wp(-0.52, 0.28,  0.42), hoodR = wp( 0.52, 0.28,  0.42);
@@ -6114,6 +6824,13 @@
         }
       }
 
+      // 3B. Marcas de caucho / derrape sobre el asfalto (Skidmarks)
+      for (let i = 0; i < MAX_SKID_SEGMENTS; i++) {
+        if (!SKID_ON[i]) continue;
+        const yS = getTerrainHeightMeters(SKID_AX[i], SKID_AZ[i]) + 0.04;
+        projLine(SKID_AX[i], yS, SKID_AZ[i], SKID_BX[i], yS, SKID_BZ[i], 0, 8);
+      }
+
       // 4. Partículas de humo de neumáticos (drift) o polvo de tierra
       for (let i = 0; i < MAX_CAR_PARTICLES; i++) {
         const age = CAR_PART_AGE[i];
@@ -6121,6 +6838,28 @@
         const pt = projPoint320(CAR_PART_X[i], CAR_PART_Y[i] + age * 0.6, CAR_PART_Z[i]);
         if (pt && pt.sx > 4 && pt.sx < DISP_W - 4 && pt.sy > 4 && pt.sy < DISP_H - 4) {
           drawInavCircleDot320(pt.sx, pt.sy, age < 0.25 ? 2 : 1, CAR_PART_COL[i]);
+        }
+      }
+
+      // 5. Renderizar los 2 Carros RC Rivales IA en pista
+      if (fcProfile.aiBots) {
+        for (let a = 0; a < 2; a++) {
+          const ab = CAR_AI_BOTS[a];
+          const cY = Math.cos(ab.yaw), sY = Math.sin(ab.yaw);
+          const S = 1.55;
+          function cp(r, u, f) {
+            return projPoint320(ab.px + (cY * r + sY * f) * S, ab.py + u * S, ab.pz + (-sY * r + cY * f) * S);
+          }
+          const bFL = cp(-0.48, 0.16,  0.95), bFR = cp( 0.48, 0.16,  0.95);
+          const bRL = cp(-0.50, 0.28, -0.90), bRR = cp( 0.50, 0.28, -0.90);
+          const rTop = cp(0.0,  0.52, -0.10);
+          const wL = cp(-0.54, 0.58, -0.95), wR = cp( 0.54, 0.58, -0.95);
+          if (bFL && bFR && bRL && bRR && rTop) {
+            fillQuad320(bFL, bFR, bRR, bRL, ab.bodyCol);
+            fillTri320(bFL.sx, bFL.sy, bFR.sx, bFR.sy, rTop.sx, rTop.sy, C565.WHITE);
+            if (wL && wR) drawOutlinedLine320(wL.sx, wL.sy, wR.sx, wR.sy, ab.wingCol);
+            drawOsdSmall320(ab.name, Math.round(rTop.sx) - 6, Math.round(rTop.sy) - 9, ab.wingCol);
+          }
         }
       }
     }
@@ -6172,6 +6911,8 @@
         this.activeGate = 1;
         this.lapTime    = 0.0;
         for (let i = 0; i < MAX_CAR_PARTICLES; i++) CAR_PART_AGE[i] = 0.0;
+        for (let i = 0; i < MAX_SKID_SEGMENTS; i++) SKID_ON[i] = 0;
+        resetCarAiBots();
         this.updateBasis();
       },
 
@@ -6314,7 +7055,7 @@
         this.suspRoll  += (targetRoll  - this.suspRoll)  * Math.min(1.0, dt * 14.0);
         this.updateBasis();
 
-        // 7. Emitir partículas de humo de neumáticos (en drift) o polvo (fuera de pista)
+        // 7A. Emitir partículas de humo de neumáticos y registrar marcas de derrape (Skidmarks) en el asfalto
         this.partTimer += dt;
         if (!this.airborne && this.partTimer >= 0.045 && (this.slipDeg >= 14 || (!this.onTrack && this.spd > 3.5))) {
           this.partTimer = 0.0;
@@ -6322,9 +7063,24 @@
           CAR_PART_Y[carPartHead]   = this.py + 0.12;
           CAR_PART_Z[carPartHead]   = this.pz - fwdZ * 1.1 + (Math.random() - 0.5) * 0.6;
           CAR_PART_AGE[carPartHead] = 0.01;
-          CAR_PART_COL[carPartHead] = this.onTrack ? rgb565(225, 232, 240) : rgb565(168, 134, 88);
-          carPartHead = (carPartHead + 1) % MAX_CAR_PARTICLES;
+          CAR_PART_COL[carPartHead] = this.onTrack ? C565.WHITE : C565.GOLD;
+          carPartHead = (carPartHead + 1) & (MAX_CAR_PARTICLES - 1);
+
+          if (this.onTrack && this.slipDeg >= 15) {
+            const side = (skidHead & 1) ? 0.85 : -0.85;
+            const wx0 = this.px - fwdX * 1.05 + rgtX * side;
+            const wz0 = this.pz - fwdZ * 1.05 + rgtZ * side;
+            SKID_AX[skidHead] = wx0;
+            SKID_AZ[skidHead] = wz0;
+            SKID_BX[skidHead] = wx0 - this.vx * 0.07;
+            SKID_BZ[skidHead] = wz0 - this.vz * 0.07;
+            SKID_ON[skidHead] = 1;
+            skidHead = (skidHead + 1) % MAX_SKID_SEGMENTS;
+          }
         }
+
+        // 7B. Actualizar los 2 Carros RC Rivales IA
+        stepCarAiBots(dt);
 
         // 8. Checkpoints del circuito y Cronómetro de Vuelta (Lap Timer)
         const wp = RC_TRACK_WPS[this.activeGate];
@@ -6488,15 +7244,951 @@
     };
 
     /***************************************************************************
+     * 6D. SIMULADOR 5: LANCHA RC BRUSHLESS (DEEP-V / CATAMARAN / F1 TUNNEL)
+     *     - Física Hidrodinámica de Planeo (Planing Hull) + Salto de Olas
+     *     - Gran Cola de Gallo (Rooster Tail) 3D de espuma blanca en la hélice
+     *     - 2 Lanchas Rivales IA en Regata sobre los 3 circuitos de boyas
+     ***************************************************************************/
+    const RC_BOAT_PRESETS = [
+      { name: 'DEEP-V 4S MONO', topSpd: 18.5, accel: 16.5, turnRate: 2.65, bankGain: 0.34, planingSpd: 4.5, hullCol: rgb565(245, 58, 32),  deckCol: C565.WHITE, canopyCol: rgb565(24, 34, 48) },
+      { name: 'CATAMARAN 6S',   topSpd: 23.5, accel: 21.0, turnRate: 2.25, bankGain: 0.22, planingSpd: 5.2, hullCol: rgb565(28, 165, 250), deckCol: C565.GOLD,  canopyCol: rgb565(24, 34, 48) },
+      { name: 'F1 TUNNEL HULL', topSpd: 21.0, accel: 19.5, turnRate: 3.35, bankGain: 0.42, planingSpd: 4.0, hullCol: rgb565(45, 225, 88),  deckCol: C565.WHITE, canopyCol: rgb565(24, 34, 48) }
+    ];
+
+    // Pool estático de 24 partículas para la Cola de Gallo (Rooster Tail) de la hélice de superficie (0 allocs)
+    const MAX_ROOSTER_PARTICLES = 24;
+    const ROOSTER_X   = new Float32Array(MAX_ROOSTER_PARTICLES);
+    const ROOSTER_Y   = new Float32Array(MAX_ROOSTER_PARTICLES);
+    const ROOSTER_Z   = new Float32Array(MAX_ROOSTER_PARTICLES);
+    const ROOSTER_VX  = new Float32Array(MAX_ROOSTER_PARTICLES);
+    const ROOSTER_VY  = new Float32Array(MAX_ROOSTER_PARTICLES);
+    const ROOSTER_VZ  = new Float32Array(MAX_ROOSTER_PARTICLES);
+    const ROOSTER_AGE = new Float32Array(MAX_ROOSTER_PARTICLES);
+    let roosterHeadIdx = 0;
+
+    const BOAT_AI_BOTS = [
+      { px: -5.0, py: 0.0, pz: -17.0, yaw: 0.42, pitch: 0.08, roll: 0.0, spd: 0.0, buoy: 0, spdMul: 0.78, col: C565.CYAN },
+      { px:  5.0, py: 0.0, pz: -19.0, yaw: 0.48, pitch: 0.08, roll: 0.0, spd: 0.0, buoy: 0, spdMul: 0.70, col: C565.GOLD }
+    ];
+
+    function resetBoatAiBots() {
+      BOAT_AI_BOTS[0].px = -5.0; BOAT_AI_BOTS[0].pz = -17.0; BOAT_AI_BOTS[0].yaw = 0.42; BOAT_AI_BOTS[0].spd = 0.0; BOAT_AI_BOTS[0].buoy = 0;
+      BOAT_AI_BOTS[1].px =  5.0; BOAT_AI_BOTS[1].pz = -19.0; BOAT_AI_BOTS[1].yaw = 0.48; BOAT_AI_BOTS[1].spd = 0.0; BOAT_AI_BOTS[1].buoy = 0;
+    }
+
+    function stepBoatAiBots(dt) {
+      if (!fcProfile.aiBots) return;
+      for (let i = 0; i < 2; i++) {
+        const b = BOAT_AI_BOTS[i];
+        const targetB = SAIL_BUOYS[b.buoy % SAIL_BUOYS.length];
+        const dx = targetB.x - b.px, dz = targetB.z - b.pz;
+        const dist = Math.hypot(dx, dz);
+        if (dist < 6.5) b.buoy = (b.buoy + 1) % SAIL_BUOYS.length;
+        const desYaw = Math.atan2(dx, dz);
+        const yawErr = Math.atan2(Math.sin(desYaw - b.yaw), Math.cos(desYaw - b.yaw));
+        const turnRate = Math.max(-2.4, Math.min(2.4, yawErr * 2.5));
+        b.yaw += turnRate * dt;
+        const targetSpd = (dist < 14.0 ? 11.5 : 15.8) * b.spdMul;
+        b.spd += (targetSpd - b.spd) * Math.min(1.0, dt * 3.0);
+        b.px  += Math.sin(b.yaw) * b.spd * dt;
+        b.pz  += Math.cos(b.yaw) * b.spd * dt;
+        b.py   = getSailWaveHeight(b.px, b.pz, aeroEnv.time);
+        b.pitch = 0.09 + Math.sin(aeroEnv.time * 5.2 + i) * 0.04;
+        b.roll  = -turnRate * 0.16;
+      }
+    }
+
+    function renderSolidSpeedboat320(sim, projPoint320, projLine) {
+      const px = sim.px, py = sim.py, pz = sim.pz;
+      const rx = sim.rx, ry = sim.ry, rz = sim.rz;
+      const ux = sim.ux, uy = sim.uy, uz = sim.uz;
+      const fx = sim.fx, fy = sim.fy, fz = sim.fz;
+
+      const S = 1.65;
+      function wp(r, u, f) {
+        return projPoint320(
+          px + (rx * r + ux * u + fx * f) * S,
+          py + (ry * r + uy * u + fy * f) * S,
+          pz + (rz * r + uz * u + fz * f) * S
+        );
+      }
+
+      const preset = RC_BOAT_PRESETS[sim.presetIdx];
+      let fc = 0;
+
+      // 0. Sombra proyectada sobre el agua (clave cuando salta olas)
+      const waterY = getSailWaveHeight(px, pz, aeroEnv.time) + 0.02;
+      const shBow  = projPoint320(px + fx * 1.9, waterY, pz + fz * 1.9);
+      const shStL  = projPoint320(px - fx * 1.4 - rx * 0.65, waterY, pz - fz * 1.4 - rz * 0.65);
+      const shStR  = projPoint320(px - fx * 1.4 + rx * 0.65, waterY, pz - fz * 1.4 + rz * 0.65);
+      if (shBow && shStL && shStR) {
+        fillTriangle320(shBow, shStR, shStL, rgb565(8, 28, 62));
+      }
+
+      // 1. Casco Deep-V afilado de competición Offshore
+      const bowTip = wp( 0.00,  0.18,  1.35);
+      const keelF  = wp( 0.00, -0.04,  0.55);
+      const keelB  = wp( 0.00, -0.06, -0.95);
+      const deckFL = wp(-0.34,  0.18,  0.50), deckFR = wp( 0.34,  0.18,  0.50);
+      const deckBL = wp(-0.42,  0.20, -0.95), deckBR = wp( 0.42,  0.20, -0.95);
+      const chineL = wp(-0.36,  0.02, -0.88), chineR = wp( 0.36,  0.02, -0.88);
+
+      fc = addCraftTri(fc, bowTip, deckFR, deckFL, preset.deckCol);
+      fc = addCraftQuad(fc, deckFL, deckFR, deckBR, deckBL, preset.hullCol);
+      fc = addCraftTri(fc, bowTip, deckFL, keelF, preset.hullCol);
+      fc = addCraftTri(fc, bowTip, keelF, deckFR, preset.hullCol);
+      fc = addCraftQuad(fc, deckFL, deckBL, chineL, keelF, preset.hullCol);
+      fc = addCraftQuad(fc, deckFR, keelF, chineR, deckBR, preset.hullCol);
+      fc = addCraftQuad(fc, deckBL, deckBR, chineR, chineL, rgb565(30, 34, 42));
+
+      // 2. Cabina aerodinámica + Alerón / Aleta dorsal
+      const canF  = wp( 0.00, 0.24,  0.28);
+      const canL  = wp(-0.22, 0.36, -0.18), canR = wp( 0.22, 0.36, -0.18);
+      const canB  = wp( 0.00, 0.34, -0.62);
+      fc = addCraftTri(fc, canF, canR, canL, preset.canopyCol);
+      fc = addCraftTri(fc, canL, canR, canB, preset.canopyCol);
+
+      renderSortedCraftFaces(fc);
+
+      // 3. Cola de Gallo (Rooster Tail) 3D de espuma blanca detrás de la hélice de superficie
+      for (let i = 0; i < MAX_ROOSTER_PARTICLES; i++) {
+        const age = ROOSTER_AGE[i];
+        if (age <= 0.0 || age > 0.55) continue;
+        const pt = projPoint320(ROOSTER_X[i], ROOSTER_Y[i], ROOSTER_Z[i]);
+        if (pt && pt.sx > 4 && pt.sx < DISP_W - 4 && pt.sy > 4 && pt.sy < DISP_H - 4) {
+          drawInavCircleDot320(pt.sx, pt.sy, age < 0.22 ? 2 : 1, age < 0.30 ? C565.WHITE : C565.CYAN);
+        }
+      }
+
+      // 4. Renderizar las 2 Lanchas Rivales IA + Jugador Remoto BLE
+      if (fcProfile.aiBots) {
+        for (let bIdx = 0; bIdx < 2; bIdx++) {
+          const b = BOAT_AI_BOTS[bIdx];
+          const cY = Math.cos(b.yaw), sY = Math.sin(b.yaw);
+          const pBow = projPoint320(b.px + sY * 1.9, b.py + 0.28, b.pz + cY * 1.9);
+          const pStL = projPoint320(b.px - sY * 1.4 - cY * 0.65, b.py + 0.22, b.pz - cY * 1.4 + sY * 0.65);
+          const pStR = projPoint320(b.px - sY * 1.4 + cY * 0.65, b.py + 0.22, b.pz - cY * 1.4 - sY * 0.65);
+          const pCan = projPoint320(b.px - sY * 0.2, b.py + 0.58, b.pz - cY * 0.2);
+          if (pBow && pStL && pStR && pCan) {
+            fillTriangle320(pBow, pStR, pStL, b.col);
+            fillTriangle320(pBow, pStR, pCan, C565.WHITE);
+            // Mini Rooster Tail de la lancha IA
+            const pRoost = projPoint320(b.px - sY * 2.8, b.py + 0.85, b.pz - cY * 2.8);
+            if (pRoost) drawOutlinedLine320(pStL.sx, pStL.sy, pRoost.sx, pRoost.sy, C565.WHITE);
+          }
+        }
+      }
+      renderRemoteBlePlayer320(projPoint320, projLine);
+    }
+
+    const rcBoatSim = {
+      px: 0.0, py: 0.0, pz: -15.0,
+      vx: 0.0, vy: 0.0, vz: 0.0,
+      yaw: 0.45,
+      spd: 0.0,
+      uFwd: 0.0,
+      vLat: 0.0,
+      thrCmd: 0.0,
+      rudderAngle: 0.0,
+      pitchAngle: 0.04,
+      rollAngle: 0.0,
+      airborne: false,
+      planing: false,
+      presetIdx: 0,
+      camMode: 0,
+      chaseCam: false,
+      activeBuoy: 0,
+      lapCount: 0,
+      flightTime: 0.0,
+      totalDistKm: 0.0,
+      wakeTimer: 0.0,
+      roosterTimer: 0.0,
+      rx: 1, ry: 0, rz: 0,
+      ux: 0, uy: 1, uz: 0,
+      fx: 0, fy: 0, fz: 1,
+
+      reset() {
+        if (activeWorldMapMode !== 'sailboat') {
+          generateSailboatBayVoxelMap();
+        }
+        this.px = 0.0; this.py = 0.0; this.pz = -15.0;
+        this.vx = 0.0; this.vy = 0.0; this.vz = 0.0;
+        this.yaw = 0.45;
+        this.spd = 0.0; this.uFwd = 0.0; this.vLat = 0.0;
+        this.thrCmd = 0.0;
+        this.rudderAngle = 0.0;
+        this.pitchAngle = 0.04;
+        this.rollAngle  = 0.0;
+        this.airborne   = false;
+        this.planing    = false;
+        this.activeBuoy = 0;
+        for (let i = 0; i < MAX_WAKE_PTS; i++) {
+          WAKE_RING_X[i] = this.px; WAKE_RING_Z[i] = this.pz; WAKE_RING_W[i] = 0.0;
+        }
+        for (let i = 0; i < MAX_ROOSTER_PARTICLES; i++) ROOSTER_AGE[i] = 0.0;
+        resetBoatAiBots();
+        this.updateBasis();
+      },
+
+      updateBasis() {
+        const cY = Math.cos(this.yaw), sY = Math.sin(this.yaw);
+        const cP = Math.cos(this.pitchAngle), sP = Math.sin(this.pitchAngle);
+        const cR = Math.cos(this.rollAngle),  sR = Math.sin(this.rollAngle);
+        this.fx = sY * cP;
+        this.fy = sP;
+        this.fz = cY * cP;
+        const r0x = cY, r0z = -sY;
+        this.rx = r0x * cR;
+        this.ry = sR;
+        this.rz = r0z * cR;
+        this.ux = -r0x * sR - sY * sP * cR;
+        this.uy = cR * cP;
+        this.uz = -r0z * sR - cY * sP * cR;
+      },
+
+      step(dt) {
+        this.flightTime += dt;
+        const preset = RC_BOAT_PRESETS[this.presetIdx];
+        const groundH = getTerrainHeightMeters(this.px, this.pz);
+        updateAeroEnvironment(this.px, 2.0, this.pz, groundH, dt);
+
+        // 1. Controles RC: Gatillo ESC (Stick Izquierdo Y o Botón A) y Timón (Stick Derecho X)
+        let esc = hwInput.ly;
+        if (hwInput.btn.A) esc = 1.0;
+        this.thrCmd = esc;
+
+        const rawRud = Math.abs(hwInput.rx) >= Math.abs(hwInput.lx) ? hwInput.rx : hwInput.lx;
+        const targetRud = applySuperExpo(rawRud, 1.0, 0.35) * (32.0 * DEG2RAD);
+        this.rudderAngle += (targetRud - this.rudderAngle) * Math.min(1.0, dt * 16.0);
+
+        // Eje vertical del Stick Derecho (hwInput.ry) ajusta suavemente el Zoom de la cámara LOS
+        if (Math.abs(hwInput.ry) > 0.24 && Math.abs(hwInput.ry) > Math.abs(hwInput.rx) * 1.15) {
+          fcProfile.losZoom = Math.max(0.50, Math.min(3.50, (fcProfile.losZoom || 1.25) + hwInput.ry * 0.95 * dt));
+        }
+
+        const fwdX = Math.sin(this.yaw), fwdZ = Math.cos(this.yaw);
+        const rgtX = Math.cos(this.yaw), rgtZ = -Math.sin(this.yaw);
+        this.uFwd = this.vx * fwdX + this.vz * fwdZ;
+        this.vLat = this.vx * rgtX + this.vz * rgtZ;
+
+        // 2. Hidrodinámica de Planeo (Planing Hull): al superar planingSpd el casco sube al pad y reduce su resistencia hidrodinámica
+        this.planing = (this.uFwd >= preset.planingSpd);
+        const hullDrag = this.airborne ? 0.12 : (this.planing ? 0.42 : 0.95);
+        let longAcc = -this.uFwd * hullDrag;
+
+        if (!this.airborne) {
+          if (esc > 0.04) {
+            const ratio = Math.max(0.0, 1.0 - this.uFwd / preset.topSpd);
+            longAcc += esc * preset.accel * (0.30 + 0.70 * ratio);
+          } else if (esc < -0.05) {
+            if (this.uFwd > 0.8) longAcc += esc * preset.accel * 1.15;
+            else longAcc += esc * preset.accel * 0.35 * Math.max(0.0, 1.0 - Math.abs(this.uFwd) / 4.0);
+          }
+        }
+        this.uFwd += longAcc * dt;
+
+        // 3. Giro con Inclinación Interior (Inward Banking) y Prop-Walk de Hélice de Superficie
+        const flowAuth = Math.min(1.2, Math.max(0.0, (Math.abs(this.uFwd) + Math.max(0, esc) * 4.5) / 5.5));
+        const turnOmega = !this.airborne
+          ? (this.rudderAngle / (32.0 * DEG2RAD)) * preset.turnRate * flowAuth * (this.uFwd >= -0.1 ? 1.0 : -1.0)
+          : 0.0;
+        this.yaw += turnOmega * dt;
+
+        const chineGrip = this.airborne ? 0.5 : 7.8;
+        const centrifLat = turnOmega * this.uFwd * 0.38;
+        this.vLat += (centrifLat - this.vLat * chineGrip) * dt;
+
+        this.vx = fwdX * this.uFwd + rgtX * this.vLat;
+        this.vz = fwdZ * this.uFwd + rgtZ * this.vLat;
+        this.spd = Math.hypot(this.vx, this.vz);
+        this.totalDistKm += (this.spd * dt) / 1000.0;
+
+        const prevX = this.px, prevZ = this.pz;
+        this.px += this.vx * dt;
+        this.pz += this.vz * dt;
+
+        // Rebote suave si toca costa o muelle
+        const nextGroundH = getTerrainHeightMeters(this.px, this.pz);
+        if (nextGroundH > 0.15 || (Math.abs(this.px) < 4.5 && this.pz < -23.0)) {
+          this.px = prevX; this.pz = prevZ;
+          this.vx *= -0.45; this.vz *= -0.45;
+          this.uFwd *= -0.45;
+          playTone(220, 0.05);
+        }
+
+        // 4. Olas 3D y Salto de Crestas (Wave Jumping) a alta velocidad
+        const waveNow  = getSailWaveHeight(this.px, this.pz, aeroEnv.time);
+        const wavePrev = getSailWaveHeight(prevX, prevZ, aeroEnv.time);
+        const waveSlopeVy = (waveNow - wavePrev) / Math.max(0.001, dt);
+
+        if (!this.airborne) {
+          if (waveSlopeVy < -0.55 && this.uFwd > 11.5 && (fcProfile.wind.waveScale || 1.0) >= 0.55) {
+            this.airborne = true;
+            this.vy = Math.min(3.4, this.uFwd * 0.16);
+          } else {
+            this.py = waveNow;
+            this.vy = waveSlopeVy;
+          }
+        } else {
+          this.vy -= 14.5 * dt;
+          this.py += this.vy * dt;
+          if (this.py <= waveNow) {
+            this.py = waveNow;
+            this.vy = 0.0;
+            this.airborne = false;
+            this.pitchAngle = 0.02;
+            playTone(290, 0.03);
+          }
+        }
+
+        // Cabeceo hidrodinámico (sube la proa en transición 3..6 m/s y asienta al planear) + canteo interior en curva
+        const humpNoseUp = this.uFwd > 0.5 ? Math.sin(Math.min(1.0, this.uFwd / 6.0) * Math.PI) * 0.11 : 0.0;
+        const planingTrim = this.planing ? 0.065 : 0.03;
+        const targetPitch = this.airborne
+          ? Math.max(-0.25, Math.min(0.32, 0.12 + this.vy * 0.05))
+          : (planingTrim + humpNoseUp + (waveNow - wavePrev) * 1.4);
+        const targetRoll = -turnOmega * preset.bankGain * Math.min(1.0, this.uFwd / 8.0);
+
+        this.pitchAngle += (targetPitch - this.pitchAngle) * Math.min(1.0, dt * 11.0);
+        this.rollAngle  += (targetRoll  - this.rollAngle)  * Math.min(1.0, dt * 12.0);
+        this.updateBasis();
+
+        // 5. Estela en el agua y partículas 3D de la Cola de Gallo (Rooster Tail)
+        this.wakeTimer += dt;
+        if (this.wakeTimer >= 0.09) {
+          this.wakeTimer = 0.0;
+          WAKE_RING_X[wakeHeadIdx] = this.px - fwdX * 1.6;
+          WAKE_RING_Z[wakeHeadIdx] = this.pz - fwdZ * 1.6;
+          WAKE_RING_W[wakeHeadIdx] = (!this.airborne && this.spd > 1.0) ? Math.min(1.6, 0.35 + this.spd * 0.08) : 0.0;
+          wakeHeadIdx = (wakeHeadIdx + 1) & (MAX_WAKE_PTS - 1);
+        }
+
+        for (let i = 0; i < MAX_ROOSTER_PARTICLES; i++) {
+          if (ROOSTER_AGE[i] > 0.0) {
+            ROOSTER_AGE[i] += dt;
+            ROOSTER_X[i]  += ROOSTER_VX[i] * dt;
+            ROOSTER_Y[i]  += ROOSTER_VY[i] * dt;
+            ROOSTER_Z[i]  += ROOSTER_VZ[i] * dt;
+            ROOSTER_VY[i] -= 12.5 * dt;
+          }
+        }
+        this.roosterTimer += dt;
+        if (!this.airborne && (esc > 0.18 || this.spd > 3.5) && this.roosterTimer >= 0.022) {
+          this.roosterTimer = 0.0;
+          const pwr = Math.max(esc, this.spd / preset.topSpd);
+          ROOSTER_X[roosterHeadIdx]   = this.px - fwdX * 1.7;
+          ROOSTER_Y[roosterHeadIdx]   = this.py + 0.15;
+          ROOSTER_Z[roosterHeadIdx]   = this.pz - fwdZ * 1.7;
+          ROOSTER_VX[roosterHeadIdx]  = -fwdX * (4.5 + pwr * 7.5) + (Math.random() - 0.5) * 1.4;
+          ROOSTER_VY[roosterHeadIdx]  = 2.2 + pwr * 3.8 + Math.random() * 0.9;
+          ROOSTER_VZ[roosterHeadIdx]  = -fwdZ * (4.5 + pwr * 7.5) + (Math.random() - 0.5) * 1.4;
+          ROOSTER_AGE[roosterHeadIdx] = 0.01;
+          roosterHeadIdx = (roosterHeadIdx + 1) % MAX_ROOSTER_PARTICLES;
+        }
+
+        stepBoatAiBots(dt);
+
+        // 6. Progreso por las 6 Boyas de Regata
+        const b = SAIL_BUOYS[this.activeBuoy];
+        if (Math.hypot(this.px - b.x, this.pz - b.z) < 6.8) {
+          this.activeBuoy = (this.activeBuoy + 1) % SAIL_BUOYS.length;
+          if (this.activeBuoy === 0) {
+            this.lapCount++;
+            showToast(`LANCHA VUELTA ${this.lapCount} OK!`);
+            playTone(980, 0.10);
+          } else {
+            showToast(`BOYA ${this.activeBuoy}/6 -> ${SAIL_BUOYS[this.activeBuoy].name}`);
+            playTone(860, 0.06);
+          }
+        }
+      },
+
+      render() {
+        const dockX = 0.0, dockY = 19.5, dockZ = -28.0;
+        let camX = dockX, camY = dockY, camZ = dockZ;
+        let cRx = 1, cRy = 0, cRz = 0;
+        let cUx = 0, cUy = 1, cUz = 0;
+        let cFx = 0, cFy = 0, cFz = 1;
+        let zoomFactor = 1.0;
+
+        const userZoom = Math.max(0.50, Math.min(3.50, fcProfile.losZoom || 1.25));
+
+        if (this.camMode === 2 || this.chaseCam) {
+          const fc = computeFollowCamPose(this, 6.2 / userZoom, Math.max(1.3, 2.5 / Math.sqrt(userZoom)), 16.0);
+          camX = fc.camX; camY = Math.max(1.4, fc.camY); camZ = fc.camZ;
+          cRx = fc.cRx; cRy = fc.cRy; cRz = fc.cRz;
+          cUx = fc.cUx; cUy = fc.cUy; cUz = fc.cUz;
+          cFx = fc.cFx; cFy = fc.cFy; cFz = fc.cFz;
+          zoomFactor = userZoom;
+        } else {
+          const rawDx = this.px - dockX;
+          const rawDz = this.pz - dockZ;
+          const horizDist = Math.hypot(rawDx, rawDz) || 1.0;
+          const dirHx = rawDx / horizDist;
+          const dirHz = rawDz / horizDist;
+
+          if (this.camMode === 0) {
+            const baseEff = horizDist > 14.0 ? (14.0 + (horizDist - 14.0) * 0.28) : horizDist;
+            const effHoriz = Math.max(4.2, Math.min(85.0, baseEff / userZoom));
+            zoomFactor = horizDist / Math.max(1.0, effHoriz);
+            camX = this.px - dirHx * effHoriz;
+            camZ = this.pz - dirHz * effHoriz;
+            camY = Math.max(4.5, Math.min(24.0, 4.2 + effHoriz * 0.72));
+          } else {
+            const effHoriz = Math.max(4.5, Math.min(90.0, horizDist / userZoom));
+            zoomFactor = userZoom;
+            camX = this.px - dirHx * effHoriz;
+            camZ = this.pz - dirHz * effHoriz;
+            camY = Math.max(5.0, Math.min(25.0, 21.0 / Math.sqrt(userZoom)));
+          }
+
+          const dx = this.px - camX;
+          const dy = (this.py + 0.45) - camY;
+          const dz = this.pz - camZ;
+          const dLen = Math.hypot(dx, dy, dz) || 1.0;
+          cFx = dx / dLen; cFy = dy / dLen; cFz = dz / dLen;
+          const hLen = Math.hypot(cFx, cFz) || 1.0;
+          cRx =  cFz / hLen; cRy = 0.0; cRz = -cFx / hLen;
+          cUx = cFy * cRz - cFz * cRy;
+          cUy = cFz * cRx - cFx * cRz;
+          cUz = cFx * cRy - cFy * cRx;
+        }
+
+        renderVoxelTerrainAndSky(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz);
+        const { projPoint320, projLine } = createProjector320(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz);
+        renderSailBuoysAndWake320(this, projPoint320, projLine);
+        renderSolidSpeedboat320(this, projPoint320, projLine);
+        this.renderBoatOsd320(zoomFactor);
+      },
+
+      renderBoatOsd320(zoomFactor) {
+        const WHITE = 0xFFFF;
+        const preset = RC_BOAT_PRESETS[this.presetIdx];
+        const titleStr = `RC BOAT // ${preset.name}`;
+        drawOsdSmall320(titleStr, 160 - ((titleStr.length * 5) >> 1), 6, WHITE);
+
+        const stateStr = this.airborne ? '!WAVE JUMP AIRBORNE!' : (this.planing ? 'HYDRO PLANING // ROOSTER TAIL' : 'DISPLACEMENT HULL');
+        const stateCol = this.airborne ? C565.GOLD : (this.planing ? C565.GREEN : C565.CYAN);
+        drawOsdSmall320(stateStr, 160 - ((stateStr.length * 5) >> 1), 16, stateCol);
+
+        const b = SAIL_BUOYS[this.activeBuoy];
+        const distB = Math.round(Math.hypot(b.x - this.px, b.z - this.pz));
+        drawOsdSmall320(`BUOY ${this.activeBuoy + 1}/6`, 8, 8,  C565.GREEN);
+        drawOsdSmall320(`DST  ${distB}M`,                8, 18, WHITE);
+        drawOsdSmall320(`LAP  ${this.lapCount}`,        8, 28, C565.GOLD);
+
+        const zUsr = (fcProfile.losZoom || 1.25).toFixed(2);
+        const camLbl = (this.camMode === 2 || this.chaseCam) ? `CHS Z:${zUsr}X` : (this.camMode === 0 ? `LOS ${zoomFactor.toFixed(1)}X` : `MAN ${zUsr}X`);
+        drawOsdSmall320(camLbl,            254, 8,  C565.CYAN);
+        drawOsdSmall320(`B:CAM Y:CLASE`,   248, 18, WHITE);
+        drawOsdSmall320(`[-ZOOM ${zUsr}+]`, 244, 28, C565.GOLD);
+
+        const kmh = Math.round(this.spd * 3.6);
+        const kts = (this.spd * 1.944).toFixed(1);
+        const thrPct = Math.round(this.thrCmd * 100);
+        const trimDeg = Math.round(this.pitchAngle * RAD2DEG);
+        drawOsdSmall320(`SPD  ${kmh}KMH (${kts}KT)`, 8, 185, C565.GREEN);
+        drawOsdSmall320(`ESC  ${thrPct >= 0 ? '+' : ''}${thrPct}%`, 8, 196, WHITE);
+        drawOsdSmall320(`TRIM ${trimDeg >= 0 ? '+' : ''}${trimDeg} DEG`, 8, 207, C565.CYAN);
+        drawOsdSmall320(`L:GAS/REV  R:TIMON`, 8, 218, C565.GOLD);
+      }
+    };
+
+    /***************************************************************************
+     * 6E. SIMULADOR 6: ROCK CRAWLER 4X4 TRAIL (CAÑÓN DE ROCA ROJA + 10 PUERTAS)
+     *     - Articulación Independiente de 4 Ruedas y 2 Ejes Sólidos (Axle Flex)
+     *     - Caja Reductora LOW 4:1 / HIGH 1:1 (Botón A) + Freno en Pendiente 100%
+     *     - Inclinómetro Pitch / Roll en Vivo con Riesgo Real de Vuelco (Rollover)
+     ***************************************************************************/
+    const RC_CRAWLER_PRESETS = [
+      { name: 'TRX-4 TRAIL',   lowSpd: 2.3, highSpd: 6.2, climbGrip: 1.25, flexScale: 1.00, tipDeg: 46, bodyCol: rgb565(235, 118, 24), roofCol: C565.WHITE },
+      { name: 'SCX10 COMP',    lowSpd: 2.6, highSpd: 6.8, climbGrip: 1.38, flexScale: 1.18, tipDeg: 49, bodyCol: rgb565(46, 188, 72),  roofCol: rgb565(28, 34, 42) },
+      { name: 'MOA PRO RIG',   lowSpd: 2.1, highSpd: 5.2, climbGrip: 1.52, flexScale: 1.32, tipDeg: 52, bodyCol: rgb565(36, 152, 248), roofCol: C565.GOLD  }
+    ];
+
+    const CRAWLER_GATES = [
+      { x:   0.0, z: -12.0, yaw:  0.00, name: 'G1 START SLAB'   },
+      { x:   2.5, z:  -4.0, yaw:  0.25, name: 'G2 RED STEP'     },
+      { x:   9.0, z:   3.0, yaw:  0.65, name: 'G3 BOULDER GARDEN'},
+      { x:  14.5, z:  12.0, yaw:  0.15, name: 'G4 SIDE HILL'    },
+      { x:   8.0, z:  20.0, yaw: -0.95, name: 'G5 CANYON CREST' },
+      { x:   0.0, z:  22.0, yaw: -1.57, name: 'G6 HIGH BRIDGE'  },
+      { x:  -9.5, z:  18.0, yaw: -2.25, name: 'G7 DROP LEDGE'   },
+      { x: -14.5, z:   8.0, yaw: -2.85, name: 'G8 TWIN ROCKS'   },
+      { x: -10.0, z:  -2.0, yaw:  2.45, name: 'G9 OFF-CAMBER'   },
+      { x:  -2.5, z:  -9.5, yaw:  1.95, name: 'G10 FINISH ROCK' }
+    ];
+
+    function evalCrawlerRockHeight(wx, wz) {
+      // Escenario de Trial 4x4 en Cañón de Roca Roja (escalones de piedra, losas inclinadas y puente central)
+      const r = Math.hypot(wx, wz - 5.0);
+      if (r > 28.0) {
+        return Math.min(11.0, 0.5 + (r - 28.0) * 0.48 + Math.sin(wx * 0.35) * 0.6);
+      }
+      // Losas escalonadas y rocas en la ruta de las 10 puertas
+      const slab1 = Math.max(0.0, 1.35 - Math.hypot(wx - 2.5, wz + 3.5) * 0.25);
+      const slab2 = Math.max(0.0, 2.20 - Math.hypot(wx - 11.5, wz - 7.5) * 0.24);
+      const crest = Math.max(0.0, 3.10 - Math.hypot(wx - 4.0, wz - 21.0) * 0.26);
+      const dropW = Math.max(0.0, 2.45 - Math.hypot(wx + 12.0, wz - 13.0) * 0.25);
+      const camber = Math.max(0.0, 1.65 - Math.hypot(wx + 11.0, wz + 1.0) * 0.28);
+      // Rugosidad de bloques de piedra (escalones de tracción para ver trabajar la suspensión 4x4)
+      const boulders = (Math.sin(wx * 0.85) * Math.cos(wz * 0.85) + Math.sin((wx + wz) * 1.45) * 0.45) * 0.28;
+      return Math.max(0.25, 0.35 + slab1 + slab2 + crest + dropW + camber + Math.max(-0.15, boulders));
+    }
+
+    function generateCrawlerRockVoxelMap() {
+      activeWorldMapMode = 'crawler';
+      choroBakedInPsram  = false;
+      WORLD_W_M   = 120.0;
+      WORLD_H_M   = 100.0;
+      MAP_SCALE_X = MAP_W / WORLD_W_M;
+      MAP_SCALE_Z = MAP_H / WORLD_H_M;
+
+      // 1. Cielo cálido de cañón desértico (Utah / Moab Red Rock)
+      for (let mz = 0; mz < SKY_DIM; mz++) {
+        const zOff = mz << SKY_SHIFT;
+        for (let mx = 0; mx < SKY_DIM; mx++) {
+          const cn = fbmCloud(mx, mz);
+          const cloudDensity = Math.max(0, Math.min(1, (cn - 0.10) * 1.7));
+          const cSmooth = cloudDensity * cloudDensity * (3 - 2 * cloudDensity);
+          const sr = 48 * (1 - cSmooth) + 252 * cSmooth;
+          const sg = 104 * (1 - cSmooth) + 246 * cSmooth;
+          const sb = 196 * (1 - cSmooth) + 238 * cSmooth;
+          voxSkyMap[zOff + mx] = rgb565(clampByte(sr), clampByte(sg), clampByte(sb));
+        }
+      }
+
+      // 2. Hornear el Cañón de Roca Roja Estratificada en PSRAM
+      for (let mz = 0; mz < MAP_H; mz++) {
+        const zOff = mz << MAP_SHIFT_X;
+        const wz   = (mz - SPAWN_MZ) / MAP_SCALE_Z;
+
+        for (let mx = 0; mx < MAP_W; mx++) {
+          const wx = (mx - SPAWN_MX) / MAP_SCALE_X;
+          const hMeters = evalCrawlerRockHeight(wx, wz);
+          const hVox = Math.max(1, Math.min(64, Math.round(hMeters / HEIGHT_SCALE)));
+          voxHeight[zOff + mx] = hVox;
+
+          // Estratos geológicos de arenisca roja/naranja/ocre con grietas oscuras de referencia visual fija
+          const stratum = (hVox + ((mx >> 3) & 1)) % 5;
+          const crack   = (((mx * 13 ^ mz * 29) & 7) === 0) ? -18 : (((mx + mz) & 3) * 3);
+          let r = 176 + stratum * 11 + crack;
+          let g = 86  + stratum * 7  + crack;
+          let b = 46  + stratum * 4  + crack;
+
+          // Senda de neumáticos ligeramente oscurecida entre las 10 puertas
+          for (let gIdx = 0; gIdx < CRAWLER_GATES.length; gIdx++) {
+            const gt = CRAWLER_GATES[gIdx];
+            if (Math.hypot(wx - gt.x, wz - gt.z) < 2.2) {
+              r -= 16; g -= 12; b -= 8;
+              break;
+            }
+          }
+          voxColor[zOff + mx] = rgb565(clampByte(r), clampByte(g), clampByte(b));
+        }
+      }
+    }
+
+    function renderCrawlerGatesAndProps320(sim, projPoint320, projLine) {
+      for (let i = 0; i < CRAWLER_GATES.length; i++) {
+        const g = CRAWLER_GATES[i];
+        const isAct = (i === sim.activeGate);
+        const cY = Math.cos(g.yaw), sY = Math.sin(g.yaw);
+        const halfW = 1.65;
+        const lx = g.x - cY * halfW, lz = g.z + sY * halfW;
+        const rx = g.x + cY * halfW, rz = g.z - sY * halfW;
+        const ly = getTerrainHeightMeters(lx, lz);
+        const ry = getTerrainHeightMeters(rx, rz);
+        const poleH = isAct ? 1.85 : 1.10;
+
+        // Banderín izquierdo (Rojo) y derecho (Verde) de cada puerta de Trial
+        projLine(lx, ly, lz, lx, ly + poleH, lz, 0, 4);
+        projLine(rx, ry, rz, rx, ry + poleH, rz, 0, 3);
+        if (isAct) {
+          projLine(lx, ly + poleH, lz, rx, ry + poleH, rz, 1, 2);
+          const pTop = projPoint320(g.x, Math.max(ly, ry) + poleH + 0.45, g.z);
+          if (pTop && pTop.sx > 8 && pTop.sx < DISP_W - 8 && pTop.sy > 8 && pTop.sy < DISP_H - 8) {
+            drawOsdSmall320(`G${i + 1}`, pTop.sx - 5, pTop.sy - 4, C565.GOLD);
+          }
+        }
+      }
+    }
+
+    function renderSolidRockCrawler320(sim, projPoint320, projLine) {
+      const px = sim.px, py = sim.py, pz = sim.pz;
+      const rx = sim.rx, ry = sim.ry, rz = sim.rz;
+      const ux = sim.ux, uy = sim.uy, uz = sim.uz;
+      const fx = sim.fx, fy = sim.fy, fz = sim.fz;
+
+      const S = 1.68;
+      function wp(r, u, f) {
+        return projPoint320(
+          px + (rx * r + ux * u + fx * f) * S,
+          py + (ry * r + uy * u + fy * f) * S,
+          pz + (rz * r + uz * u + fz * f) * S
+        );
+      }
+
+      const preset = RC_CRAWLER_PRESETS[sim.presetIdx];
+      let fc = 0;
+
+      // 0. Sombra 3D bajo el chasis sobre la roca
+      const groundY = getTerrainHeightMeters(px, pz) + 0.03;
+      const shFL = projPoint320(px - rx * 0.9 + fx * 1.3, groundY, pz - rz * 0.9 + fz * 1.3);
+      const shFR = projPoint320(px + rx * 0.9 + fx * 1.3, groundY, pz + rz * 0.9 + fz * 1.3);
+      const shRL = projPoint320(px - rx * 0.9 - fx * 1.3, groundY, pz - rz * 0.9 - fz * 1.3);
+      const shRR = projPoint320(px + rx * 0.9 - fx * 1.3, groundY, pz + rz * 0.9 - fz * 1.3);
+      if (shFL && shFR && shRL && shRR) {
+        fillQuad320(shFL, shFR, shRR, shRL, rgb565(48, 24, 14));
+      }
+
+      // 1. Ejes Sólidos Delantero y Trasero con Articulación Independiente (Axle Flex) + Links Naranjas
+      const fFlexL = sim.flSusp, fFlexR = sim.frSusp;
+      const rFlexL = sim.rlSusp, rFlexR = sim.rrSusp;
+      const axFL = wp(-0.66, 0.18 + fFlexL,  0.72), axFR = wp( 0.66, 0.18 + fFlexR,  0.72);
+      const axRL = wp(-0.66, 0.18 + rFlexL, -0.72), axRR = wp( 0.66, 0.18 + rFlexR, -0.72);
+      const chCenter = wp(0.0, 0.34, 0.0);
+      if (axFL && axFR) drawOutlinedLine320(axFL.sx, axFL.sy, axFR.sx, axFR.sy, C565.SILVER);
+      if (axRL && axRR) drawOutlinedLine320(axRL.sx, axRL.sy, axRR.sx, axRR.sy, C565.SILVER);
+      if (chCenter && axFL && axFR && axRL && axRR) {
+        drawOutlinedLine320(chCenter.sx, chCenter.sy, axFL.sx, axFL.sy, C565.ORANGE);
+        drawOutlinedLine320(chCenter.sx, chCenter.sy, axFR.sx, axFR.sy, C565.ORANGE);
+        drawOutlinedLine320(chCenter.sx, chCenter.sy, axRL.sx, axRL.sy, C565.ORANGE);
+        drawOutlinedLine320(chCenter.sx, chCenter.sy, axRR.sx, axRR.sy, C565.ORANGE);
+      }
+
+      // 2. Carrocería 4x4 Trail elevada (Capó, Cabina cuadrada, Jaula antivuelco y Batea trasera)
+      const noseL = wp(-0.46, 0.42,  1.02), noseR = wp( 0.46, 0.42,  1.02);
+      const hoodL = wp(-0.50, 0.52,  0.38), hoodR = wp( 0.50, 0.52,  0.38);
+      const roofFL = wp(-0.44, 0.82,  0.22), roofFR = wp( 0.44, 0.82,  0.22);
+      const roofRL = wp(-0.44, 0.82, -0.45), roofRR = wp( 0.44, 0.82, -0.45);
+      const bedL   = wp(-0.50, 0.52, -0.98), bedR   = wp( 0.50, 0.52, -0.98);
+      const sillFL = wp(-0.50, 0.30,  0.96), sillFR = wp( 0.50, 0.30,  0.96);
+      const sillRL = wp(-0.50, 0.30, -0.96), sillRR = wp( 0.50, 0.30, -0.96);
+
+      fc = addCraftQuad(fc, sillFL, sillRL, bedL, hoodL, preset.bodyCol);
+      fc = addCraftQuad(fc, sillFR, hoodR, bedR, sillRR, preset.bodyCol);
+      fc = addCraftQuad(fc, noseL, noseR, hoodR, hoodL, preset.bodyCol);
+      fc = addCraftQuad(fc, hoodL, hoodR, roofFR, roofFL, rgb565(32, 44, 62));
+      fc = addCraftQuad(fc, roofFL, roofFR, roofRR, roofRL, preset.roofCol);
+      fc = addCraftQuad(fc, roofRL, roofRR, bedR, bedL, preset.bodyCol);
+
+      // 3. Las 4 Ruedas Sobredimensionadas de Tacos con desplazamiento vertical independiente por roca
+      const wheelDefs = [
+        { r: -0.68, f:  0.72, susp: fFlexL, isFront: true  },
+        { r:  0.68, f:  0.72, susp: fFlexR, isFront: true  },
+        { r: -0.68, f: -0.72, susp: rFlexL, isFront: false },
+        { r:  0.68, f: -0.72, susp: rFlexR, isFront: false }
+      ];
+      const stCos = Math.cos(sim.steerAngle), stSin = Math.sin(sim.steerAngle);
+      const wRad = 0.33;
+
+      for (let w = 0; w < 4; w++) {
+        const wd = wheelDefs[w];
+        const cF = wd.isFront ? stCos : 1.0;
+        const sF = wd.isFront ? stSin : 0.0;
+        const uBase = wd.susp;
+        const pTop = wp(wd.r, uBase + wRad * 2.0, wd.f);
+        const pBot = wp(wd.r, uBase,              wd.f);
+        const pFrt = wp(wd.r + sF * wRad, uBase + wRad, wd.f + cF * wRad);
+        const pBck = wp(wd.r - sF * wRad, uBase + wRad, wd.f - cF * wRad);
+        fc = addCraftQuad(fc, pTop, pFrt, pBot, pBck, rgb565(22, 25, 30));
+        const pBeadlock = wp(wd.r, uBase + wRad, wd.f);
+        if (pBeadlock) drawInavCircleDot320(pBeadlock.sx, pBeadlock.sy, 2, C565.ORANGE);
+      }
+
+      renderSortedCraftFaces(fc);
+      renderRemoteBlePlayer320(projPoint320, projLine);
+    }
+
+    const rcCrawlerSim = {
+      px: 0.0, py: 0.5, pz: -16.0,
+      vx: 0.0, vy: 0.0, vz: 0.0,
+      yaw: 0.0,
+      spd: 0.0,
+      uFwd: 0.0,
+      steerAngle: 0.0,
+      thrCmd: 0.0,
+      lowGear: true, // true = LOW 4:1 Rock Crawl + Drag Brake 100%, false = HIGH 1:1 Trail
+      pitchRad: 0.0,
+      rollRad: 0.0,
+      flSusp: 0.0, frSusp: 0.0, rlSusp: 0.0, rrSusp: 0.0,
+      tippedOver: false,
+      presetIdx: 0,
+      camMode: 0,
+      chaseCam: false,
+      activeGate: 0,
+      lapCount: 0,
+      penalties: 0,
+      flightTime: 0.0,
+      totalDistKm: 0.0,
+      rx: 1, ry: 0, rz: 0,
+      ux: 0, uy: 1, uz: 0,
+      fx: 0, fy: 0, fz: 1,
+
+      reset() {
+        if (activeWorldMapMode !== 'crawler') {
+          generateCrawlerRockVoxelMap();
+        }
+        const g0 = CRAWLER_GATES[this.activeGate % CRAWLER_GATES.length];
+        this.px = g0.x - Math.sin(g0.yaw) * 3.2;
+        this.pz = g0.z - Math.cos(g0.yaw) * 3.2;
+        this.py = getTerrainHeightMeters(this.px, this.pz) + 0.06;
+        this.yaw = g0.yaw;
+        this.vx = 0.0; this.vy = 0.0; this.vz = 0.0;
+        this.uFwd = 0.0; this.spd = 0.0;
+        this.steerAngle = 0.0;
+        this.thrCmd = 0.0;
+        this.pitchRad = 0.0;
+        this.rollRad  = 0.0;
+        this.tippedOver = false;
+        this.updateBasis();
+      },
+
+      updateBasis() {
+        const cY = Math.cos(this.yaw), sY = Math.sin(this.yaw);
+        const cP = Math.cos(this.pitchRad), sP = Math.sin(this.pitchRad);
+        const cR = Math.cos(this.rollRad),  sR = Math.sin(this.rollRad);
+        this.fx = sY * cP;
+        this.fy = sP;
+        this.fz = cY * cP;
+        const r0x = cY, r0z = -sY;
+        this.rx = r0x * cR;
+        this.ry = sR;
+        this.rz = r0z * cR;
+        this.ux = -r0x * sR - sY * sP * cR;
+        this.uy = cR * cP;
+        this.uz = -r0z * sR - cY * sP * cR;
+      },
+
+      step(dt) {
+        this.flightTime += dt;
+        const preset = RC_CRAWLER_PRESETS[this.presetIdx];
+
+        // Botón A cambia entre Reductora LOW 4:1 (Rock Crawl + Drag Brake) y HIGH 1:1 (Trail)
+        if (hwInput.justPressed('A')) {
+          this.lowGear = !this.lowGear;
+          showToast(this.lowGear ? 'CAJA: LOW 4:1 (DRAG BRAKE ON)' : 'CAJA: HIGH 1:1 (TRAIL SPEED)');
+          playTone(this.lowGear ? 520 : 780, 0.05);
+        }
+
+        // Eje vertical del Stick Derecho (hwInput.ry) ajusta el Zoom de la cámara LOS
+        if (Math.abs(hwInput.ry) > 0.24 && Math.abs(hwInput.ry) > Math.abs(hwInput.rx) * 1.15) {
+          fcProfile.losZoom = Math.max(0.50, Math.min(3.50, (fcProfile.losZoom || 1.25) + hwInput.ry * 0.95 * dt));
+        }
+
+        if (this.tippedOver) {
+          // Si volcó por exceso de inclinación (> tipDeg), mantener volcado hasta pulsar X (Winch/Reset)
+          this.rollRad += (Math.sign(this.rollRad || 1) * 1.45 - this.rollRad) * Math.min(1.0, dt * 6.0);
+          this.uFwd = 0.0; this.spd = 0.0;
+          this.updateBasis();
+          return;
+        }
+
+        const rawSteer = Math.abs(hwInput.rx) >= Math.abs(hwInput.lx) ? hwInput.rx : hwInput.lx;
+        const targetSteer = applySuperExpo(rawSteer, 1.0, 0.30) * (38.0 * DEG2RAD);
+        this.steerAngle += (targetSteer - this.steerAngle) * Math.min(1.0, dt * 15.0);
+
+        const esc = hwInput.ly;
+        this.thrCmd = esc;
+
+        const fwdX = Math.sin(this.yaw), fwdZ = Math.cos(this.yaw);
+        const rgtX = Math.cos(this.yaw), rgtZ = -Math.sin(this.yaw);
+
+        // 1. Muestreo de las 4 Ruedas sobre el Mapa Voxel de Roca para calcular Pitch, Roll y Articulación de Ejes
+        const halfTrack = 1.05, halfWb = 1.25;
+        const hFL = getTerrainHeightMeters(this.px - rgtX * halfTrack + fwdX * halfWb, this.pz - rgtZ * halfTrack + fwdZ * halfWb);
+        const hFR = getTerrainHeightMeters(this.px + rgtX * halfTrack + fwdX * halfWb, this.pz + rgtZ * halfTrack + fwdZ * halfWb);
+        const hRL = getTerrainHeightMeters(this.px - rgtX * halfTrack - fwdX * halfWb, this.pz - rgtZ * halfTrack - fwdZ * halfWb);
+        const hRR = getTerrainHeightMeters(this.px + rgtX * halfTrack - fwdX * halfWb, this.pz + rgtZ * halfTrack - fwdZ * halfWb);
+
+        const avgH   = 0.25 * (hFL + hFR + hRL + hRR);
+        const tPitch = Math.atan2((0.5 * (hFL + hFR)) - (0.5 * (hRL + hRR)), halfWb * 2.0);
+        const tRoll  = Math.atan2((0.5 * (hFL + hRL)) - (0.5 * (hFR + hRR)), halfTrack * 2.0);
+
+        this.py       += (avgH + 0.05 - this.py) * Math.min(1.0, dt * 16.0);
+        this.pitchRad += (tPitch - this.pitchRad) * Math.min(1.0, dt * 12.0);
+        this.rollRad  += (tRoll  - this.rollRad)  * Math.min(1.0, dt * 12.0);
+
+        // Desplazamiento vertical relativo de cada rueda respecto al plano del chasis (Axle Flex visible en 3D)
+        const flexMul = 0.28 * preset.flexScale;
+        this.flSusp = Math.max(-0.22, Math.min(0.26, (hFL - avgH) * flexMul));
+        this.frSusp = Math.max(-0.22, Math.min(0.26, (hFR - avgH) * flexMul));
+        this.rlSusp = Math.max(-0.22, Math.min(0.26, (hRL - avgH) * flexMul));
+        this.rrSusp = Math.max(-0.22, Math.min(0.26, (hRR - avgH) * flexMul));
+
+        // 2. Comprobación de Vuelco por Centro de Gravedad (Rollover si supera tipDeg)
+        const tiltDeg = Math.hypot(this.pitchRad, this.rollRad) * RAD2DEG;
+        if (Math.abs(this.rollRad * RAD2DEG) > preset.tipDeg || Math.abs(this.pitchRad * RAD2DEG) > preset.tipDeg + 6) {
+          this.tippedOver = true;
+          this.penalties++;
+          showToast('!VUELCO / ROLLOVER! PULSA X:WINCH');
+          playTone(190, 0.14);
+          return;
+        }
+
+        // 3. Tracción 4x4 con Diferenciales Bloqueados y Freno de Arrastre en Pendiente (Drag Brake 100% en LOW)
+        const maxSpd = this.lowGear ? preset.lowSpd : preset.highSpd;
+        const gravitySlopeAcc = -9.81 * Math.sin(this.pitchRad) * 0.65;
+
+        if (Math.abs(esc) < 0.06 && this.lowGear) {
+          // Drag Brake activo al 100%: clava el crawler en la roca inclinada al soltar el stick
+          this.uFwd *= Math.max(0.0, 1.0 - dt * 22.0);
+        } else {
+          const targetSpd = esc * maxSpd;
+          const torqueGain = this.lowGear ? 14.0 : 7.5;
+          this.uFwd += ((targetSpd - this.uFwd) * torqueGain + gravitySlopeAcc * (this.lowGear ? 0.25 : 0.85)) * dt;
+        }
+
+        if (Math.abs(this.uFwd) > 0.04) {
+          const dirSign = this.uFwd >= 0 ? 1.0 : -1.0;
+          this.yaw += this.steerAngle * dirSign * Math.min(1.0, Math.abs(this.uFwd) / 0.8) * 1.95 * dt;
+        }
+
+        this.vx = Math.sin(this.yaw) * this.uFwd;
+        this.vz = Math.cos(this.yaw) * this.uFwd;
+        this.spd = Math.abs(this.uFwd);
+        this.totalDistKm += (this.spd * dt) / 1000.0;
+
+        this.px = Math.max(-36.0, Math.min(36.0, this.px + this.vx * dt));
+        this.pz = Math.max(-24.0, Math.min(32.0, this.pz + this.vz * dt));
+        this.updateBasis();
+
+        // 4. Paso por las 10 Puertas Numeradas de Trial
+        const g = CRAWLER_GATES[this.activeGate];
+        if (Math.hypot(this.px - g.x, this.pz - g.z) < 2.35) {
+          this.activeGate = (this.activeGate + 1) % CRAWLER_GATES.length;
+          if (this.activeGate === 0) {
+            this.lapCount++;
+            showToast(`TRIAL COMPLETADO! VUELTA ${this.lapCount}`);
+            playTone(1020, 0.12);
+          } else {
+            showToast(`PUERTA ${this.activeGate}/10 OK -> ${CRAWLER_GATES[this.activeGate].name}`);
+            playTone(840, 0.06);
+          }
+        }
+      },
+
+      render() {
+        const rockStandX = 0.0, rockStandY = 14.5, rockStandZ = -24.0;
+        let camX = rockStandX, camY = rockStandY, camZ = rockStandZ;
+        let cRx = 1, cRy = 0, cRz = 0;
+        let cUx = 0, cUy = 1, cUz = 0;
+        let cFx = 0, cFy = 0, cFz = 1;
+        let zoomFactor = 1.0;
+
+        const userZoom = Math.max(0.50, Math.min(3.50, fcProfile.losZoom || 1.25));
+
+        if (this.camMode === 2 || this.chaseCam) {
+          const fc = computeFollowCamPose(this, 4.8 / userZoom, Math.max(1.1, 2.1 / Math.sqrt(userZoom)), 16.0);
+          camX = fc.camX; camY = Math.max(getTerrainHeightMeters(camX, camZ) + 0.9, fc.camY); camZ = fc.camZ;
+          cRx = fc.cRx; cRy = fc.cRy; cRz = fc.cRz;
+          cUx = fc.cUx; cUy = fc.cUy; cUz = fc.cUz;
+          cFx = fc.cFx; cFy = fc.cFy; cFz = fc.cFz;
+          zoomFactor = userZoom;
+        } else {
+          const rawDx = this.px - rockStandX;
+          const rawDz = this.pz - rockStandZ;
+          const horizDist = Math.hypot(rawDx, rawDz) || 1.0;
+          const dirHx = rawDx / horizDist;
+          const dirHz = rawDz / horizDist;
+
+          if (this.camMode === 0) {
+            const baseEff = horizDist > 10.5 ? (10.5 + (horizDist - 10.5) * 0.28) : horizDist;
+            const effHoriz = Math.max(3.4, Math.min(60.0, baseEff / userZoom));
+            zoomFactor = horizDist / Math.max(1.0, effHoriz);
+            camX = this.px - dirHx * effHoriz;
+            camZ = this.pz - dirHz * effHoriz;
+            camY = Math.max(getTerrainHeightMeters(camX, camZ) + 2.2, Math.min(20.0, this.py + 2.6 + effHoriz * 0.58));
+          } else {
+            const effHoriz = Math.max(3.6, Math.min(68.0, horizDist / userZoom));
+            zoomFactor = userZoom;
+            camX = this.px - dirHx * effHoriz;
+            camZ = this.pz - dirHz * effHoriz;
+            camY = Math.max(getTerrainHeightMeters(camX, camZ) + 2.4, Math.min(22.0, 16.0 / Math.sqrt(userZoom)));
+          }
+
+          const dx = this.px - camX;
+          const dy = (this.py + 0.35) - camY;
+          const dz = this.pz - camZ;
+          const dLen = Math.hypot(dx, dy, dz) || 1.0;
+          cFx = dx / dLen; cFy = dy / dLen; cFz = dz / dLen;
+          const hLen = Math.hypot(cFx, cFz) || 1.0;
+          cRx =  cFz / hLen; cRy = 0.0; cRz = -cFx / hLen;
+          cUx = cFy * cRz - cFz * cRy;
+          cUy = cFz * cRx - cFx * cRz;
+          cUz = cFx * cRy - cFy * cRx;
+        }
+
+        renderVoxelTerrainAndSky(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz);
+        const { projPoint320, projLine } = createProjector320(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz);
+        renderCrawlerGatesAndProps320(this, projPoint320, projLine);
+        renderSolidRockCrawler320(this, projPoint320, projLine);
+        this.renderCrawlerOsd320(zoomFactor);
+      },
+
+      renderCrawlerOsd320(zoomFactor) {
+        const WHITE = 0xFFFF;
+        const preset = RC_CRAWLER_PRESETS[this.presetIdx];
+        const titleStr = `4X4 CRAWLER // ${preset.name}`;
+        drawOsdSmall320(titleStr, 160 - ((titleStr.length * 5) >> 1), 6, WHITE);
+
+        const pitchDeg = Math.round(this.pitchRad * RAD2DEG);
+        const rollDeg  = Math.round(this.rollRad  * RAD2DEG);
+        const maxTilt  = Math.max(Math.abs(pitchDeg), Math.abs(rollDeg));
+
+        let statusStr = this.lowGear ? 'LOW 4:1 // DRAG BRAKE 100%' : 'HIGH 1:1 // TRAIL GEAR';
+        let statusCol = this.lowGear ? C565.GREEN : C565.CYAN;
+        if (this.tippedOver) {
+          statusStr = '!ROLLOVER! PRESS X FOR WINCH';
+          statusCol = C565.RED;
+        } else if (maxTilt >= preset.tipDeg - 8) {
+          statusStr = `!CRITICAL TILT ${maxTilt} DEG!`;
+          statusCol = C565.ORANGE;
+        }
+        drawOsdSmall320(statusStr, 160 - ((statusStr.length * 5) >> 1), 16, statusCol);
+
+        const g = CRAWLER_GATES[this.activeGate];
+        const distG = Math.hypot(g.x - this.px, g.z - this.pz).toFixed(1);
+        drawOsdSmall320(`GATE ${this.activeGate + 1}/10`, 8, 8,  C565.GOLD);
+        drawOsdSmall320(`DST  ${distG}M`,                8, 18, WHITE);
+        drawOsdSmall320(`PEN  ${this.penalties}`,       8, 28, this.penalties > 0 ? C565.ORANGE : C565.GREEN);
+
+        const zUsr = (fcProfile.losZoom || 1.25).toFixed(2);
+        const camLbl = (this.camMode === 2 || this.chaseCam) ? `CHS Z:${zUsr}X` : (this.camMode === 0 ? `LOS ${zoomFactor.toFixed(1)}X` : `MAN ${zUsr}X`);
+        drawOsdSmall320(camLbl,            254, 8,  C565.CYAN);
+        drawOsdSmall320(`A:GEAR X:WINCH`,  246, 18, WHITE);
+        drawOsdSmall320(`[-ZOOM ${zUsr}+]`, 244, 28, C565.GOLD);
+
+        // Inclinómetro Gráfico Pitch & Roll en la esquina inferior derecha
+        const icx = 282, icy = 192, ir = 18;
+        drawInavCircleDot320(icx, icy, 2, NIN565.CARD);
+        const rLineX = Math.round(Math.cos(this.rollRad) * ir);
+        const rLineY = Math.round(Math.sin(this.rollRad) * ir);
+        const incCol = maxTilt >= preset.tipDeg - 8 ? C565.RED : (maxTilt >= 25 ? C565.GOLD : C565.GREEN);
+        drawOutlinedLine320(icx - rLineX, icy - rLineY, icx + rLineX, icy + rLineY, incCol);
+        drawOsdSmall320(`PIT ${pitchDeg >= 0 ? '+' : ''}${pitchDeg}D`, 248, 212, WHITE);
+        drawOsdSmall320(`ROL ${rollDeg  >= 0 ? '+' : ''}${rollDeg}D`,  248, 222, incCol);
+
+        const kmh = (this.spd * 3.6).toFixed(1);
+        drawOsdSmall320(`SPD  ${kmh} KMH`, 8, 194, C565.GREEN);
+        drawOsdSmall320(`GEAR ${this.lowGear ? 'LOW 4:1' : 'HIGH 1:1'}`, 8, 205, C565.GOLD);
+        drawOsdSmall320(`DIFF LOCKED 4WD`, 8, 216, C565.CYAN);
+      }
+    };
+
+    /***************************************************************************
      * 7. SISTEMA OPERATIVO RETRO-GO: SELECTOR MULTI-SIMULADOR + MENÚ UNIFICADO
      ***************************************************************************/
     const ROM_LIST = [
-      { id: 'fpv_wing',    sys: 'FPV-3D', name: '1. FPV FIXED-WING',  desc: 'ALA Z-84 / AVION COLA', ctrl: 'L:THR/RUD R:ELV/AIL', fav: true  },
-      { id: 'fpv_drone',   sys: 'FPV-3D', name: '2. FPV DRONE 5"',    desc: 'QUAD-X BETAFLIGHT PID', ctrl: 'L:THR/YAW R:PIT/ROL', fav: true  },
-      { id: 'rc_sailboat', sys: 'RC-LOS', name: '3. RC SAILBOAT LOS', desc: 'VELERO IOM / BAHIA 3D', ctrl: 'L:VELA/WINCH R:TIMON',fav: true  },
-      { id: 'rc_car',      sys: 'RC-LOS', name: '4. RC CAR TRACK LOS',desc: 'BUGGY/DRIFT 1/10 PISTA',ctrl: 'L:GAS/BRK R:DIRECC.', fav: true  },
-      { id: 'fc_tuning',   sys: 'CONFIG', name: '5. WORLD & RC SETUP',desc: 'VIENTO, MAPAS Y RADIO', ctrl: 'CONFIGURADOR GLOBAL', fav: false },
-      { id: 'hwtest',      sys: 'TOOLS',  name: '6. SPI & TOUCH DIAG',desc: 'TEST DMA + ADC + PAD',  ctrl: 'DIAGNOSTICO S3 N16R8',fav: false }
+      { id: 'fpv_wing',    sys: 'FPV-3D', name: '1. FPV FIXED-WING',   desc: 'ALA Z-84 / AVION COLA',  ctrl: 'L:THR/RUD R:ELV/AIL', fav: true  },
+      { id: 'fpv_drone',   sys: 'FPV-3D', name: '2. FPV DRONE 5"',     desc: 'QUAD-X BETAFLIGHT PID',  ctrl: 'L:THR/YAW R:PIT/ROL', fav: true  },
+      { id: 'rc_sailboat', sys: 'RC-LOS', name: '3. RC SAILBOAT LOS',  desc: 'VELERO IOM / 3 REGATAS', ctrl: 'L:VELA/WINCH R:TIMON',fav: true  },
+      { id: 'rc_boat',     sys: 'RC-LOS', name: '4. RC SPEEDBOAT',     desc: 'LANCHA 6S ROOSTER TAIL', ctrl: 'L:GAS/REV R:TIMON',   fav: true  },
+      { id: 'rc_car',      sys: 'RC-LOS', name: '5. RC CAR TRACK LOS', desc: 'BUGGY/DRIFT 3 PISTAS',   ctrl: 'L:GAS/BRK R:DIRECC.', fav: true  },
+      { id: 'rc_crawler',  sys: 'RC-LOS', name: '6. ROCK CRAWLER 4X4', desc: 'TRIAL ROCA / REDUCTORA', ctrl: 'L:GAS R:DIR A:LOW/HI',fav: true  },
+      { id: 'fc_tuning',   sys: 'CONFIG', name: '7. WORLD & RC SETUP', desc: 'VIENTO, PISTAS Y BLE',   ctrl: 'CONFIGURADOR GLOBAL', fav: false },
+      { id: 'hwtest',      sys: 'TOOLS',  name: '8. SPI & TOUCH DIAG', desc: 'TEST DMA + ADC + PAD',   ctrl: 'DIAGNOSTICO S3 N16R8',fav: false }
     ];
 
     let osState = 'boot';
@@ -6560,7 +8252,7 @@
 
     function showToast(msg) {
       toastMsg = msg;
-      toastTimer = 1.4;
+      toastTimer = 0.92;
       blinkSdLed();
     }
 
@@ -6593,119 +8285,166 @@
         if (activeWorldMapMode !== 'fpv') generateGentleVoxelMap(currentThemeIdx);
         setFaceLabels('MODO', 'LNCH', 'CAM', 'BOOST', 'L:THR/RUD R:ELV/AIL | SELECT:SIMS | MENU:CFG');
         fpvWingSim.reset();
-        showToast('HAND LAUNCH! Z-84');
+        showToast('HAND LAUNCH Z-84');
       } else if (romId === 'rc_sailboat') {
         setFaceLabels('CLASE', 'RST', 'CAM', 'GUST', 'L:ESCOTA R:TIMON | UP/DN O R-Y:ZOOM LOS | B:CAM');
         rcSailboatSim.reset();
-        showToast('VELERO RC LOS // UP/DN:ZOOM');
+        showToast('RC SAIL // UP/DN:ZOOM');
+      } else if (romId === 'rc_boat') {
+        setFaceLabels('CLASE', 'RST', 'CAM', 'GAS', 'L:GAS R:TIMON | UP/DN O R-Y:ZOOM LOS | B:CAM');
+        rcBoatSim.reset();
+        showToast('RC SPEEDBOAT 6S // ROOSTER TAIL');
+      } else if (romId === 'rc_boat') {
+        const cx = vx + 46, cy = vy + 46;
+        fillRect320(vx + 6, cy + 4, vw - 12, 10, rgb565(14, 58, 112));
+        // Rooster tail de espuma blanca
+        drawOutlinedLine320(cx - 18, cy + 2, cx - 36, cy - 16, NIN565.WHITE);
+        drawOutlinedLine320(cx - 18, cy + 2, cx - 34, cy - 8,  C565.CYAN);
+        // Casco Deep-V rojo/blanco en planeo
+        drawOutlinedLine320(cx - 18, cy + 2, cx + 24, cy - 6, NIN565.RED);
+        drawOutlinedLine320(cx - 14, cy + 5, cx + 24, cy - 6, NIN565.WHITE);
+        drawPillBadge320(vx + 14, vy + 66, 68, 13, NIN565.CARD_SEL, 'DEEP-V 6S', NIN565.RED, true);
+      } else if (romId === 'rc_crawler') {
+        const cx = vx + 48, cy = vy + 42;
+        // Escalones de roca roja
+        fillRect320(vx + 10, cy + 10, 34, 8, rgb565(178, 78, 38));
+        fillRect320(vx + 44, cy + 6,  42, 12, rgb565(198, 92, 44));
+        // Chasis 4x4 inclinado con ruedas grandes de tacos
+        drawRoundedCard320(cx - 18, cy - 10, 36, 14, rgb565(235, 118, 24), NIN565.WHITE);
+        drawInavCircleDot320(cx - 13, cy + 6, 5, NIN565.WHITE);
+        drawInavCircleDot320(cx + 13, cy + 2, 5, NIN565.GOLD);
+        drawPillBadge320(vx + 14, vy + 66, 68, 13, NIN565.CARD_SEL, '4X4 CRAWL', NIN565.GOLD, true);
       } else if (romId === 'rc_car') {
         setFaceLabels('SPEC', 'RST', 'CAM', 'GAS', 'L:GAS R:DIR | UP/DN O R-Y:ZOOM LOS | B:CAM');
         rcCarSim.reset();
-        showToast('CARRO RC 1/10 // UP/DN:ZOOM');
+        showToast('RC CAR 1/10 // UP/DN:ZOOM');
+      } else if (romId === 'rc_crawler') {
+        setFaceLabels('RIG', 'WINCH', 'CAM', 'GEAR', 'L:CRAWL R:DIR | A:LOW/HIGH GEAR | X:WINCH');
+        rcCrawlerSim.reset();
+        showToast('4X4 ROCK CRAWLER // A:LOW 4:1');
       } else if (romId === 'hwtest') {
-        setFaceLabels('Y', 'X', 'B', 'A', 'TOCA LA PANTALLA IPS O PULSA SELECT / ★ MENU');
+        setFaceLabels('Y', 'X', 'B', 'A', 'TOCA LA PANTALLA IPS O PULSA SELECT / + MENU');
       }
     }
 
+    // Tarjeta de Vista Previa Animada en 320x240 nativo estilo Nintendo Switch
     function drawRomBoxArt(romId, t) {
-      const bx = 84, by = 13, bw = 41, bh = 37;
-      fbRect(bx, by, bw, bh, true, 8);
-      fbRect(bx, by, bw, bh, false, 5);
+      const vx = 212, vy = 34, vw = 96, vh = 86;
+      drawRoundedCard320(vx, vy, vw, vh, rgb565(16, 20, 28), NIN565.BORDER);
 
       if (romId === 'fpv_drone') {
-        fbRect(bx + 12, by + 5, 17, 12, false, 10);
-        const dy = Math.round(Math.sin(t * 4) * 2);
-        const cx = bx + 20, cy = by + 19 + dy;
-        fbDrawLine(cx - 8, cy - 3, cx + 8, cy + 3, 0, 5);
-        fbDrawLine(cx - 8, cy + 3, cx + 8, cy - 3, 0, 5);
-        fbCircle(cx - 8, cy - 3, 2, 3);
-        fbCircle(cx + 8, cy - 3, 2, 3);
-        fbDrawText('QUAD-X', bx + 9, by + 29, 2);
+        // Puerta 3D + Dron Quad-X animado en resolución nativa 320x240
+        drawRoundedCard320(vx + 28, vy + 10, 40, 28, rgb565(22, 26, 36), C565.MAGENTA);
+        const dy = Math.round(Math.sin(t * 4.0) * 4);
+        const cx = vx + 48, cy = vy + 46 + dy;
+        drawOutlinedLine320(cx - 20, cy - 8, cx + 20, cy + 8, NIN565.BLUE);
+        drawOutlinedLine320(cx - 20, cy + 8, cx + 20, cy - 8, NIN565.BLUE);
+        drawRoundedCard320(cx - 7, cy - 4, 14, 8, NIN565.RED, NIN565.WHITE);
+        drawInavCircleDot320(cx - 20, cy - 8, 4, NIN565.GREEN);
+        drawInavCircleDot320(cx + 20, cy - 8, 4, NIN565.GREEN);
+        drawInavCircleDot320(cx - 20, cy + 8, 4, NIN565.GOLD);
+        drawInavCircleDot320(cx + 20, cy + 8, 4, NIN565.GOLD);
+        drawPillBadge320(vx + 18, vy + 66, 60, 13, NIN565.CARD_SEL, 'QUAD-X 5"', NIN565.WHITE, true);
       } else if (romId === 'fpv_wing') {
-        const cx = bx + 20, cy = by + 16;
-        const bank = Math.sin(t * 2.5) * 4;
-        fbDrawLine(cx, cy - 6, cx - 13, cy + 6 + bank, 0, 1);
-        fbDrawLine(cx, cy - 6, cx + 13, cy + 6 - bank, 0, 1);
-        fbDrawLine(cx - 13, cy + 6 + bank, cx, cy + 2, 0, 4);
-        fbDrawLine(cx + 13, cy + 6 - bank, cx, cy + 2, 0, 4);
-        fbDrawText('Z-84', bx + 12, by + 29, 3);
+        const cx = vx + 48, cy = vy + 38;
+        const bank = Math.round(Math.sin(t * 2.6) * 8);
+        drawOutlinedLine320(cx, cy - 12, cx - 32, cy + 12 + bank, NIN565.WHITE);
+        drawOutlinedLine320(cx, cy - 12, cx + 32, cy + 12 - bank, NIN565.WHITE);
+        drawOutlinedLine320(cx - 32, cy + 12 + bank, cx, cy + 3, NIN565.RED);
+        drawOutlinedLine320(cx + 32, cy + 12 - bank, cx, cy + 3, NIN565.RED);
+        drawInavCircleDot320(cx, cy - 4, 2, NIN565.BLUE);
+        drawPillBadge320(vx + 18, vy + 66, 60, 13, NIN565.CARD_SEL, 'Z-84 WING', NIN565.GREEN, true);
       } else if (romId === 'rc_sailboat') {
-        // Arte animado de Velero RC escorando sobre olas azules
-        const cx = bx + 20, cy = by + 23;
-        const heel = Math.sin(t * 2.2) * 3;
-        // Olas de agua
-        fbDrawLine(bx + 4, cy + 3, bx + 36, cy + 3, 1, 5);
-        fbDrawLine(bx + 6, cy + 5, bx + 34, cy + 5, 0, 5);
-        // Casco rojo/blanco
-        fbDrawLine(cx - 9, cy, cx + 10, cy, 0, 4);
-        fbDrawLine(cx - 7, cy + 2, cx + 8, cy + 2, 0, 1);
-        // Mástil y dos velas triangulares (Mayor y Foque)
-        fbDrawLine(cx, cy, cx + heel, cy - 15, 0, 2);
-        fbDrawLine(cx + heel, cy - 15, cx - 9 + heel, cy - 2, 0, 1);
-        fbDrawLine(cx - 9 + heel, cy - 2, cx, cy - 2, 0, 1);
-        fbDrawLine(cx + heel, cy - 13, cx + 8 + heel, cy - 2, 0, 5);
-        fbDrawLine(cx + 8 + heel, cy - 2, cx, cy - 2, 0, 5);
-        fbDrawText('SAIL', bx + 12, by + 29, 5);
+        const cx = vx + 48, cy = vy + 52;
+        const heel = Math.round(Math.sin(t * 2.2) * 7);
+        // Agua y olas limpias
+        fillRect320(vx + 6, cy + 4, vw - 12, 10, rgb565(14, 58, 112));
+        drawOutlinedLine320(vx + 10, cy + 4, vx + vw - 10, cy + 4, NIN565.BLUE);
+        // Casco + mástil + velas
+        fillRect320(cx - 20, cy - 2, 40, 5, NIN565.RED);
+        drawOutlinedLine320(cx, cy - 2, cx + heel, cy - 34, NIN565.GOLD);
+        drawOutlinedLine320(cx + heel, cy - 34, cx - 20 + heel, cy - 5, NIN565.WHITE);
+        drawOutlinedLine320(cx - 20 + heel, cy - 5, cx, cy - 5, NIN565.WHITE);
+        drawOutlinedLine320(cx + heel, cy - 30, cx + 18 + heel, cy - 5, NIN565.BLUE);
+        drawOutlinedLine320(cx + 18 + heel, cy - 5, cx, cy - 5, NIN565.BLUE);
+        drawPillBadge320(vx + 18, vy + 66, 60, 13, NIN565.CARD_SEL, 'IOM SAIL', NIN565.BLUE, true);
       } else if (romId === 'rc_car') {
-        // Arte animado de Carro RC 1/10 derrapando sobre pista con pianos rojo/blanco
-        const cx = bx + 20 + Math.round(Math.sin(t * 3.5) * 3), cy = by + 19;
-        // Pianos rojo/blanco de la pista
-        fbDrawLine(bx + 3, by + 8, bx + 12, by + 26, 0, 4);
-        fbDrawLine(bx + 37, by + 8, bx + 28, by + 26, 0, 1);
-        // Chasis + alerón + 4 ruedas
-        fbRect(cx - 8, cy - 4, 16, 7, true, 9);
-        fbRect(cx - 4, cy - 7, 8, 4, true, 5);
-        fbRect(cx - 9, cy - 9, 4, 3, true, 2); // Alerón
-        fbRect(cx - 9, cy + 2, 4, 3, true, 1); // Rueda trasera
-        fbRect(cx + 5, cy + 2, 4, 3, true, 1); // Rueda delantera
-        fbDrawText('RCCAR', bx + 10, by + 29, 9);
+        const cx = vx + 48 + Math.round(Math.sin(t * 3.5) * 7), cy = vy + 42;
+        // Pianos de pista
+        drawOutlinedLine320(vx + 8, vy + 16, vx + 26, vy + 58, NIN565.RED);
+        drawOutlinedLine320(vx + vw - 8, vy + 16, vx + vw - 26, vy + 58, NIN565.WHITE);
+        // Carrocería RC 1/10
+        drawRoundedCard320(cx - 18, cy - 8, 36, 15, NIN565.RED, NIN565.WHITE);
+        fillRect320(cx - 9, cy - 14, 18, 7, NIN565.BLUE);
+        fillRect320(cx - 20, cy - 16, 8, 5, NIN565.GOLD);
+        fillRect320(cx - 19, cy + 5, 9, 6, NIN565.WHITE);
+        fillRect320(cx + 10, cy + 5, 9, 6, NIN565.WHITE);
+        drawPillBadge320(vx + 18, vy + 66, 60, 13, NIN565.CARD_SEL, '1/10 BUGGY', NIN565.GOLD, true);
       } else if (romId === 'fc_tuning') {
-        fbDrawLine(bx + 6, by + 24, bx + 35, by + 24, 0, 6);
-        fbDrawLine(bx + 20, by + 6, bx + 20, by + 26, 0, 6);
-        fbDrawLine(bx + 7, by + 24, bx + 20, by + 18, 0, 3);
-        fbDrawLine(bx + 20, by + 18, bx + 33, by + 7, 0, 2);
-        fbDrawText('SETUP', bx + 10, by + 29, 5);
+        drawOutlinedLine320(vx + 14, vy + 54, vx + 82, vy + 54, NIN565.BORDER);
+        drawOutlinedLine320(vx + 48, vy + 12, vx + 48, vy + 58, NIN565.BORDER);
+        drawOutlinedLine320(vx + 16, vy + 52, vx + 48, vy + 36, NIN565.GREEN);
+        drawOutlinedLine320(vx + 48, vy + 36, vx + 80, vy + 14, NIN565.GOLD);
+        drawPillBadge320(vx + 18, vy + 66, 60, 13, NIN565.CARD_SEL, 'RC TUNING', NIN565.GOLD, true);
       } else {
-        fbRect(bx + 10, by + 6, 20, 18, false, 3);
-        fbDrawLine(bx + 13, by + 15, bx + 27, by + 15, 0, 2);
-        fbDrawLine(bx + 20, by + 9, bx + 20, by + 21, 0, 2);
-        fbDrawText('DIAG', bx + 12, by + 29, 3);
+        drawRoundedCard320(vx + 22, vy + 12, 52, 42, rgb565(22, 30, 42), NIN565.GREEN);
+        drawOutlinedLine320(vx + 32, vy + 33, vx + 64, vy + 33, NIN565.GOLD);
+        drawOutlinedLine320(vx + 48, vy + 18, vx + 48, vy + 48, NIN565.GOLD);
+        drawPillBadge320(vx + 18, vy + 66, 60, 13, NIN565.CARD_SEL, 'S3 DIAG', NIN565.GREEN, true);
       }
     }
 
     function updateAndRenderRetroGoBoot(dt) {
       bootTimer -= dt;
-      fbClear(0);
-      fbRect(2, 2, 124, 60, false, 5);
-      fbRect(3, 3, 122, 11, true, 8);
-      fbDrawText('RETRO-GO S3 // MULTI-SIM RC', 8, 6, 2);
-      fbDrawText('MCU : ESP32-S3 LX7 240MHZ', 8, 18, 1);
-      fbDrawText('MEM : 16MB FLASH / 8MB PSRAM', 8, 26, 3);
-      fbDrawText('SIMS: WING / DRONE / SAIL / CAR', 8, 34, 5);
-      fbDrawText('OSD : MAX7456 2-BIT + LOS ZOOM', 8, 42, 2);
+      vram565.fill(NIN565.BG);
+
+      // Cabecera limpia estilo Nintendo Switch
+      fillRect320(0, 0, DISP_W, 24, NIN565.HEADER);
+      fillRect320(0, 24, DISP_W, 2, NIN565.RED);
+      drawPillBadge320(8, 5, 44, 14, NIN565.RED, 'N16R8', NIN565.WHITE, false);
+      drawInavText320('FPV & RC MULTI-SIMULATOR', 58, 9, NIN565.WHITE, -1);
+
+      // Tarjeta central de hardware ESP32-S3
+      drawRoundedCard320(16, 38, 288, 138, NIN565.CARD, NIN565.BORDER);
+      drawInavText320('SYSTEM HARDWARE CHECK', 30, 50, NIN565.GOLD, -1);
+      fillRect320(30, 62, 260, 1, NIN565.BORDER);
+
+      drawInavText320('MCU', 30, 72, NIN565.MUTED, -1);
+      drawInavText320('ESP32-S3 DUAL LX7 240MHZ', 84, 72, NIN565.WHITE, -1);
+
+      drawInavText320('MEMORY', 30, 90, NIN565.MUTED, -1);
+      drawInavText320('512KB SRAM + 8MB PSRAM', 84, 90, NIN565.GREEN, -1);
+
+      drawInavText320('DISPLAY', 30, 108, NIN565.MUTED, -1);
+      drawInavText320('ILI9341V 320X240 RGB565', 84, 108, NIN565.BLUE, -1);
+
+      drawInavText320('ENGINES', 30, 126, NIN565.MUTED, -1);
+      drawInavText320('WING / DRONE / SAIL / CAR', 84, 126, NIN565.WHITE, -1);
 
       const pct = Math.min(1.0, (0.65 - bootTimer) / 0.55);
-      fbRect(12, 51, 104, 6, false, 1);
-      fbRect(14, 53, Math.round(pct * 100), 2, true, 3);
+      drawSliderBar320(30, 152, 260, 8, pct, NIN565.RED);
+
+      // Pie de pantalla
+      fillRect320(0, 214, DISP_W, 26, NIN565.HEADER);
+      drawBtnPrompt320(96, 222, 'A', NIN565.RED, 'PRESS TO START', NIN565.WHITE);
 
       if (bootTimer <= 0 || hwInput.justPressed('A') || hwInput.justPressed('MENU') || capTouch.justTapped) {
-        // Abrir el Selector Principal de Simuladores para elegir entre Wing, Drone, Velero RC y Carro RC
         osState = 'launcher';
         setFaceLabels('TEMA', 'CFG', 'BACK', 'RUN', 'UP/DN/TOUCH:ELEGIR SIMULADOR | A:INICIAR | X:SETUP');
       }
     }
 
-    // Selector Principal de Simuladores en resolución nativa 320x240 con Vista Previa Animada
+    // Selector Principal de Simuladores en resolución nativa 320x240 estilo Nintendo Switch Dark Matte
     function updateAndRenderRetroGoLauncher(dt) {
       previewAnimT += dt;
       if (navCooldown > 0) navCooldown -= dt;
 
       if (rgCursor >= ROM_LIST.length) rgCursor = 0;
 
-      // Soporte táctil directo sobre la lista de 6 simuladores/modos y panel derecho
+      // Soporte táctil directo sobre las 6 tarjetas izquierdas, panel derecho y barra inferior
       if (capTouch.justTapped) {
-        if (capTouch.y240 >= 32 && capTouch.y240 <= 198 && capTouch.x320 <= 205) {
-          const idx = Math.floor((capTouch.y240 - 32) / 27);
+        if (capTouch.y240 >= 28 && capTouch.y240 <= 210 && capTouch.x320 <= 202) {
+          const idx = Math.floor((capTouch.y240 - 28) / 22);
           if (idx >= 0 && idx < ROM_LIST.length) {
             if (rgCursor === idx) {
               launchRom(ROM_LIST[idx].id);
@@ -6716,15 +8455,19 @@
               playTone(480, 0.025);
             }
           }
-        } else if (capTouch.x320 > 205 && capTouch.y240 >= 32 && capTouch.y240 <= 198) {
+        } else if (capTouch.x320 > 202 && capTouch.y240 >= 28 && capTouch.y240 <= 210) {
           launchRom(ROM_LIST[rgCursor].id);
           capTouch.justTapped = false;
           return;
-        } else if (capTouch.y240 > 198) {
-          if (capTouch.x320 < 105) {
+        } else if (capTouch.y240 > 210) {
+          if (capTouch.x320 < 95) {
             launchRom(ROM_LIST[rgCursor].id);
-          } else if (capTouch.x320 < 215) {
+          } else if (capTouch.x320 < 175) {
             launchRom('fc_tuning');
+          } else if (capTouch.x320 < 245) {
+            generateGentleVoxelMap(currentThemeIdx + 1);
+            showToast(TERRAIN_THEMES[currentThemeIdx].name);
+            playTone(700, 0.04);
           } else {
             launchRom(activeRomId);
           }
@@ -6771,45 +8514,69 @@
         }
       }
 
-      // Renderizado del Selector de Simuladores en 320x240 RGB565
-      fbClear(0);
-      fbRect(2, 2, 124, 60, false, 5);
-      fbRect(2, 2, 124, 8, true, 8);
-      drawInavText320('ESP32-S3 // SELECTOR DE SIMULADOR RC', 14, 8, C565.GOLD);
+      // 1. Fondo y Barra Superior Nintendo Switch Dark Matte
+      vram565.fill(NIN565.BG);
+      fillRect320(0, 0, DISP_W, 22, NIN565.HEADER);
+      fillRect320(0, 22, DISP_W, 2, NIN565.RED);
+      drawPillBadge320(6, 4, 42, 14, NIN565.RED, 'RC SIM', NIN565.WHITE, true);
+      drawInavText320('SELECT SIMULATOR', 54, 8, NIN565.WHITE, -1);
+      drawPillBadge320(268, 4, 46, 14, NIN565.CARD, '60 FPS', NIN565.GREEN, true, NIN565.BORDER);
 
+      // 2. Lista de 8 Tarjetas Redondeadas a la izquierda (x=6..200, paso vertical 22px)
+      const cleanNames = [
+        'FPV FIXED-WING',
+        'FPV DRONE 5"',
+        'RC SAILBOAT',
+        'RC SPEEDBOAT 6S',
+        'RC CAR 1/10',
+        'ROCK CRAWLER 4X4',
+        'WORLD & RC SETUP',
+        'HW DIAGNOSTIC'
+      ];
       for (let i = 0; i < ROM_LIST.length; i++) {
         const rom = ROM_LIST[i];
-        const py320 = 34 + i * 27;
+        const cy = 28 + i * 22;
         const isSel = (i === rgCursor);
         const isRunning = (rom.id === activeRomId);
+
+        drawRoundedCard320(
+          6, cy, 194, 20,
+          isSel ? NIN565.CARD_SEL : NIN565.CARD,
+          isSel ? NIN565.BORDER_HI : NIN565.BORDER
+        );
+
         if (isSel) {
-          for (let y = py320 - 2; y < py320 + 22; y++) {
-            vram565.fill(C565.NAVY, y * DISP_W + 8, y * DISP_W + 204);
-          }
-          setPx320(8, py320 - 2, C565.GOLD);
+          fillRect320(8, cy + 3, 3, 14, NIN565.RED);
+        } else if (isRunning) {
+          fillRect320(8, cy + 4, 2, 12, NIN565.GREEN);
         }
-        const badgeCol = rom.sys === 'RC-LOS' ? C565.CYAN : (rom.sys === 'FPV-3D' ? C565.GREEN : C565.ORANGE);
-        drawInavText320((isSel ? '>' : (isRunning ? '*' : ' ')) + rom.name, 10, py320, isSel ? C565.GOLD : C565.WHITE);
-        drawOsdSmall320(`${rom.sys}: ${rom.desc}`, 20, py320 + 13, isSel ? badgeCol : C565.GREY);
+
+        const tagCol = rom.sys === 'FPV-3D' ? NIN565.GREEN : (rom.sys === 'RC-LOS' ? NIN565.BLUE : NIN565.GOLD);
+        drawPillBadge320(154, cy + 4, 40, 11, NIN565.PANEL, rom.sys, tagCol, true);
+
+        drawInavText320(cleanNames[i] || rom.name, 16, cy + 3, isSel ? NIN565.WHITE : rgb565(215, 222, 232), -1);
+        drawOsdSmall320(rom.desc, 16, cy + 12, isSel ? NIN565.GOLD : NIN565.MUTED);
       }
 
-      // Panel derecho: Box Art animado + Controles del Simulador seleccionado
+      // 3. Panel Derecho: Tarjeta de Vista Previa + Botón de Inicio
+      drawRoundedCard320(206, 28, 108, 179, NIN565.PANEL, NIN565.BORDER);
       const curRom = ROM_LIST[rgCursor];
       if (curRom) {
         drawRomBoxArt(curRom.id, previewAnimT);
-        drawOsdSmall320(curRom.sys,  222, 145, C565.CYAN);
-        drawOsdSmall320(curRom.desc.slice(0, 18), 210, 157, C565.WHITE);
-        drawOsdSmall320(curRom.ctrl.slice(0, 18), 210, 169, C565.GOLD);
-        drawOsdSmall320('SRAM: 286KB / 60FPS',    210, 182, C565.GREEN);
+        drawOsdSmall320('CONTROLS', 214, 127, NIN565.MUTED);
+        drawOsdSmall320(curRom.ctrl.slice(0, 19), 214, 137, NIN565.WHITE);
+        drawOsdSmall320('MAP THEME', 214, 151, NIN565.MUTED);
+        drawOsdSmall320(TERRAIN_THEMES[currentThemeIdx].name.slice(0, 18), 214, 161, NIN565.GOLD);
+        drawPillBadge320(214, 178, 92, 21, NIN565.RED, 'START SIM', NIN565.WHITE, false);
       }
 
-      // Barra inferior de acciones táctiles / botones
-      fbRect(4, 54, 42, 7, true, 3);
-      fbDrawText('A:ABRIR SIM', 7, 56, 0);
-      fbRect(48, 54, 38, 7, true, 8);
-      fbDrawText('X:CONFIG', 52, 56, 2);
-      fbRect(88, 54, 36, 7, true, 4);
-      fbDrawText('B:VOLVER', 91, 56, 1);
+      // 4. Barra Inferior con Iconos Circulares Nintendo (A)(X)(Y)(B)
+      fillRect320(0, 214, DISP_W, 26, NIN565.HEADER);
+      fillRect320(0, 214, DISP_W, 1, NIN565.BORDER);
+      drawBtnPrompt320(8,   221, 'A', NIN565.RED,   'START',  NIN565.WHITE);
+      drawBtnPrompt320(86,  221, 'X', NIN565.BLUE,  'SETUP',  NIN565.WHITE);
+      drawBtnPrompt320(166, 221, 'Y', NIN565.GREEN, 'MAP',    NIN565.WHITE);
+      drawBtnPrompt320(238, 221, 'B', NIN565.GOLD,  'RESUME', NIN565.WHITE);
     }
 
     // =========================================================================
@@ -6858,9 +8625,15 @@
           if (activeRomId === 'rc_sailboat') {
             rcSailboatSim.presetIdx = ((rcSailboatSim.presetIdx + dir) % SAIL_PRESETS.length + SAIL_PRESETS.length) % SAIL_PRESETS.length;
             showToast(`CLASE VELERO: ${SAIL_PRESETS[rcSailboatSim.presetIdx].name}`);
+          } else if (activeRomId === 'rc_boat') {
+            rcBoatSim.presetIdx = ((rcBoatSim.presetIdx + dir) % RC_BOAT_PRESETS.length + RC_BOAT_PRESETS.length) % RC_BOAT_PRESETS.length;
+            showToast(`CLASE LANCHA: ${RC_BOAT_PRESETS[rcBoatSim.presetIdx].name}`);
           } else if (activeRomId === 'rc_car') {
             rcCarSim.presetIdx = ((rcCarSim.presetIdx + dir) % RC_CAR_PRESETS.length + RC_CAR_PRESETS.length) % RC_CAR_PRESETS.length;
             showToast(`ESPEC CARRO: ${RC_CAR_PRESETS[rcCarSim.presetIdx].name}`);
+          } else if (activeRomId === 'rc_crawler') {
+            rcCrawlerSim.presetIdx = ((rcCrawlerSim.presetIdx + dir) % RC_CRAWLER_PRESETS.length + RC_CRAWLER_PRESETS.length) % RC_CRAWLER_PRESETS.length;
+            showToast(`CRAWLER: ${RC_CRAWLER_PRESETS[rcCrawlerSim.presetIdx].name}`);
           } else {
             generateGentleVoxelMap(currentThemeIdx + dir);
             showToast(`MAPA: ${TERRAIN_THEMES[currentThemeIdx].name}`);
@@ -6868,12 +8641,18 @@
         } else if (row === 2) {
           if (activeRomId === 'fpv_wing' || activeRomId === 'fpv_drone') {
             selectChoroboboCircuit(currentCircuitIdx + dir, activeSim, true);
+          } else if (activeRomId === 'rc_sailboat' || activeRomId === 'rc_boat') {
+            selectSailCourse((fcProfile.sailCourseIdx || 0) + dir);
+            showToast(`REGATA: ${SAIL_COURSES[fcProfile.sailCourseIdx].name}`);
+          } else if (activeRomId === 'rc_car') {
+            selectRcCarTrack((fcProfile.carTrackIdx || 0) + dir);
+            showToast(`PISTA: ${RC_CAR_TRACKS[fcProfile.carTrackIdx].name}`);
           } else {
             activeSim.reset();
             showToast('REINICIADO EN SALIDA!');
           }
         } else if (row === 3) {
-          if (activeRomId === 'rc_sailboat' || activeRomId === 'rc_car') {
+          if (isLosSimId(activeRomId)) {
             activeSim.camMode = ((activeSim.camMode + dir) % 3 + 3) % 3;
             activeSim.chaseCam = (activeSim.camMode === 2);
             const cLbl = activeSim.camMode === 0 ? 'LOS AUTO-ZOOM' : (activeSim.camMode === 1 ? 'LOS WIDE' : 'FOLLOW 3D');
@@ -6888,12 +8667,11 @@
           applyWindPreset(fcProfile.windPresetIdx + dir);
           showToast(`CLIMA: ${fcProfile.wind.name} (${fcProfile.wind.baseKts}KT)`);
         } else if (row === 5) {
-          // Abrir directamente la Pestaña 1 [WIND] para ajustar todos los parámetros de viento y olas
           rgTuningTab    = 1;
           rgTuningCursor = 0;
           showToast('MENU COMPLETO DE VIENTO Y OLAS');
         } else if (row === 6) {
-          if (activeRomId === 'rc_sailboat' || activeRomId === 'rc_car') {
+          if (isLosSimId(activeRomId)) {
             fcProfile.losZoom = Math.max(0.50, Math.min(3.50, Math.round(((fcProfile.losZoom || 1.25) + dir * 0.25) * 100) / 100));
             showToast(`ZOOM CAMARA LOS: ${fcProfile.losZoom.toFixed(2)}X`);
           } else {
@@ -6904,8 +8682,8 @@
             showToast(`ARBOLES: ${Math.round(fcProfile.treeDensity * 100)}%`);
           }
         } else if (row === 7) {
-          fcProfile.showSplinePath = fcProfile.showSplinePath ? 0 : 1;
-          showToast(fcProfile.showSplinePath ? 'CAMINO GUIA: ON' : 'CAMINO GUIA: OFF');
+          fcProfile.aiBots = fcProfile.aiBots ? 0 : 1;
+          showToast(fcProfile.aiBots ? 'RIVALES IA + BLE MP: ON' : 'MODO SOLO (IA OFF)');
         } else if (row === 8) {
           // Fila 8: Abrir el Selector Principal de Simuladores (Launcher)
           rgTuningOpen = false;
@@ -7041,20 +8819,12 @@
 
     // Panel Derecho en 320x240 para la Pestaña 1 [WIND]: Rosa Náutica + Cono de Roles + Medidores de Rachas/Olas en Vivo
     function renderWindAnalyzerPanel320(gx0, gy0, gw, gh) {
-      for (let y = gy0; y <= gy0 + gh; y++) {
-        vram565.fill(rgb565(10, 18, 30), y * DISP_W + gx0, y * DISP_W + gx0 + gw);
-        setPx320(gx0, y, C565.CYAN);
-        setPx320(gx0 + gw, y, C565.CYAN);
-      }
-      for (let x = gx0; x <= gx0 + gw; x++) {
-        setPx320(x, gy0, C565.CYAN);
-        setPx320(x, gy0 + gh, C565.CYAN);
-      }
+      drawRoundedCard320(gx0, gy0, gw, gh, NIN565.PANEL, NIN565.BORDER);
+      fillRect320(gx0 + 1, gy0 + 1, gw - 2, 14, NIN565.HEADER);
+      drawOsdSmall320('WIND RADAR', gx0 + 6, gy0 + 5, NIN565.CYAN);
 
-      drawInavText320('WIND RADAR', gx0 + 10, gy0 + 4, C565.CYAN);
-
-      // Rosa de los Vientos grande en el centro del panel
-      const wcx = gx0 + (gw >> 1), wcy = gy0 + 54, wr = 30;
+      // Rosa de los Vientos en el centro del panel
+      const wcx = gx0 + (gw >> 1), wcy = gy0 + 62, wr = 32;
       for (let a = 0; a < 16; a++) {
         const ang = a * (Math.PI / 8.0);
         const rIn = (a & 3) === 0 ? wr - 4 : wr - 1;
@@ -7062,12 +8832,12 @@
         const y0 = wcy - Math.round(Math.sin(ang) * rIn);
         const x1 = wcx + Math.round(Math.cos(ang) * wr);
         const y1 = wcy - Math.round(Math.sin(ang) * wr);
-        drawOutlinedLine320(x0, y0, x1, y1, (a & 3) === 0 ? C565.WHITE : C565.GREY);
+        drawOutlinedLine320(x0, y0, x1, y1, (a & 3) === 0 ? NIN565.WHITE : NIN565.MUTED);
       }
-      drawOsdSmall320('N', wcx - 2, wcy - wr - 7, C565.GOLD);
-      drawOsdSmall320('S', wcx - 2, wcy + wr + 2, C565.GREY);
-      drawOsdSmall320('E', wcx + wr + 3, wcy - 3, C565.GREY);
-      drawOsdSmall320('W', wcx - wr - 6, wcy - 3, C565.GREY);
+      drawOsdSmall320('N', wcx - 2, wcy - wr - 7, NIN565.GOLD);
+      drawOsdSmall320('S', wcx - 2, wcy + wr + 3, NIN565.MUTED);
+      drawOsdSmall320('E', wcx + wr + 3, wcy - 3, NIN565.MUTED);
+      drawOsdSmall320('W', wcx - wr - 6, wcy - 3, NIN565.MUTED);
 
       // Cono de oscilación (shiftDeg) y vector instantáneo del viento en vivo
       const wCfg    = fcProfile.wind;
@@ -7088,79 +8858,71 @@
         const lenPx = Math.max(8, Math.min(wr - 3, Math.round(8 + (liveKts / 25.0) * (wr - 10))));
         const tx = wcx + Math.round(wxN * lenPx), ty = wcy - Math.round(wzN * lenPx);
         const bx = wcx - Math.round(wxN * 10),    by = wcy + Math.round(wzN * 10);
-        drawOutlinedLine320(bx, by, tx, ty, C565.CYAN);
-        drawInavCircleDot320(tx, ty, 3, C565.GREEN);
+        drawOutlinedLine320(bx, by, tx, ty, NIN565.CYAN);
+        drawInavCircleDot320(tx, ty, 3, NIN565.GREEN);
       } else {
-        drawInavCircleDot320(wcx, wcy, 2, C565.GREY);
+        drawInavCircleDot320(wcx, wcy, 2, NIN565.MUTED);
       }
 
       // Lecturas digitales de velocidad en Nudos (KT), KM/H y estado del mar
-      drawInavText320(`${liveKts.toFixed(1)}KT/${liveKmh}KMH`, gx0 + 6, gy0 + 96, C565.GOLD);
-      const seaStr = wCfg.waveScale <= 0.05 ? 'MAR:ESPEJO' : (wCfg.waveScale < 0.75 ? 'MAR:RIZADO' : (wCfg.waveScale < 1.35 ? 'MAR:MODERADO' : 'MAR:PICADO!'));
-      drawInavText320(seaStr, gx0 + 6, gy0 + 113, C565.CYAN);
-      const turbStr = wCfg.gustPct <= 0.02 && wCfg.turbPct <= 0.02 ? 'FLUJO LAMINAR' : `GUST:${Math.round(wCfg.gustPct * 100)}% T:${Math.round(wCfg.turbPct * 100)}%`;
-      drawInavText320(turbStr, gx0 + 6, gy0 + 130, C565.GREEN);
+      fillRect320(gx0 + 4, gy0 + 106, gw - 8, 1, NIN565.BORDER);
+      drawInavText320(`${liveKts.toFixed(1)}KT / ${liveKmh}KMH`, gx0 + 6, gy0 + 111, NIN565.GOLD);
+      const seaStr = wCfg.waveScale <= 0.05 ? 'MAR: ESPEJO' : (wCfg.waveScale < 0.75 ? 'MAR: RIZADO' : (wCfg.waveScale < 1.35 ? 'MAR: MODERADO' : 'MAR: PICADO'));
+      drawOsdSmall320(seaStr, gx0 + 6, gy0 + 127, NIN565.CYAN);
+      const turbStr = wCfg.gustPct <= 0.02 && wCfg.turbPct <= 0.02 ? 'FLUJO LAMINAR' : `GUST ${Math.round(wCfg.gustPct * 100)}% TURB ${Math.round(wCfg.turbPct * 100)}%`;
+      drawOsdSmall320(turbStr, gx0 + 6, gy0 + 137, NIN565.GREEN);
+      drawOsdSmall320(`DIR: ${WIND_DIR_NAMES[dirMode]}`, gx0 + 6, gy0 + 147, NIN565.SILVER);
     }
 
     function renderWorldMinimapPanel320(gx0, gy0, gw, gh) {
       // Panel Derecho en 320x240 para [WORLD]: Radar Táctico Cenital adaptado al Simulador Activo
-      for (let y = gy0; y <= gy0 + gh; y++) {
-        vram565.fill(rgb565(10, 18, 28), y * DISP_W + gx0, y * DISP_W + gx0 + gw);
-        setPx320(gx0, y, C565.CYAN);
-        setPx320(gx0 + gw, y, C565.CYAN);
-      }
-      for (let x = gx0; x <= gx0 + gw; x++) {
-        setPx320(x, gy0, C565.CYAN);
-        setPx320(x, gy0 + gh, C565.CYAN);
-      }
+      drawRoundedCard320(gx0, gy0, gw, gh, NIN565.PANEL, NIN565.BORDER);
+      fillRect320(gx0 + 1, gy0 + 1, gw - 2, 14, NIN565.HEADER);
 
       const sizeLbl = WORLD_W_M >= 1000 ? `${(WORLD_W_M / 1000).toFixed(1)}X${(WORLD_H_M / 1000).toFixed(1)}KM` : `${Math.round(WORLD_W_M)}X${Math.round(WORLD_H_M)}M`;
-      drawInavText320(`MAP ${sizeLbl}`, gx0 + 4, gy0 + 4, C565.CYAN);
+      drawOsdSmall320(`MAP ${sizeLbl}`, gx0 + 6, gy0 + 5, NIN565.CYAN);
 
-      const rx0 = gx0 + 4, ry0 = gy0 + 18, rw = gw - 8, rh = 92;
+      const rx0 = gx0 + 5, ry0 = gy0 + 19, rw = gw - 10, rh = 100;
       const rcx = rx0 + (rw >> 1), rcy = ry0 + (rh >> 1);
-      const mapBg = activeRomId === 'rc_sailboat' ? rgb565(14, 48, 96) : (TERRAIN_THEMES[currentThemeIdx].isChorobobo ? rgb565(36, 48, 32) : rgb565(24, 38, 30));
-      for (let y = ry0; y <= ry0 + rh; y++) {
-        vram565.fill(mapBg, y * DISP_W + rx0, y * DISP_W + rx0 + rw);
-        setPx320(rx0, y, C565.GREY);
-        setPx320(rx0 + rw, y, C565.GREY);
-      }
-      for (let x = rx0; x <= rx0 + rw; x++) {
-        setPx320(x, ry0, C565.GREY);
-        setPx320(x, ry0 + rh, C565.GREY);
-      }
+      const mapBg = (activeRomId === 'rc_sailboat' || activeRomId === 'rc_boat') ? rgb565(14, 48, 96) : (activeRomId === 'rc_crawler' ? rgb565(92, 42, 24) : (TERRAIN_THEMES[currentThemeIdx].isChorobobo ? rgb565(32, 46, 30) : rgb565(22, 36, 28)));
+      drawRoundedCard320(rx0, ry0, rw, rh, mapBg, NIN565.BORDER);
+
       for (let d = -3; d <= 3; d++) {
-        setPx320(rcx + d, rcy, C565.GREY);
-        setPx320(rcx, rcy + d, C565.GREY);
+        setPx320(rcx + d, rcy, NIN565.MUTED);
+        setPx320(rcx, rcy + d, NIN565.MUTED);
       }
 
       const activeSim = getActiveSimObject();
-      const spanX = activeRomId === 'rc_sailboat' ? 60.0 : (activeRomId === 'rc_car' ? 44.0 : WORLD_W_M * 0.46);
-      const spanZ = activeRomId === 'rc_sailboat' ? 55.0 : (activeRomId === 'rc_car' ? 34.0 : WORLD_H_M * 0.46);
+      const spanX = (activeRomId === 'rc_sailboat' || activeRomId === 'rc_boat') ? 60.0 : (activeRomId === 'rc_car' ? 44.0 : (activeRomId === 'rc_crawler' ? 24.0 : WORLD_W_M * 0.46));
+      const spanZ = (activeRomId === 'rc_sailboat' || activeRomId === 'rc_boat') ? 55.0 : (activeRomId === 'rc_car' ? 34.0 : (activeRomId === 'rc_crawler' ? 24.0 : WORLD_H_M * 0.46));
       const scaleX = (rw * 0.46) / spanX;
       const scaleZ = (rh * 0.46) / spanZ;
 
-      if (activeRomId === 'rc_sailboat') {
-        // Dibujar Muelle + las 6 Boyas de Regata en el radar
+      if (activeRomId === 'rc_sailboat' || activeRomId === 'rc_boat') {
         drawOutlinedLine320(rcx, Math.round(rcy + 30 * scaleZ), rcx, Math.round(rcy + 23 * scaleZ), C565.ORANGE);
         for (let i = 0; i < SAIL_BUOYS.length; i++) {
           const b = SAIL_BUOYS[i];
           const bx = Math.round(rcx + b.x * scaleX);
           const by = Math.round(rcy - b.z * scaleZ);
-          drawInavCircleDot320(bx, by, i === rcSailboatSim.activeBuoy ? 2 : 1, i === rcSailboatSim.activeBuoy ? C565.GREEN : C565.GOLD);
+          drawInavCircleDot320(bx, by, i === activeSim.activeBuoy ? 2 : 1, i === activeSim.activeBuoy ? NIN565.GREEN : NIN565.GOLD);
+        }
+      } else if (activeRomId === 'rc_crawler') {
+        for (let i = 0; i < CRAWLER_GATES.length; i++) {
+          const g = CRAWLER_GATES[i];
+          const gx = Math.round(rcx + g.x * scaleX);
+          const gy = Math.round(rcy - (g.z - 5.0) * scaleZ);
+          drawInavCircleDot320(gx, gy, i === rcCrawlerSim.activeGate ? 2 : 1, i === rcCrawlerSim.activeGate ? NIN565.GREEN : NIN565.GOLD);
         }
       } else if (activeRomId === 'rc_car') {
-        // Dibujar el Circuito Cerrado de 12 Waypoints en el radar
         for (let i = 0; i < RC_TRACK_WPS.length; i++) {
           const a = RC_TRACK_WPS[i];
           const b = RC_TRACK_WPS[(i + 1) % RC_TRACK_WPS.length];
           const ax0 = Math.round(rcx + a.x * scaleX), ay0 = Math.round(rcy - a.z * scaleZ);
           const bx0 = Math.round(rcx + b.x * scaleX), by0 = Math.round(rcy - b.z * scaleZ);
-          drawOutlinedLine320(ax0, ay0, bx0, by0, C565.WHITE);
-          if (i === rcCarSim.activeGate) drawInavCircleDot320(ax0, ay0, 2, C565.GREEN);
+          drawOutlinedLine320(ax0, ay0, bx0, by0, NIN565.WHITE);
+          if (i === rcCarSim.activeGate) drawInavCircleDot320(ax0, ay0, 2, NIN565.GREEN);
         }
       } else {
-        // Mapa FPV: Edificios + Spline + 15 Gates
         for (let i = 0; i < WORLD_BUILDINGS.length; i++) {
           const b = WORLD_BUILDINGS[i];
           const bx = Math.round(rcx + b.x * scaleX);
@@ -7188,7 +8950,7 @@
             const gy = Math.round(rcy - g.z * scaleZ);
             if (gx > rx0 + 1 && gx < rx0 + rw - 1 && gy > ry0 + 1 && gy < ry0 + rh - 1) {
               const isAct = (i === activeSim.activeGate);
-              const gCol = isAct ? C565.GREEN : C565.WHITE;
+              const gCol = isAct ? NIN565.GREEN : NIN565.WHITE;
               setPx320(gx, gy, gCol);
               if (isAct) {
                 setPx320(gx - 1, gy, gCol); setPx320(gx + 1, gy, gCol);
@@ -7204,63 +8966,66 @@
       const ay = Math.max(ry0 + 3, Math.min(ry0 + rh - 3, Math.round(rcy - activeSim.pz * scaleZ)));
       const hLen = Math.hypot(activeSim.fx, activeSim.fz) || 1.0;
       const hx = activeSim.fx / hLen, hz = activeSim.fz / hLen;
-      drawOutlinedLine320(ax, ay, Math.round(ax + hx * 6), Math.round(ay - hz * 6), C565.GOLD);
-      drawInavCircleDot320(ax, ay, 2, C565.WHITE);
+      drawOutlinedLine320(ax, ay, Math.round(ax + hx * 6), Math.round(ay - hz * 6), NIN565.GOLD);
+      drawInavCircleDot320(ax, ay, 2, NIN565.WHITE);
 
       const windMs  = Math.hypot(aeroEnv.windX, aeroEnv.windZ);
       const windKmh = Math.round(windMs * 3.6);
-      drawInavText320(`WND:${windKmh}KMH`, gx0 + 4, gy0 + 114, C565.GOLD);
-      const subStatus = activeRomId === 'rc_sailboat' ? '6 BUOYS BAY' : (activeRomId === 'rc_car' ? '12 WP TRACK' : (isFreeFlightNoGates() ? 'FREE FLY' : `${CHOROBOBO_CIRCUITS[currentCircuitIdx].shortCode}:15 GATE`));
-      drawInavText320(subStatus, gx0 + 4, gy0 + 131, C565.GREEN);
+      drawOsdSmall320(`WIND: ${windKmh} KMH`, gx0 + 6, gy0 + 126, NIN565.GOLD);
+      const subStatus = activeRomId === 'rc_sailboat' ? '6 BUOYS BAY' : (activeRomId === 'rc_car' ? '12 WP TRACK' : (isFreeFlightNoGates() ? 'FREE FLIGHT' : `${CHOROBOBO_CIRCUITS[currentCircuitIdx].shortCode}: 15 GATES`));
+      drawOsdSmall320(subStatus, gx0 + 6, gy0 + 138, NIN565.GREEN);
+      drawOsdSmall320(`ALT: ${Math.round(activeSim.py)}M`, gx0 + 6, gy0 + 149, NIN565.SILVER);
 
-      const wcx = gx0 + gw - 16, wcy = gy0 + 126;
-      drawInavCircleDot320(wcx, wcy, 9, rgb565(24, 36, 54));
+      const wcx = gx0 + gw - 16, wcy = gy0 + 139;
+      drawInavCircleDot320(wcx, wcy, 9, NIN565.CARD);
       if (windMs > 0.2) {
         const wxN = aeroEnv.windX / windMs, wzN = aeroEnv.windZ / windMs;
-        drawOutlinedLine320(wcx - Math.round(wxN * 6), wcy + Math.round(wzN * 6), wcx + Math.round(wxN * 7), wcy - Math.round(wzN * 7), C565.CYAN);
-        setPx320(wcx + Math.round(wxN * 7), wcy - Math.round(wzN * 7), C565.GOLD);
+        drawOutlinedLine320(wcx - Math.round(wxN * 6), wcy + Math.round(wzN * 6), wcx + Math.round(wxN * 7), wcy - Math.round(wzN * 7), NIN565.CYAN);
+        setPx320(wcx + Math.round(wxN * 7), wcy - Math.round(wzN * 7), NIN565.GOLD);
       }
     }
 
     function updateAndRenderTuningMenu(dt) {
       if (navCooldown > 0) navCooldown -= dt;
       const numRows = 9;
-      const numTabs = 5; // 0 = [WRLD], 1 = [WIND], 2 = [WING], 3 = [DRON], 4 = [RC]
+      const numTabs = 5; // 0 = WORLD, 1 = WIND, 2 = WING, 3 = DRONE, 4 = RC
 
-      // Interacción táctil directa sobre la pantalla IPS 320x240 (128x64 lógicos)
+      // Interacción táctil directa sobre la pantalla IPS 320x240
       if (capTouch.justTapped) {
-        if (capTouch.ly64 <= 10) {
-          if (capTouch.lx128 < 24)      { rgTuningTab = 0; playTone(640, 0.03); }
-          else if (capTouch.lx128 < 45) { rgTuningTab = 1; playTone(640, 0.03); }
-          else if (capTouch.lx128 < 66) { rgTuningTab = 2; playTone(640, 0.03); }
-          else if (capTouch.lx128 < 87) { rgTuningTab = 3; playTone(640, 0.03); }
-          else if (capTouch.lx128 < 105){ rgTuningTab = 4; playTone(640, 0.03); }
-          else { rgTuningOpen = false; rgOverlayOpen = false; playTone(520, 0.03); return; }
-        } else if (capTouch.ly64 >= 11 && capTouch.ly64 <= 53 && capTouch.lx128 <= 82) {
-          const clickedRow = Math.floor((capTouch.ly64 - 11) / 4.7);
+        const tx = capTouch.x320, ty = capTouch.y240;
+        if (ty <= 26) {
+          if (tx < 56)       { rgTuningTab = 0; playTone(640, 0.03); }
+          else if (tx < 108) { rgTuningTab = 1; playTone(640, 0.03); }
+          else if (tx < 160) { rgTuningTab = 2; playTone(640, 0.03); }
+          else if (tx < 214) { rgTuningTab = 3; playTone(640, 0.03); }
+          else if (tx < 264) { rgTuningTab = 4; playTone(640, 0.03); }
+          else { rgTuningOpen = false; rgOverlayOpen = false; playTone(520, 0.03); capTouch.justTapped = false; return; }
+        } else if (ty >= 28 && ty <= 210 && tx <= 202) {
+          const clickedRow = Math.floor((ty - 28) / 20);
           if (clickedRow >= 0 && clickedRow < numRows) {
             if (rgTuningCursor === clickedRow) {
-              adjustTuningParameter(rgTuningTab, rgTuningCursor, capTouch.lx128 > 45 ? 1 : -1);
+              adjustTuningParameter(rgTuningTab, rgTuningCursor, tx > 110 ? 1 : -1);
             } else {
               rgTuningCursor = clickedRow;
               playTone(480, 0.02);
             }
           }
-        } else if (capTouch.ly64 > 53) {
-          if (capTouch.lx128 < 34) adjustTuningParameter(rgTuningTab, rgTuningCursor, -1);
-          else if (capTouch.lx128 < 68) adjustTuningParameter(rgTuningTab, rgTuningCursor, 1);
-          else if (capTouch.lx128 < 98) {
-            // Botón [SIMS] inferior abre directamente el Selector Principal de Simuladores
+        } else if (ty > 210) {
+          if (tx < 54) adjustTuningParameter(rgTuningTab, rgTuningCursor, -1);
+          else if (tx < 108) adjustTuningParameter(rgTuningTab, rgTuningCursor, 1);
+          else if (tx < 185) {
             rgTuningOpen = false;
             rgOverlayOpen = false;
             osState = 'launcher';
-            showToast('SELECTOR DE SIMULADORES');
+            showToast('SIM SELECTOR');
             playTone(700, 0.04);
+            capTouch.justTapped = false;
             return;
           } else {
             rgTuningOpen = false;
             rgOverlayOpen = false;
             playTone(760, 0.04);
+            capTouch.justTapped = false;
             return;
           }
         }
@@ -7297,7 +9062,7 @@
         rgTuningOpen = false;
         rgOverlayOpen = false;
         osState = 'launcher';
-        showToast('SELECTOR DE SIMULADORES');
+        showToast('SIM SELECTOR');
         playTone(700, 0.04);
         return;
       }
@@ -7307,7 +9072,7 @@
         else if (rgTuningTab === 2) applyWingPreset(fcProfile.wingPresetIdx);
         else if (rgTuningTab === 3) applyDronePreset(fcProfile.dronePresetIdx);
         else calibrateControllerCenter();
-        showToast(rgTuningTab === 4 ? 'STICKS CENTRADOS' : 'VALORES POR DEFECTO');
+        showToast(rgTuningTab === 4 ? 'STICKS CENTERED' : 'DEFAULTS RESTORED');
         playTone(580, 0.04);
       }
       if (hwInput.justPressed('B')) {
@@ -7317,185 +9082,178 @@
         return;
       }
 
-      // Fondo oscuro sobre el framebuffer 320x240
-      fbRect(2, 2, 124, 60, true, 0);
-      fbRect(2, 2, 124, 60, false, 5);
-      fbRect(2, 2, 124, 8, true, 8);
+      // Fondo limpio Nintendo Switch Dark Matte en 320x240
+      fillRect320(0, 0, DISP_W, DISP_H, NIN565.BG_DARK);
+      fillRect320(0, 0, DISP_W, 25, NIN565.HEADER);
+      fillRect320(0, 25, DISP_W, 1, NIN565.BORDER);
 
-      // 5 Pestañas superiores + Botón [GO]: [WRLD] | [WIND] | [WING] | [DRON] | [RC] | [GO]
-      fbRect(3,  3, 20, 6, true, rgTuningTab === 0 ? 3 : 8);
-      fbDrawText('WRLD', 5, 4, rgTuningTab === 0 ? 0 : 1);
+      // 5 Pestañas superiores tipo píldora Nintendo Switch + botón [FLY]
+      const tabNames = ['WORLD', 'WIND', 'WING', 'DRONE', 'RC'];
+      const tabX     = [5, 58, 107, 156, 212];
+      const tabW     = [50, 46, 46, 53, 38];
+      for (let t = 0; t < 5; t++) {
+        const isAct = (rgTuningTab === t);
+        drawRoundedCard320(tabX[t], 4, tabW[t], 17, isAct ? NIN565.RED : NIN565.CARD, isAct ? NIN565.RED_HI : NIN565.BORDER);
+        const tw = tabNames[t].length * 6;
+        drawInavText320(tabNames[t], tabX[t] + ((tabW[t] - tw) >> 1), 8, isAct ? NIN565.WHITE : NIN565.SILVER);
+      }
+      drawRoundedCard320(256, 4, 58, 17, NIN565.GREEN, NIN565.BORDER_HI);
+      drawInavText320('FLY >', 271, 8, NIN565.WHITE);
 
-      fbRect(24, 3, 20, 6, true, rgTuningTab === 1 ? 5 : 8);
-      fbDrawText('WIND', 26, 4, rgTuningTab === 1 ? 0 : 1);
-
-      fbRect(45, 3, 20, 6, true, rgTuningTab === 2 ? 2 : 8);
-      fbDrawText('WING', 47, 4, rgTuningTab === 2 ? 0 : 1);
-
-      fbRect(66, 3, 20, 6, true, rgTuningTab === 3 ? 9 : 8);
-      fbDrawText('DRON', 68, 4, rgTuningTab === 3 ? 0 : 1);
-
-      fbRect(87, 3, 17, 6, true, rgTuningTab === 4 ? 3 : 8);
-      fbDrawText('RC', 91, 4, rgTuningTab === 4 ? 0 : 1);
-
-      fbRect(105, 3, 19, 6, true, 4);
-      fbDrawText('GO!', 109, 4, 1);
-
-      // Lista de 9 parámetros configurables en columna izquierda (nativa en 320x240 usando OSD ROM)
+      // Preparar filas de parámetros (Etiqueta izquierda + Valor derecha + Barra opcional)
       const d   = fcProfile.drone;
       const w   = fcProfile.wing;
       const wnd = fcProfile.wind;
       const activeSim = getActiveSimObject();
-      const mapShort = ['AUTO', 'TX16S AETR', 'PAD MODE2', 'RC TAER', 'ANDROID BT'][rcInputConfig.mapMode];
-      const thrShort = ['AUTO(W:FIJO)', 'RADIO 0-100', 'FIJO (INC)', 'SPRING DIR'][rcInputConfig.thrMode];
-      const treeLbl  = fcProfile.treeDensity >= 0.9 ? '100% (ALTA)' : (fcProfile.treeDensity >= 0.4 ? '50% (MEDIA)' : 'OFF (LIMPIO)');
+      const mapShort = ['AUTO', 'TX16S AETR', 'PAD MODE2', 'RC TAER', 'BT PAD'][rcInputConfig.mapMode];
+      const thrShort = ['AUTO', 'RADIO 0-100', 'STICKY INC', 'SPRING'][rcInputConfig.thrMode];
+      const treeLbl  = fcProfile.treeDensity >= 0.9 ? 'HIGH 100%' : (fcProfile.treeDensity >= 0.4 ? 'MED 50%' : 'OFF');
 
       const row1World = activeRomId === 'rc_sailboat'
-        ? `BOAT:${SAIL_PRESETS[rcSailboatSim.presetIdx].name}`
-        : (activeRomId === 'rc_car'
-          ? `CAR :${RC_CAR_PRESETS[rcCarSim.presetIdx].name}`
-          : `MAPA:${TERRAIN_THEMES[currentThemeIdx].name.slice(0, 17)}`);
+        ? `BOAT:${SAIL_PRESETS[rcSailboatSim.presetIdx].name.slice(0, 14)}`
+        : (activeRomId === 'rc_boat'
+          ? `BOAT:${RC_BOAT_PRESETS[rcBoatSim.presetIdx].name.slice(0, 14)}`
+          : (activeRomId === 'rc_car'
+            ? `CAR :${RC_CAR_PRESETS[rcCarSim.presetIdx].name.slice(0, 14)}`
+            : (activeRomId === 'rc_crawler'
+              ? `RIG :${RC_CRAWLER_PRESETS[rcCrawlerSim.presetIdx].name.slice(0, 14)}`
+              : `MAP :${TERRAIN_THEMES[currentThemeIdx].name.slice(0, 14)}`)));
 
-      const row2World = activeRomId === 'rc_sailboat'
-        ? `RACE:6 BOYAS (BAHIA)`
+      const row2World = (activeRomId === 'rc_sailboat' || activeRomId === 'rc_boat')
+        ? `RACE:${SAIL_COURSES[fcProfile.sailCourseIdx || 0].name.slice(0, 14)}`
         : (activeRomId === 'rc_car'
-          ? `TRK :12 WP + 2 SALTOS`
-          : `CIRC:${getActiveCircuitLabel().slice(0, 17)}`);
+          ? `TRK :${RC_CAR_TRACKS[fcProfile.carTrackIdx || 0].name.slice(0, 14)}`
+          : (activeRomId === 'rc_crawler'
+            ? `TRL :10 ROCK GATES`
+            : `CIRC:${getActiveCircuitLabel().slice(0, 14)}`));
 
-      const row3View = (activeRomId === 'rc_sailboat' || activeRomId === 'rc_car')
-        ? `VIEW:${activeSim.camMode === 0 ? 'LOS AUTO-ZOOM' : (activeSim.camMode === 1 ? 'LOS WIDE' : 'FOLLOW 3D')}`
-        : `VIEW:${activeSim.chaseCam ? 'FOLLOW 3D' : 'FPV CABINA'}`;
+      const row3View = isLosSimId(activeRomId)
+        ? `VIEW:${activeSim.camMode === 0 ? 'LOS AUTO' : (activeSim.camMode === 1 ? 'LOS WIDE' : 'FOLLOW 3D')}`
+        : `VIEW:${activeSim.chaseCam ? 'FOLLOW 3D' : 'FPV COCKPIT'}`;
 
       const labels = rgTuningTab === 0 ? [
-        `SIM :${PLAYABLE_SIM_NAMES[activeRomId] || 'ALA FIJA FPV'}`,
+        `SIM :${(PLAYABLE_SIM_NAMES[activeRomId] || 'FPV WING').slice(0, 14)}`,
         row1World,
         row2World,
         row3View,
-        `CLIM:${wnd.name} (${wnd.baseKts}KT)`,
-        `WIND:A=ABRIR MENU VIENTO`,
-        (activeRomId === 'rc_sailboat' || activeRomId === 'rc_car') ? `ZOOM:${(fcProfile.losZoom || 1.25).toFixed(2)}X (UP/DN O R-Y)` : `TREE:${treeLbl}`,
-        `PATH:${fcProfile.showSplinePath ? 'LUCES GUIA ON' : 'OFF (LIMPIO)'}`,
-        `SIMS:A=ABRIR SELECTOR`
+        `WIND:${wnd.name.slice(0, 9)} ${wnd.baseKts.toFixed(0)}KT`,
+        `TUNE:OPEN WIND LAB`,
+        isLosSimId(activeRomId) ? `ZOOM:${(fcProfile.losZoom || 1.25).toFixed(2)}X` : `TREE:${treeLbl}`,
+        `RIVL:${fcProfile.aiBots ? 'AI + BLE ON' : 'SOLO OFF'}`,
+        `HOME:SIM SELECTOR`
       ] : (rgTuningTab === 1 ? [
-        `PSET:${wnd.name}`,
-        `VEL :${wnd.baseKts.toFixed(0)}KT (${Math.round(wnd.baseKts * 1.852)} KM/H)`,
-        `DIR :${WIND_DIR_NAMES[fcProfile.windDirMode || 0]}`,
-        `GUST:${Math.round(wnd.gustPct * 100)}% ${wnd.gustPct <= 0.02 ? '(CONSTANTE)' : '(RACHAS)'}`,
-        `TURB:${Math.round(wnd.turbPct * 100)}% ${wnd.turbPct <= 0.02 ? '(LAMINAR)' : '(DRYDEN)'}`,
-        `SHFT:+/-${wnd.shiftDeg} DEG (ROLES)`,
-        `THER:${Math.round(wnd.thermalPct * 100)}% (TERM/SHEAR)`,
-        `WAVE:${Math.round(wnd.waveScale * 100)}% (OLAS AGUA)`,
-        `DEF :A=RESTAURAR PRESET`
+        `PSET:${wnd.name.slice(0, 14)}`,
+        `SPD :${wnd.baseKts.toFixed(0)}KT (${Math.round(wnd.baseKts * 1.852)}KMH)`,
+        `DIR :${WIND_DIR_NAMES[fcProfile.windDirMode || 0].slice(0, 14)}`,
+        `GUST:${Math.round(wnd.gustPct * 100)}%`,
+        `TURB:${Math.round(wnd.turbPct * 100)}%`,
+        `SHFT:+/-${wnd.shiftDeg} DEG`,
+        `THER:${Math.round(wnd.thermalPct * 100)}%`,
+        `WAVE:${Math.round(wnd.waveScale * 100)}%`,
+        `REST:RESET PRESET`
       ] : (rgTuningTab === 2 ? [
-        `TYPE:${w.name}`,
-        `MODO:${fpvWingSim.mode} (WING)`,
-        `PIT :${w.pitchRate} D/S`,
-        `ROL :${w.rollRate} D/S`,
-        `RUDD:${w.hasRudder && w.yawRate > 0 ? w.yawRate + ' D/S' : 'OFF (WING)'}`,
+        `WING:${w.name.slice(0, 14)}`,
+        `MODE:${fpvWingSim.mode}`,
+        `PITC:${w.pitchRate} D/S`,
+        `ROLL:${w.rollRate} D/S`,
+        `RUDD:${w.hasRudder && w.yawRate > 0 ? w.yawRate + ' D/S' : 'OFF'}`,
         `EXPO:${Math.round(w.expo * 100)}%`,
         `LOAD:${Math.round(w.wingLoad * 100)}%`,
-        `PWR :${Math.round(w.maxThrustAcc)}M/S2`,
-        `THRL:${w.thrHold ? 'FIJO (INC)' : 'RESORTE'}`
+        `POWR:${Math.round(w.maxThrustAcc)} M/S2`,
+        `THRL:${w.thrHold ? 'STICKY' : 'SPRING'}`
       ] : (rgTuningTab === 3 ? [
-        `PSET:${d.name}`,
-        `MODO:${fpvDroneSim.mode} (QUAD)`,
-        `P/R :${d.rcRate} D/S`,
+        `QUAD:${d.name.slice(0, 14)}`,
+        `MODE:${fpvDroneSim.mode}`,
+        `RATE:${d.rcRate} D/S`,
         `YAW :${d.yawRate} D/S`,
         `EXPO:${Math.round(d.expo * 100)}%`,
         `MASS:${Math.round(d.massKg * 1000)}G`,
-        `PWR :${Math.round(d.maxThrustAcc)}M/S2`,
+        `POWR:${Math.round(d.maxThrustAcc)} M/S2`,
         `TILT:${d.camTilt} DEG`,
         `AIRM:${d.airMode ? 'ON (BF)' : 'OFF'}`
       ] : [
         `MAP :${mapShort}`,
-        `THR :${thrShort}`,
+        `THRL:${thrShort}`,
         `DEAD:${Math.round(rcInputConfig.deadzone * 100)}%`,
-        `INVT:${rcInputConfig.invThr > 0 ? 'NORM' : 'INVERT'}`,
-        `INVY:${rcInputConfig.invYaw > 0 ? 'NORM' : 'INVERT'}`,
-        `INVP:${rcInputConfig.invPit > 0 ? 'NORM' : 'INVERT'}`,
-        `INVR:${rcInputConfig.invRol > 0 ? 'NORM' : 'INVERT'}`,
-        `CENT:A=CALIBRAR`,
-        `SIMS:A=SELECTOR SIMS`
+        `INVT:${rcInputConfig.invThr > 0 ? 'NORMAL' : 'INVERT'}`,
+        `INVY:${rcInputConfig.invYaw > 0 ? 'NORMAL' : 'INVERT'}`,
+        `INVP:${rcInputConfig.invPit > 0 ? 'NORMAL' : 'INVERT'}`,
+        `INVR:${rcInputConfig.invRol > 0 ? 'NORMAL' : 'INVERT'}`,
+        `CAL :CENTER STICKS`,
+        `HOME:SIM SELECTOR`
       ])));
 
       for (let i = 0; i < numRows; i++) {
-        const py320 = 42 + i * 17;
+        const ry = 29 + i * 20;
         const isSel = (i === rgTuningCursor);
+        const raw = labels[i];
+        const sep = raw.indexOf(':');
+        const keyStr = sep >= 0 ? raw.slice(0, sep).trim() : raw;
+        const valStr = sep >= 0 ? raw.slice(sep + 1).trim() : '';
+
         if (isSel) {
-          for (let y = py320 - 1; y < py320 + 13; y++) {
-            vram565.fill(C565.NAVY, y * DISP_W + 10, y * DISP_W + 202);
-          }
+          drawRoundedCard320(6, ry, 194, 19, NIN565.CARD_SEL, NIN565.BORDER_HI);
+          fillRect320(7, ry + 3, 3, 13, NIN565.RED);
+        } else {
+          fillRect320(6, ry, 194, 18, (i & 1) === 0 ? NIN565.PANEL : NIN565.BG_DARK);
         }
-        drawInavText320((isSel ? '>' : ' ') + labels[i], 12, py320, isSel ? C565.GOLD : C565.WHITE);
+
+        drawOsdSmall320(keyStr, 14, ry + 7, isSel ? NIN565.CYAN : NIN565.MUTED);
+        const valW = valStr.length * 6;
+        const valX = Math.max(52, 194 - valW);
+        drawInavText320(valStr, valX, ry + 5, isSel ? NIN565.GOLD : NIN565.WHITE);
       }
 
+      // Panel derecho (x = 204..314, y = 29..208)
       if (rgTuningTab === 0) {
-        renderWorldMinimapPanel320(206, 42, 104, 148);
+        renderWorldMinimapPanel320(204, 29, 110, 178);
       } else if (rgTuningTab === 1) {
-        renderWindAnalyzerPanel320(206, 42, 104, 148);
+        renderWindAnalyzerPanel320(204, 29, 110, 178);
       } else if (rgTuningTab === 4) {
-        // Panel Derecho en 320x240 para [RC]: Monitor de Canales PWM (1000..2000 us) estilo Betaflight Receiver
-        const gx0 = 206, gy0 = 42, gw = 104, gh = 148;
-        for (let y = gy0; y <= gy0 + gh; y++) {
-          vram565.fill(rgb565(10, 16, 28), y * DISP_W + gx0, y * DISP_W + gx0 + gw);
-          setPx320(gx0, y, C565.CYAN);
-          setPx320(gx0 + gw, y, C565.CYAN);
-        }
-        for (let x = gx0; x <= gx0 + gw; x++) {
-          setPx320(x, gy0, C565.CYAN);
-          setPx320(x, gy0 + gh, C565.CYAN);
-        }
-
-        drawInavText320(rcInputConfig.padShortName.slice(0, 12), gx0 + 4, gy0 + 4, rcInputConfig.connected ? C565.GREEN : C565.ORANGE);
+        // Panel Derecho en 320x240 para [RC]: Monitor de Canales PWM (1000..2000 us)
+        const gx0 = 204, gy0 = 29, gw = 110, gh = 178;
+        drawRoundedCard320(gx0, gy0, gw, gh, NIN565.PANEL, NIN565.BORDER);
+        fillRect320(gx0 + 1, gy0 + 1, gw - 2, 14, NIN565.HEADER);
+        drawOsdSmall320(rcInputConfig.padShortName.slice(0, 14), gx0 + 6, gy0 + 5, rcInputConfig.connected ? NIN565.GREEN : C565.ORANGE);
 
         if (isWingStickyThrottleActive() && Math.abs(hwInput.ly) > 0.10) {
           const dStick = (hwInput.ly > 0 ? (hwInput.ly - 0.10) : (hwInput.ly + 0.10)) / 0.90;
           fpvWingSim.thrLatch = Math.max(0.0, Math.min(1.0, fpvWingSim.thrLatch + dStick * 0.72 * dt));
         }
         const thrNorm01 = isWingStickyThrottleActive() ? fpvWingSim.thrLatch : evalRcThrottle(0.5);
-        const chNames = ['T', 'R', 'P', 'Y'];
+        const chNames = ['THR', 'ROL', 'PIT', 'YAW'];
         const chVals  = [thrNorm01 * 2.0 - 1.0, hwInput.rx, hwInput.ry, hwInput.lx];
-        const chCols  = [C565.ORANGE, C565.CYAN, C565.GREEN, C565.GOLD];
+        const chCols  = [C565.ORANGE, NIN565.CYAN, NIN565.GREEN, NIN565.GOLD];
 
         for (let c = 0; c < 4; c++) {
-          const by = gy0 + 20 + c * 22;
+          const by = gy0 + 22 + c * 28;
           const val = Math.max(-1.0, Math.min(1.0, chVals[c]));
           const us  = Math.round(1500 + val * 500);
-          drawInavText320(`${chNames[c]}:${us}`, gx0 + 4, by, C565.WHITE);
-
-          const barX = gx0 + 54, barW = 44, barH = 8;
-          for (let y = by + 2; y < by + 2 + barH; y++) {
-            vram565.fill(rgb565(28, 36, 52), y * DISP_W + barX, y * DISP_W + barX + barW);
-          }
-          const fillW = Math.max(1, Math.min(barW, Math.round(((val + 1.0) * 0.5) * barW)));
-          for (let y = by + 2; y < by + 2 + barH; y++) {
-            vram565.fill(chCols[c], y * DISP_W + barX, y * DISP_W + barX + fillW);
-            setPx320(barX + (barW >> 1), y, C565.WHITE);
-          }
+          drawOsdSmall320(chNames[c], gx0 + 6, by, NIN565.SILVER);
+          drawOsdSmall320(`${us}`, gx0 + gw - 30, by, NIN565.WHITE);
+          drawSliderBar320(gx0 + 6, by + 9, gw - 12, (val + 1.0) * 0.5, chCols[c]);
         }
 
         const a0 = Math.round(rcInputConfig.rawAxes[0] * 100);
         const a1 = Math.round(rcInputConfig.rawAxes[1] * 100);
         const a2 = Math.round(rcInputConfig.rawAxes[2] * 100);
         const a3 = Math.round(rcInputConfig.rawAxes[3] * 100);
-        drawInavText320(`A0:${a0} A1:${a1}`, gx0 + 4, gy0 + 112, C565.CYAN);
-        drawInavText320(`A2:${a2} A3:${a3}`, gx0 + 4, gy0 + 128, C565.CYAN);
+        fillRect320(gx0 + 4, gy0 + 138, gw - 8, 1, NIN565.BORDER);
+        drawOsdSmall320(`A0:${a0}  A1:${a1}`, gx0 + 6, gy0 + 145, NIN565.CYAN);
+        drawOsdSmall320(`A2:${a2}  A3:${a3}`, gx0 + 6, gy0 + 157, NIN565.CYAN);
       } else {
-        // Panel Derecho en 320x240 para [WING] (tab 2) y [DRON] (tab 3): Gráfica en vivo de la Curva SuperExpo / Actual Rates
+        // Panel Derecho en 320x240 para [WING] (tab 2) y [DRONE] (tab 3): Curva SuperExpo / Actual Rates
         const isDroneTab = (rgTuningTab === 3);
-        const gx0 = 210, gy0 = 44, gw = 98, gh = 96;
-        const gcx = gx0 + (gw >> 1), gcy = gy0 + (gh >> 1);
-        for (let y = gy0; y <= gy0 + gh; y++) {
-          vram565.fill(rgb565(12, 18, 32), y * DISP_W + gx0, y * DISP_W + gx0 + gw);
-          setPx320(gx0, y, C565.CYAN);
-          setPx320(gx0 + gw, y, C565.CYAN);
-          setPx320(gcx, y, C565.GREY);
-        }
-        for (let x = gx0; x <= gx0 + gw; x++) {
-          setPx320(x, gy0, C565.CYAN);
-          setPx320(x, gy0 + gh, C565.CYAN);
-          setPx320(x, gcy, C565.GREY);
-        }
+        const gx0 = 204, gy0 = 29, gw = 110, gh = 178;
+        drawRoundedCard320(gx0, gy0, gw, gh, NIN565.PANEL, NIN565.BORDER);
+        fillRect320(gx0 + 1, gy0 + 1, gw - 2, 14, NIN565.HEADER);
+        drawOsdSmall320('RATES CURVE', gx0 + 6, gy0 + 5, NIN565.CYAN);
+
+        const rx0 = gx0 + 6, ry0 = gy0 + 20, rw = gw - 12, rh = 96;
+        const gcx = rx0 + (rw >> 1), gcy = ry0 + (rh >> 1);
+        drawRoundedCard320(rx0, ry0, rw, rh, NIN565.BG_DARK, NIN565.BORDER);
+        for (let y = ry0 + 1; y < ry0 + rh - 1; y++) setPx320(gcx, y, NIN565.BORDER);
+        for (let x = rx0 + 1; x < rx0 + rw - 1; x++) setPx320(x, gcy, NIN565.BORDER);
 
         const maxRateRef = isDroneTab ? 960.0 : 540.0;
         const curMaxRate = isDroneTab ? d.rcRate : w.rollRate;
@@ -7503,41 +9261,43 @@
         const curExpo    = isDroneTab ? d.expo : w.expo;
 
         let prevPy = gcy;
-        for (let px = 0; px <= gw; px++) {
-          const rcVal = (px / (gw * 0.5)) - 1.0;
+        for (let px = 1; px < rw - 1; px++) {
+          const rcVal = (px / (rw * 0.5)) - 1.0;
           const rateDeg = evalActualRateRad(rcVal, curCenter, curMaxRate, curExpo) * RAD2DEG;
           const normY = Math.max(-1.0, Math.min(1.0, rateDeg / maxRateRef));
-          const py = Math.round(gcy - normY * (gh * 0.46));
-          const sx = gx0 + px;
+          const py = Math.round(gcy - normY * (rh * 0.44));
+          const sx = rx0 + px;
           const yMin = Math.min(prevPy, py), yMax = Math.max(prevPy, py);
           for (let y = yMin; y <= yMax; y++) {
-            setPx320(sx, y, C565.GREEN);
-            setPx320(sx, Math.min(gy0 + gh - 1, y + 1), C565.GREEN);
+            setPx320(sx, y, NIN565.GREEN);
+            setPx320(sx, Math.min(ry0 + rh - 2, y + 1), NIN565.GREEN);
           }
           prevPy = py;
         }
 
         const liveStick = Math.abs(hwInput.rx) >= Math.abs(hwInput.ry) ? hwInput.rx : hwInput.ry;
         const liveRateDeg = Math.round(evalActualRateRad(liveStick, curCenter, curMaxRate, curExpo) * RAD2DEG);
-        const dotX = Math.round(gcx + liveStick * (gw * 0.48));
-        const dotY = Math.round(gcy - Math.max(-1.0, Math.min(1.0, liveRateDeg / maxRateRef)) * (gh * 0.46));
-        drawInavCircleDot320(dotX, dotY, 3, C565.GOLD);
+        const dotX = Math.round(gcx + liveStick * (rw * 0.45));
+        const dotY = Math.round(gcy - Math.max(-1.0, Math.min(1.0, liveRateDeg / maxRateRef)) * (rh * 0.44));
+        drawInavCircleDot320(dotX, dotY, 3, NIN565.GOLD);
 
-        drawInavText320('EXPO CURVE', 218, 47, C565.CYAN);
-        drawInavText320(`${Math.abs(liveRateDeg)}D/S`, 216, 148, C565.GOLD);
-        drawInavText320(isDroneTab ? `TWR:${(d.maxThrustAcc / 9.81).toFixed(1)}:1` : `VS:${(8.8 * Math.sqrt(w.wingLoad)).toFixed(1)}M/S`, 216, 166, C565.WHITE);
-        drawInavText320('MOVE R-STICK!', 208, 184, C565.GREEN);
+        drawInavText320(`${Math.abs(liveRateDeg)} D/S`, gx0 + 8, gy0 + 124, NIN565.GOLD);
+        drawOsdSmall320(isDroneTab ? `TWR: ${(d.maxThrustAcc / 9.81).toFixed(1)}:1` : `STALL: ${(8.8 * Math.sqrt(w.wingLoad)).toFixed(1)}M/S`, gx0 + 8, gy0 + 141, NIN565.WHITE);
+        drawOsdSmall320('TEST RIGHT STICK', gx0 + 8, gy0 + 155, NIN565.GREEN);
       }
 
-      // Barra inferior de botones táctiles / atajos
-      fbRect(4, 54, 30, 7, true, 8);
-      fbDrawText('[-DEC]', 7, 56, 5);
-      fbRect(36, 54, 30, 7, true, 8);
-      fbDrawText('[+INC]', 39, 56, 3);
-      fbRect(68, 54, 26, 7, true, 2);
-      fbDrawText('[SIMS]', 70, 56, 0);
-      fbRect(96, 54, 28, 7, true, 4);
-      fbDrawText('B:GO!', 101, 56, 1);
+      // Barra inferior de controles estilo Nintendo Switch
+      fillRect320(0, 213, DISP_W, 27, NIN565.HEADER);
+      fillRect320(0, 213, DISP_W, 1, NIN565.BORDER);
+
+      drawRoundedCard320(6, 217, 44, 19, NIN565.CARD, NIN565.BORDER);
+      drawInavText320('- DEC', 13, 222, NIN565.SILVER);
+      drawRoundedCard320(54, 217, 44, 19, NIN565.CARD, NIN565.BORDER);
+      drawInavText320('+ INC', 61, 222, NIN565.WHITE);
+
+      drawBtnPrompt320(114, 221, 'Y', NIN565.GREEN, 'TAB');
+      drawBtnPrompt320(164, 221, 'X', NIN565.CYAN, 'DEF');
+      drawBtnPrompt320(214, 221, 'B', NIN565.GOLD, 'RESUME');
     }
 
     function updateAndRenderRetroGoOverlay(dt) {
@@ -7546,50 +9306,51 @@
 
     // CARTUCHO DIAGNÓSTICO: ILI9341V SPI + FT6336 TOUCH + ADC DIAGNOSTIC
     function renderHwDiagnostic() {
-      fbClear(0);
-      fbRect(0, 0, 128, 8, true, 8);
-      fbDrawText('S3 ILI9341V + FT6336 + ADC', 4, 2, 2);
+      fillRect320(0, 0, DISP_W, DISP_H, NIN565.BG_DARK);
+      fillRect320(0, 0, DISP_W, 24, NIN565.HEADER);
+      fillRect320(0, 24, DISP_W, 1, NIN565.BORDER);
+      drawPillBadge320(6, 5, 'HW TEST', NIN565.RED, NIN565.WHITE);
+      drawInavText320('S3 ILI9341V + FT6336 + ADC', 56, 7, NIN565.WHITE);
 
-      fbRect(4, 11, 34, 34, false, 5);
-      const lxPx = 21 + Math.round(hwInput.lx * 14), lyPx = 28 - Math.round(hwInput.ly * 14);
-      fbDrawLine(21, 28, lxPx, lyPx, 0, 3);
-      fbRect(lxPx - 1, lyPx - 1, 3, 3, true, 2);
-      fbDrawText(`L3:${hwInput.btn.L3 ? 1 : 0}`, 6, 47, hwInput.btn.L3 ? 3 : 1);
+      drawRoundedCard320(12, 34, 82, 82, NIN565.PANEL, NIN565.BORDER);
+      const lxPx = 53 + Math.round(hwInput.lx * 34), lyPx = 75 - Math.round(hwInput.ly * 34);
+      drawOutlinedLine320(53, 75, lxPx, lyPx, NIN565.CYAN);
+      drawInavCircleDot320(lxPx, lyPx, 3, NIN565.GOLD);
+      drawOsdSmall320(`L3:${hwInput.btn.L3 ? 1 : 0}`, 16, 120, hwInput.btn.L3 ? NIN565.GREEN : NIN565.SILVER);
 
-      fbRect(90, 11, 34, 34, false, 5);
-      const rxPx = 107 + Math.round(hwInput.rx * 14), ryPx = 28 - Math.round(hwInput.ry * 14);
-      fbDrawLine(107, 28, rxPx, ryPx, 0, 3);
-      fbRect(rxPx - 1, ryPx - 1, 3, 3, true, 2);
-      fbDrawText(`R3:${hwInput.btn.R3 ? 1 : 0}`, 92, 47, hwInput.btn.R3 ? 3 : 1);
+      drawRoundedCard320(226, 34, 82, 82, NIN565.PANEL, NIN565.BORDER);
+      const rxPx = 267 + Math.round(hwInput.rx * 34), ryPx = 75 - Math.round(hwInput.ry * 34);
+      drawOutlinedLine320(267, 75, rxPx, ryPx, NIN565.CYAN);
+      drawInavCircleDot320(rxPx, ryPx, 3, NIN565.GOLD);
+      drawOsdSmall320(`R3:${hwInput.btn.R3 ? 1 : 0}`, 230, 120, hwInput.btn.R3 ? NIN565.GREEN : NIN565.SILVER);
 
       const btns = ['Y', 'X', 'B', 'A'];
       for (let i = 0; i < 4; i++) {
-        const bx = 44 + i * 10, pressed = hwInput.btn[btns[i]];
-        fbRect(bx, 12, 8, 9, pressed, pressed ? 2 : 5);
-        fbDrawText(btns[i], bx + 2, 14, pressed ? 0 : 1);
+        const bx = 108 + i * 26, pressed = hwInput.btn[btns[i]];
+        drawRoundedCard320(bx, 38, 22, 22, pressed ? NIN565.RED : NIN565.CARD, NIN565.BORDER_HI);
+        drawInavText320(btns[i], bx + 8, 45, NIN565.WHITE);
       }
 
       const dpad = ['UP', 'DOWN', 'LEFT', 'RIGHT'];
       const dLbl = ['U', 'D', 'L', 'R'];
       for (let i = 0; i < 4; i++) {
-        const bx = 44 + i * 10, pressed = hwInput.btn[dpad[i]];
-        fbRect(bx, 23, 8, 9, pressed, pressed ? 3 : 5);
-        fbDrawText(dLbl[i], bx + 2, 25, pressed ? 0 : 1);
+        const bx = 108 + i * 26, pressed = hwInput.btn[dpad[i]];
+        drawRoundedCard320(bx, 66, 22, 22, pressed ? NIN565.CYAN : NIN565.CARD, NIN565.BORDER_HI);
+        drawInavText320(dLbl[i], bx + 8, 73, NIN565.WHITE);
       }
 
       const mode = SPI_MODES[paletteIdx];
       const dmaMs = (1228800 / (mode.spiMhz * 1e6) * 1000).toFixed(1);
-      fbDrawText(`SPI:${mode.spiMhz}MHZ (${dmaMs}MS)`, 40, 35, 3);
-      fbDrawText(`TCH:${capTouch.x320},${capTouch.y240}`, 40, 43, capTouch.active ? 2 : 5);
-      fbRect(0, 55, 128, 9, true, 8);
-      fbDrawText(rcInputConfig.connected ? `RC: ${rcInputConfig.padShortName} OK` : 'RC: CONECTA TX16S USB/BT PAD', 4, 57, rcInputConfig.connected ? 3 : 2);
+      drawInavText320(`SPI: ${mode.spiMhz}MHZ (${dmaMs}MS)`, 104, 102, NIN565.GREEN);
+      drawInavText320(`TOUCH: ${capTouch.x320},${capTouch.y240}`, 104, 118, capTouch.active ? NIN565.GOLD : NIN565.SILVER);
+
+      fillRect320(0, 214, DISP_W, 26, NIN565.HEADER);
+      drawInavText320(rcInputConfig.connected ? `RC: ${rcInputConfig.padShortName} OK` : 'RC: CONNECT USB / BT CONTROLLER', 10, 223, rcInputConfig.connected ? NIN565.GREEN : NIN565.GOLD);
 
       if (capTouch.active) {
-        fbCircle(capTouch.lx128, capTouch.ly64, 5, 4);
-        fbDrawLine(capTouch.lx128 - 8, capTouch.ly64, capTouch.lx128 + 8, capTouch.ly64, 0, 2);
-        fbDrawLine(capTouch.lx128, capTouch.ly64 - 8, capTouch.lx128, capTouch.ly64 + 8, 0, 2);
+        drawInavCircleDot320(capTouch.x320, capTouch.y240, 5, NIN565.RED);
       }
-      if (hwInput.justPressed('SELECT')) {
+      if (hwInput.justPressed('SELECT') || hwInput.justPressed('B')) {
         osState = 'launcher';
       }
     }
@@ -7602,9 +9363,17 @@
       btnPaletteEl.addEventListener('click', (e) => {
         paletteIdx = (paletteIdx + 1) % SPI_MODES.length;
         const m = SPI_MODES[paletteIdx];
-        e.currentTarget.textContent = `🎨 ${m.name}`;
+        e.currentTarget.textContent = m.name;
         showToast(m.name);
       });
+    }
+    const btnSoundEl = document.getElementById('btnSound');
+    if (btnSoundEl) {
+      btnSoundEl.addEventListener('click', () => toggleSoundSynth());
+    }
+    const btnBleMpEl = document.getElementById('btnBleMp');
+    if (btnBleMpEl) {
+      btnBleMpEl.addEventListener('click', () => connectWebBluetoothPeer());
     }
 
     let lastTime = performance.now();
@@ -7652,11 +9421,21 @@
                 for (let s = 0; s < 4; s++) rcSailboatSim.step(dt * 0.25);
               }
               rcSailboatSim.render();
+            } else if (activeRomId === 'rc_boat') {
+              if (!handleInFlightShortcuts(rcBoatSim)) {
+                for (let s = 0; s < 4; s++) rcBoatSim.step(dt * 0.25);
+              }
+              rcBoatSim.render();
             } else if (activeRomId === 'rc_car') {
               if (!handleInFlightShortcuts(rcCarSim)) {
                 for (let s = 0; s < 4; s++) rcCarSim.step(dt * 0.25);
               }
               rcCarSim.render();
+            } else if (activeRomId === 'rc_crawler') {
+              if (!handleInFlightShortcuts(rcCrawlerSim)) {
+                for (let s = 0; s < 4; s++) rcCrawlerSim.step(dt * 0.25);
+              }
+              rcCrawlerSim.render();
             } else if (activeRomId === 'hwtest') {
               renderHwDiagnostic();
             }
@@ -7664,18 +9443,21 @@
             if (activeRomId === 'fpv_drone') fpvDroneSim.render();
             else if (activeRomId === 'fpv_wing') fpvWingSim.render();
             else if (activeRomId === 'rc_sailboat') rcSailboatSim.render();
+            else if (activeRomId === 'rc_boat') rcBoatSim.render();
             else if (activeRomId === 'rc_car') rcCarSim.render();
+            else if (activeRomId === 'rc_crawler') rcCrawlerSim.render();
             else if (activeRomId === 'hwtest') renderHwDiagnostic();
 
             updateAndRenderRetroGoOverlay(dt);
           }
         }
 
+        updatePhysicalSynthAudio(dt);
+        stepAndBroadcastBleMp(dt);
+
         if (toastTimer > 0) {
           toastTimer -= dt;
-          const tw = toastMsg.length * 4 + 6;
-          fbRect(64 - (tw >> 1), 1, tw, 9, true, 2);
-          fbDrawText(toastMsg, 64 - (tw >> 1) + 3, 3, 0);
+          renderNintendoToast320(toastMsg);
         }
 
         fbPresentToCanvas();
