@@ -944,28 +944,31 @@
           </small>
         </div>
 
-        <!-- 4. Escala Activa de Chorobobo -->
+        <!-- 4. Mapa y Escala Activa -->
         <div class="me-card">
-          <h4>Escala Activa (Recorte del Mapa)</h4>
+          <h4>Mapa Activo y Escala</h4>
+          <div class="me-row">
+            <span>Mapa:</span>
+            <select id="meSelMapTheme" style="flex:1;">
+              <option value="0">CHOROBOBO HD (1.65×1.1km)</option>
+              <option value="5">CHORO PARK (715×484m)</option>
+              <option value="9">CHOROBOBO LR (6.6×4.4km)</option>
+              <option value="1">BANDO EDIFICIO (500×360m)</option>
+              <option value="2">COMANCHE 3 CANYON (2.8×2.0km)</option>
+              <option value="3">ALPES CUMBRES (3.2×2.2km)</option>
+              <option value="4">ISLA VOLCÁNICA (2.0×1.4km)</option>
+              <option value="6">BANDO ARENA (550×380m)</option>
+              <option value="7">BOSQUE SLALOM (600×420m)</option>
+              <option value="8">DUNAS SUNSET (700×480m)</option>
+            </select>
+          </div>
           <div style="display:flex;gap:4px;">
             <button class="me-btn" data-me-scale="5" style="flex:1;">PARK 715×484m</button>
             <button class="me-btn active" data-me-scale="0" style="flex:1;">HD 1.65×1.1km</button>
             <button class="me-btn" data-me-scale="9" style="flex:1;">LR 6.6×4.4km</button>
           </div>
-          <div style="display:flex;gap:4px;margin-top:3px;">
-            <button id="meBtnMoveCrop" class="me-btn" data-me-tool="crop" style="flex:1;border-color:#00f5ff;color:#00f5ff;" title="Haz clic o arrastra sobre la foto completa de 6.6×4.4km para elegir qué zona recortan los mapas HD y PARK">📐 Mover Área de Corte</button>
-            <button id="meBtnFitCrop" class="me-btn" title="Hacer Zoom para encuadrar el área de corte activa en pantalla">🔍 Encuadrar</button>
-          </div>
-          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:2px;">
-            <button class="me-btn" data-me-crop-preset="0.585,0.365" style="font-size:10px;padding:4px 2px;" title="Centrar recorte en la Pista A.I.A Chorobobo">🛬 Pista A.I.A</button>
-            <button class="me-btn" data-me-crop-preset="0.500,0.220" style="font-size:10px;padding:4px 2px;" title="Mover recorte al cauce del Río Turbio (Norte)">🌊 Río Turbio</button>
-            <button class="me-btn" data-me-crop-preset="0.310,0.420" style="font-size:10px;padding:4px 2px;" title="Mover recorte a la Planta de Etanol y Silos (Oeste)">🏭 Planta Etanol</button>
-          </div>
-          <div class="me-row" style="margin-top:3px;">
-            <label title="Muestra en tono oscuro el resto de la foto satelital de 6.6×4.4 km fuera del recorte del mapa activo"><input type="checkbox" id="meChkShowOutside" /> 👁️ Ver exterior de 6.6×4.4km (atenuado)</label>
-          </div>
           <small style="color:#98a4b8;line-height:1.35;">
-            💡 Pulsa <b>📐 Mover Área de Corte</b> y arrastra el recorte sobre cualquier lugar de la foto de <b>6.6×4.4 km</b> para volar en esa zona en modo <b>HD</b> o <b>PARK</b>.
+            💡 Las 3 escalas de <b>Chorobobo</b> comparten sus circuitos y sprites sobre <b>chorobobo.jpg</b>. Los demás mapas tienen sus propios circuitos y sprites independientes.
           </small>
         </div>
       </aside>
@@ -2259,56 +2262,33 @@
     const SPAWN_MZ       = 650;          // mz = (1 - 0.365) * 1024 (Norte hacia +wz)
     const SPAWN_U        = SPAWN_MX / MAP_W;
     const SPAWN_V        = 1.0 - (SPAWN_MZ / MAP_H);
-    const CHORO_FULL_W_M = 6600.0;       // Ancho físico real 1:1 (Este-Oeste) de la ortofoto completa chorobobo.jpg (6.6 km = 1.1x)
-    const CHORO_FULL_H_M = 4400.0;       // Alto físico real 1:1 (Norte-Sur) de la ortofoto completa chorobobo.jpg (4.4 km = 1.1x)
+    const CHORO_FULL_W_M = 6600.0;       // Ancho físico de referencia (Este-Oeste) en escala LR (6.6 km = 1.1x)
+    const CHORO_FULL_H_M = 4400.0;       // Alto físico de referencia (Norte-Sur) en escala LR (4.4 km = 1.1x)
     var   isChoroboboThemeActive = true; // Activo cuando el mapa actual es Chorobobo (PARK, HD o LR)
 
-    // Posición configurable del recorte (esquina superior izquierda uMin, vMin en 0..1) para los mapas HD (1.65x1.1km) y PARK (715x484m)
+    // Posición configurable por compatibilidad JSON
     const DEFAULT_CHOROBOBO_CROP_DEFS = {
-      park: {
-        uMin: 0.5424,
-        vMin: 0.3041
-      },
-      hd: {
-        uMin: 0.4816,
-        vMin: 0.2789
-      }
+      park: { uMin: 0.0, vMin: 0.0 },
+      hd:   { uMin: 0.0, vMin: 0.0 }
     };
     var CHOROBOBO_CROP_DEFS = JSON.parse(JSON.stringify(DEFAULT_CHOROBOBO_CROP_DEFS));
 
-    // Calcula el recorte UV [uMin..uMax, vMin..vMax] y el punto ancla (anchorU, anchorV -> wx=0, wz=0) sobre chorobobo.jpg
+    // La ortofoto completa chorobobo.jpg cubre siempre el 100% del mapa activo (u=0..1, v=0..1 -> WORLD_W_M x WORLD_H_M)
     function getChoroboboActiveUvBounds(wM = WORLD_W_M, hM = WORLD_H_M) {
-      const rx = Math.min(1.0, Math.max(0.05, wM / CHORO_FULL_W_M));
-      const rz = Math.min(1.0, Math.max(0.05, hM / CHORO_FULL_H_M));
-      let uMin = SPAWN_U * (1.0 - rx);
-      let vMin = SPAWN_V * (1.0 - rz);
-      if (CHOROBOBO_CROP_DEFS) {
-        if (wM <= 950.0 && CHOROBOBO_CROP_DEFS.park) {
-          uMin = Number(CHOROBOBO_CROP_DEFS.park.uMin);
-          vMin = Number(CHOROBOBO_CROP_DEFS.park.vMin);
-        } else if (wM <= 2400.0 && CHOROBOBO_CROP_DEFS.hd) {
-          uMin = Number(CHOROBOBO_CROP_DEFS.hd.uMin);
-          vMin = Number(CHOROBOBO_CROP_DEFS.hd.vMin);
-        }
-      }
-      uMin = Math.max(0.0, Math.min(1.0 - rx, isFinite(uMin) ? uMin : 0.0));
-      vMin = Math.max(0.0, Math.min(1.0 - rz, isFinite(vMin) ? vMin : 0.0));
-      const uMax = uMin + rx;
-      const vMax = vMin + rz;
-      const anchorU = uMin + SPAWN_U * rx;
-      const anchorV = vMin + SPAWN_V * rz;
-      return { rx, rz, uMin, uMax, vMin, vMax, anchorU, anchorV };
+      return {
+        rx: 1.0,
+        rz: 1.0,
+        uMin: 0.0,
+        uMax: 1.0,
+        vMin: 0.0,
+        vMax: 1.0,
+        anchorU: SPAWN_U,
+        anchorV: SPAWN_V
+      };
     }
 
-    // Conversión inversa exacta de metros del mundo (wx, wz) a coordenada normalizada (u, v) sobre chorobobo.jpg (escala 1:1 real)
+    // Conversión inversa exacta de metros del mundo (wx, wz) a coordenada normalizada (u, v) sobre el mapa activo (WORLD_W_M x WORLD_H_M)
     function worldToUv(wx, wz) {
-      if (isChoroboboThemeActive) {
-        const b = getChoroboboActiveUvBounds(WORLD_W_M, WORLD_H_M);
-        return {
-          u: b.anchorU + (wx / CHORO_FULL_W_M),
-          v: b.anchorV - (wz / CHORO_FULL_H_M)
-        };
-      }
       return {
         u: SPAWN_U + (wx / WORLD_W_M),
         v: SPAWN_V - (wz / WORLD_H_M)
@@ -2337,15 +2317,8 @@
     const vramDepthQ4 = new Uint16Array(DISP_W * DISP_H);
     let   activeObjCzQ4 = 0; // > 0 durante el renderizado de objetos 3D (árboles, edificios, gates) para oclusión exacta tras montañas
 
-    // Conversión exacta 1:1 de coordenada normalizada (u, v) sobre chorobobo.jpg a metros reales (wx, wz)
+    // Conversión exacta de coordenada normalizada (u, v) sobre el mapa activo a metros reales (wx, wz) en escala WORLD_W_M x WORLD_H_M
     function uvToWorld(u, v) {
-      if (isChoroboboThemeActive) {
-        const b = getChoroboboActiveUvBounds(WORLD_W_M, WORLD_H_M);
-        return {
-          x: Math.round((u - b.anchorU) * CHORO_FULL_W_M * 10) / 10,
-          z: Math.round((b.anchorV - v) * CHORO_FULL_H_M * 10) / 10
-        };
-      }
       return {
         x: Math.round((u - SPAWN_U) * WORLD_W_M * 10) / 10,
         z: Math.round((SPAWN_V - v) * WORLD_H_M * 10) / 10
@@ -2531,6 +2504,105 @@
       }
     ];
 
+    // Helper para generar circuitos UV propios de cada mapa a partir de coordenadas en metros alrededor de (0, 0)
+    function makeMapUvCircuitPts(wM, hM, mPts) {
+      return mPts.map(pt => [
+        Number((SPAWN_U + pt[0] / wM).toFixed(4)),
+        Number((SPAWN_V - pt[1] / hM).toFixed(4)),
+        pt[2],
+        pt[3]
+      ]);
+    }
+
+    // Circuitos por defecto independientes por cada mapa (las 3 escalas de Chorobobo comparten el grupo 'chorobobo')
+    const DEFAULT_MAP_CIRCUITS_BY_GROUP = {
+      chorobobo: DEFAULT_CHOROBOBO_CIRCUIT_DEFS,
+      bando_edificio: [
+        { id: 'c1', name: 'C1 BANDO CENTRAL', shortCode: 'C1', lineCol565: 59814, palIdx: 4,
+          uvList: makeMapUvCircuitPts(500, 360, [[0, -18, 0.9, 'arch'], [0, 22, 1.0, 'open_bando' ? 'over_under' : 'arch'], [-34, 42, 1.1, 'split_lr'], [-62, 14, 0.9, 'flag_L'], [-38, -26, 1.2, 'dive_cube'], [18, -32, 0.95, 'flag_R'], [38, 12, 1.1, 'diamond'], [22, 46, 1.0, 'arch']]) },
+        { id: 'c2', name: 'C2 DIVE TORRES', shortCode: 'C2', lineCol565: 11807, palIdx: 5,
+          uvList: makeMapUvCircuitPts(500, 360, [[0, -10, 1.0, 'arch'], [38, 34, 1.5, 'dive_cube'], [74, -8, 1.1, 'flag_R'], [24, -48, 0.9, 'split_lr'], [-38, -26, 1.6, 'dive_cube'], [-72, 12, 1.0, 'flag_L'], [-34, 52, 1.35, 'diamond'], [0, 46, 1.1, 'over_under']]) },
+        { id: 'c3', name: 'C3 SLALOM PATIO', shortCode: 'C3', lineCol565: 14156, palIdx: 3,
+          uvList: makeMapUvCircuitPts(500, 360, [[0, -24, 0.85, 'arch'], [-22, -4, 0.85, 'flag_L'], [22, 14, 0.85, 'flag_R'], [-24, 34, 0.9, 'flag_L'], [6, 68, 1.1, 'split_lr'], [48, 42, 0.85, 'flag_R'], [52, -12, 0.9, 'flag_L'], [24, -36, 1.0, 'over_under']]) },
+        { id: 'c4', name: 'C4 OCHO INDUSTRIAL', shortCode: 'C4', lineCol565: 47581, palIdx: 10,
+          uvList: makeMapUvCircuitPts(500, 360, [[0, 8, 1.0, 'over_under'], [-44, 48, 1.25, 'diamond'], [-82, 12, 0.95, 'arch'], [-44, -34, 1.4, 'dive_cube'], [0, 8, 1.35, 'over_under'], [46, 44, 1.25, 'diamond'], [82, -8, 0.95, 'arch'], [42, -38, 1.4, 'dive_cube']]) },
+        { id: 'c5', name: 'C5 PERIMETRO BANDO', shortCode: 'C5', lineCol565: 64547, palIdx: 9,
+          uvList: makeMapUvCircuitPts(500, 360, [[0, -32, 0.95, 'arch'], [-78, -28, 1.0, 'split_lr'], [-96, 36, 1.2, 'flag_L'], [-34, 86, 1.35, 'diamond'], [36, 86, 1.1, 'over_under'], [96, 28, 1.0, 'flag_R'], [84, -38, 1.4, 'dive_cube'], [28, -56, 0.95, 'split_lr']]) }
+      ],
+      comanche_canyon: [
+        { id: 'c1', name: 'C1 CANON ROJO', shortCode: 'C1', lineCol565: 59814, palIdx: 4,
+          uvList: makeMapUvCircuitPts(2800, 2000, [[0, -40, 1.0, 'arch'], [12, 88, 1.1, 'over_under'], [-28, 210, 1.2, 'flag_L'], [-95, 340, 1.45, 'diamond'], [45, 390, 1.6, 'dive_cube'], [140, 210, 1.15, 'flag_R'], [95, 25, 0.95, 'split_lr'], [48, -120, 1.05, 'arch']]) },
+        { id: 'c2', name: 'C2 PUENTES TACTICOS', shortCode: 'C2', lineCol565: 11807, palIdx: 5,
+          uvList: makeMapUvCircuitPts(2800, 2000, [[8, 20, 0.95, 'arch'], [8, 88, 1.0, 'over_under'], [-52, 220, 1.1, 'over_under'], [-160, 180, 1.5, 'dive_cube'], [-120, -40, 1.2, 'diamond'], [-40, -140, 0.95, 'split_lr'], [64, -135, 1.05, 'over_under'], [55, -40, 0.9, 'flag_R']]) },
+        { id: 'c3', name: 'C3 SLALOM DESIERTO', shortCode: 'C3', lineCol565: 14156, palIdx: 3,
+          uvList: makeMapUvCircuitPts(2800, 2000, [[0, -20, 0.85, 'arch'], [-42, 48, 0.85, 'flag_L'], [36, 115, 0.9, 'flag_R'], [-48, 185, 0.9, 'flag_L'], [32, 255, 1.25, 'diamond'], [110, 175, 0.95, 'split_lr'], [75, 65, 0.85, 'flag_R'], [38, -45, 0.9, 'over_under']]) },
+        { id: 'c4', name: 'C4 CRESTAS BUTTE', shortCode: 'C4', lineCol565: 47581, palIdx: 10,
+          uvList: makeMapUvCircuitPts(2800, 2000, [[0, 0, 1.1, 'arch'], [-180, 140, 1.85, 'diamond'], [-320, 310, 2.1, 'dive_cube'], [-140, 480, 1.75, 'diamond'], [160, 420, 1.95, 'dive_cube'], [290, 180, 1.65, 'split_lr'], [220, -110, 1.5, 'diamond'], [80, -160, 1.15, 'over_under']]) },
+        { id: 'c5', name: 'C5 GRAN CANON LR', shortCode: 'C5', lineCol565: 64547, palIdx: 9,
+          uvList: makeMapUvCircuitPts(2800, 2000, [[0, -60, 1.0, 'arch'], [-120, 180, 1.3, 'flag_L'], [-280, 460, 1.7, 'dive_cube'], [40, 620, 1.5, 'diamond'], [340, 440, 1.65, 'split_lr'], [420, 80, 1.35, 'flag_R'], [260, -280, 1.5, 'dive_cube'], [-40, -320, 1.1, 'over_under']]) }
+      ],
+      alpes_cumbres: [
+        { id: 'c1', name: 'C1 VALLE GLACIAR', shortCode: 'C1', lineCol565: 59814, palIdx: 4,
+          uvList: makeMapUvCircuitPts(3200, 2200, [[0, -30, 0.95, 'arch'], [-24, 52, 1.0, 'flag_L'], [22, 138, 1.1, 'over_under'], [-18, 240, 1.3, 'diamond'], [65, 290, 1.45, 'dive_cube'], [120, 160, 1.1, 'split_lr'], [85, 30, 0.95, 'flag_R'], [35, -75, 1.0, 'arch']]) },
+        { id: 'c2', name: 'C2 CUMBRES DIVE', shortCode: 'C2', lineCol565: 11807, palIdx: 5,
+          uvList: makeMapUvCircuitPts(3200, 2200, [[0, 0, 1.1, 'arch'], [-150, 120, 1.9, 'diamond'], [-280, 280, 2.2, 'dive_cube'], [-90, 390, 1.6, 'split_lr'], [140, 320, 2.0, 'dive_cube'], [240, 110, 1.7, 'diamond'], [130, -90, 1.3, 'flag_R'], [20, -110, 1.0, 'over_under']]) },
+        { id: 'c3', name: 'C3 SLALOM CHALETS', shortCode: 'C3', lineCol565: 14156, palIdx: 3,
+          uvList: makeMapUvCircuitPts(3200, 2200, [[0, -18, 0.85, 'arch'], [-24, 32, 0.85, 'flag_L'], [-42, 68, 0.9, 'flag_R'], [6, 128, 1.05, 'over_under'], [42, 74, 0.85, 'flag_R'], [28, 18, 0.85, 'flag_L'], [18, -44, 0.95, 'split_lr'], [-35, -42, 0.9, 'arch']]) },
+        { id: 'c4', name: 'C4 PASO ALPINO', shortCode: 'C4', lineCol565: 47581, palIdx: 10,
+          uvList: makeMapUvCircuitPts(3200, 2200, [[0, 10, 1.0, 'arch'], [110, 160, 1.5, 'diamond'], [260, 280, 1.85, 'dive_cube'], [120, 440, 1.6, 'over_under'], [-130, 410, 1.75, 'diamond'], [-240, 210, 1.5, 'split_lr'], [-160, -20, 1.25, 'flag_L'], [-45, -95, 1.0, 'arch']]) },
+        { id: 'c5', name: 'C5 CORDILLERA LR', shortCode: 'C5', lineCol565: 64547, palIdx: 9,
+          uvList: makeMapUvCircuitPts(3200, 2200, [[0, -50, 1.0, 'arch'], [-220, 220, 1.8, 'diamond'], [-420, 520, 2.2, 'dive_cube'], [-80, 680, 1.7, 'split_lr'], [310, 560, 2.1, 'dive_cube'], [460, 190, 1.65, 'diamond'], [290, -240, 1.4, 'over_under'], [-30, -290, 1.1, 'flag_R']]) }
+      ],
+      isla_volcan: [
+        { id: 'c1', name: 'C1 BAHIA TROPICAL', shortCode: 'C1', lineCol565: 59814, palIdx: 4,
+          uvList: makeMapUvCircuitPts(2000, 1400, [[0, -25, 0.9, 'arch'], [-48, -32, 0.85, 'flag_L'], [-85, 28, 1.0, 'split_lr'], [-52, 95, 1.15, 'diamond'], [18, 115, 1.05, 'over_under'], [72, 48, 0.9, 'flag_R'], [58, -35, 0.85, 'flag_L'], [22, -62, 0.9, 'arch']]) },
+        { id: 'c2', name: 'C2 CRATER DIVE', shortCode: 'C2', lineCol565: 11807, palIdx: 5,
+          uvList: makeMapUvCircuitPts(2000, 1400, [[0, 0, 1.0, 'arch'], [55, 35, 1.65, 'diamond'], [110, 70, 2.25, 'dive_cube'], [165, 110, 1.85, 'diamond'], [120, 185, 1.4, 'split_lr'], [25, 165, 1.15, 'flag_L'], [-45, 85, 1.0, 'over_under'], [-28, -15, 0.9, 'flag_R']]) },
+        { id: 'c3', name: 'C3 SLALOM PALMERAS', shortCode: 'C3', lineCol565: 14156, palIdx: 3,
+          uvList: makeMapUvCircuitPts(2000, 1400, [[0, -18, 0.8, 'arch'], [-32, -45, 0.8, 'flag_L'], [-68, -12, 0.85, 'flag_R'], [-68, 42, 0.9, 'split_lr'], [-22, 68, 0.85, 'flag_L'], [35, 42, 0.9, 'flag_R'], [52, -22, 0.85, 'over_under'], [18, -48, 0.8, 'flag_L']]) },
+        { id: 'c4', name: 'C4 CORONA VOLCAN', shortCode: 'C4', lineCol565: 47581, palIdx: 10,
+          uvList: makeMapUvCircuitPts(2000, 1400, [[0, 15, 1.1, 'arch'], [75, 135, 1.75, 'diamond'], [185, 145, 1.95, 'dive_cube'], [235, 45, 1.8, 'diamond'], [175, -55, 1.65, 'dive_cube'], [75, -75, 1.25, 'split_lr'], [-25, -55, 1.0, 'over_under'], [-45, 25, 0.95, 'flag_L']]) },
+        { id: 'c5', name: 'C5 VUELTA A LA ISLA', shortCode: 'C5', lineCol565: 64547, palIdx: 9,
+          uvList: makeMapUvCircuitPts(2000, 1400, [[0, -60, 0.95, 'arch'], [-180, -110, 1.0, 'flag_L'], [-290, 60, 1.2, 'split_lr'], [-190, 260, 1.45, 'diamond'], [60, 310, 1.6, 'dive_cube'], [290, 190, 1.4, 'over_under'], [310, -70, 1.15, 'flag_R'], [160, -190, 1.0, 'arch']]) }
+      ],
+      bando_arena: [
+        { id: 'c1', name: 'C1 ARENA SPRINT', shortCode: 'C1', lineCol565: 59814, palIdx: 4,
+          uvList: makeMapUvCircuitPts(550, 380, [[0, -16, 0.9, 'arch'], [0, 24, 1.0, 'over_under'], [38, 42, 1.1, 'flag_R'], [68, 8, 0.95, 'split_lr'], [36, -32, 1.2, 'dive_cube'], [-24, -36, 0.95, 'flag_L'], [-52, 8, 1.1, 'diamond'], [-28, 44, 1.0, 'arch']]) },
+        { id: 'c2', name: 'C2 POWERLOOP ARCOS', shortCode: 'C2', lineCol565: 11807, palIdx: 5,
+          uvList: makeMapUvCircuitPts(550, 380, [[0, 6, 0.95, 'arch'], [0, 46, 1.45, 'dive_cube'], [-38, 48, 1.1, 'diamond'], [-68, -6, 0.95, 'split_lr'], [-38, -28, 1.5, 'dive_cube'], [24, -18, 1.1, 'over_under'], [64, 16, 1.25, 'diamond'], [34, 46, 0.95, 'flag_R']]) },
+        { id: 'c3', name: 'C3 SLALOM PILARES', shortCode: 'C3', lineCol565: 14156, palIdx: 3,
+          uvList: makeMapUvCircuitPts(550, 380, [[0, -22, 0.85, 'arch'], [26, -4, 0.85, 'flag_R'], [-26, 16, 0.85, 'flag_L'], [28, 38, 0.9, 'flag_R'], [-6, 72, 1.1, 'split_lr'], [-48, 42, 0.85, 'flag_L'], [-48, -14, 0.85, 'flag_R'], [-22, -38, 0.95, 'over_under']]) },
+        { id: 'c4', name: 'C4 SPLIT BANDO', shortCode: 'C4', lineCol565: 47581, palIdx: 10,
+          uvList: makeMapUvCircuitPts(550, 380, [[0, 10, 1.0, 'split_lr'], [52, 52, 1.3, 'diamond'], [92, 6, 1.0, 'arch'], [48, -42, 1.4, 'dive_cube'], [0, 10, 1.35, 'over_under'], [-52, 52, 1.3, 'diamond'], [-92, 6, 1.0, 'arch'], [-48, -42, 1.4, 'dive_cube']]) },
+        { id: 'c5', name: 'C5 CIRCUITO TOTAL', shortCode: 'C5', lineCol565: 64547, palIdx: 9,
+          uvList: makeMapUvCircuitPts(550, 380, [[0, -34, 0.95, 'arch'], [84, -32, 1.05, 'split_lr'], [108, 34, 1.25, 'flag_R'], [42, 92, 1.4, 'dive_cube'], [-42, 92, 1.15, 'over_under'], [-108, 34, 1.0, 'flag_L'], [-84, -36, 1.35, 'diamond'], [-24, -58, 0.95, 'arch']]) }
+      ],
+      bosque_slalom: [
+        { id: 'c1', name: 'C1 ARROYO SLALOM', shortCode: 'C1', lineCol565: 59814, palIdx: 4,
+          uvList: makeMapUvCircuitPts(600, 420, [[0, -18, 0.85, 'arch'], [-18, 14, 0.85, 'flag_L'], [0, 42, 0.95, 'over_under'], [26, 76, 0.9, 'flag_R'], [-14, 112, 1.15, 'diamond'], [-64, 72, 0.95, 'split_lr'], [-52, 6, 0.85, 'flag_L'], [-28, -44, 0.9, 'arch']]) },
+        { id: 'c2', name: 'C2 PUENTE MADERA', shortCode: 'C2', lineCol565: 11807, palIdx: 5,
+          uvList: makeMapUvCircuitPts(600, 420, [[0, 8, 0.9, 'arch'], [0, 42, 0.95, 'over_under'], [-38, 68, 1.25, 'diamond'], [-76, 22, 1.0, 'flag_L'], [-36, -44, 1.35, 'dive_cube'], [32, -22, 0.95, 'split_lr'], [68, 28, 1.15, 'diamond'], [36, 64, 0.9, 'flag_R']]) },
+        { id: 'c3', name: 'C3 TECNICO PINOS', shortCode: 'C3', lineCol565: 14156, palIdx: 3,
+          uvList: makeMapUvCircuitPts(600, 420, [[0, -24, 0.8, 'arch'], [22, -2, 0.8, 'flag_R'], [-22, 20, 0.8, 'flag_L'], [22, 44, 0.85, 'flag_R'], [-18, 72, 0.85, 'flag_L'], [28, 96, 1.1, 'split_lr'], [64, 48, 0.85, 'flag_R'], [42, -16, 0.9, 'over_under']]) },
+        { id: 'c4', name: 'C4 OCHO FORESTAL', shortCode: 'C4', lineCol565: 47581, palIdx: 10,
+          uvList: makeMapUvCircuitPts(600, 420, [[0, 20, 0.95, 'over_under'], [-58, 74, 1.25, 'diamond'], [-105, 18, 1.0, 'arch'], [-54, -46, 1.35, 'dive_cube'], [0, 20, 1.3, 'over_under'], [58, 74, 1.25, 'diamond'], [105, 18, 1.0, 'arch'], [54, -46, 1.35, 'dive_cube']]) },
+        { id: 'c5', name: 'C5 RUTA DEL BOSQUE', shortCode: 'C5', lineCol565: 64547, palIdx: 9,
+          uvList: makeMapUvCircuitPts(600, 420, [[0, -38, 0.9, 'arch'], [-92, -28, 1.05, 'split_lr'], [-125, 48, 1.25, 'flag_L'], [-48, 118, 1.4, 'dive_cube'], [52, 118, 1.15, 'over_under'], [125, 44, 1.0, 'flag_R'], [96, -38, 1.3, 'diamond'], [28, -68, 0.95, 'arch']]) }
+      ],
+      dunas_sunset: [
+        { id: 'c1', name: 'C1 OASIS SPRINT', shortCode: 'C1', lineCol565: 59814, palIdx: 4,
+          uvList: makeMapUvCircuitPts(700, 480, [[0, -20, 0.9, 'arch'], [0, 38, 1.0, 'over_under'], [-42, 68, 1.1, 'flag_L'], [-86, 18, 0.95, 'split_lr'], [-44, -48, 1.25, 'diamond'], [28, -52, 0.95, 'flag_R'], [68, 8, 1.15, 'dive_cube'], [38, 56, 0.95, 'arch']]) },
+        { id: 'c2', name: 'C2 DUNAS CARVING', shortCode: 'C2', lineCol565: 11807, palIdx: 5,
+          uvList: makeMapUvCircuitPts(700, 480, [[0, 0, 0.95, 'arch'], [58, 42, 1.35, 'diamond'], [118, -12, 1.5, 'dive_cube'], [64, -78, 1.1, 'split_lr'], [-28, -68, 0.95, 'flag_L'], [-92, -14, 1.4, 'dive_cube'], [-64, 58, 1.15, 'diamond'], [0, 38, 1.0, 'over_under']]) },
+        { id: 'c3', name: 'C3 KASBAH SLALOM', shortCode: 'C3', lineCol565: 14156, palIdx: 3,
+          uvList: makeMapUvCircuitPts(700, 480, [[0, -22, 0.85, 'arch'], [-32, 18, 0.85, 'flag_L'], [0, 38, 0.95, 'over_under'], [36, 24, 0.85, 'flag_R'], [58, -18, 0.9, 'flag_L'], [44, -48, 1.05, 'split_lr'], [-24, -48, 0.85, 'flag_R'], [-48, -12, 0.9, 'arch']]) },
+        { id: 'c4', name: 'C4 CRESTAS SUNSET', shortCode: 'C4', lineCol565: 47581, palIdx: 10,
+          uvList: makeMapUvCircuitPts(700, 480, [[0, 12, 1.0, 'arch'], [-78, 82, 1.45, 'diamond'], [-145, 24, 1.6, 'dive_cube'], [-82, -68, 1.2, 'split_lr'], [18, -88, 1.35, 'diamond'], [115, -42, 1.55, 'dive_cube'], [125, 54, 1.2, 'over_under'], [48, 78, 1.0, 'flag_R']]) },
+        { id: 'c5', name: 'C5 GRAN DESIERTO', shortCode: 'C5', lineCol565: 64547, palIdx: 9,
+          uvList: makeMapUvCircuitPts(700, 480, [[0, -42, 0.95, 'arch'], [-115, -36, 1.1, 'split_lr'], [-155, 58, 1.35, 'diamond'], [-58, 135, 1.5, 'dive_cube'], [68, 135, 1.2, 'over_under'], [155, 52, 1.05, 'flag_R'], [118, -54, 1.4, 'dive_cube'], [35, -82, 0.95, 'arch']]) }
+      ]
+    };
+
     let CHOROBOBO_CIRCUIT_DEFS = JSON.parse(JSON.stringify(DEFAULT_CHOROBOBO_CIRCUIT_DEFS));
 
     const CHOROBOBO_CIRCUITS = CHOROBOBO_CIRCUIT_DEFS.map(d =>
@@ -2543,6 +2615,9 @@
     let CIRCUIT_GATES = CHOROBOBO_CIRCUITS[0].gates;
 
     function rebuildChoroboboCircuitsForScale() {
+      if (typeof syncActiveMapGroupState === 'function') {
+        syncActiveMapGroupState(currentThemeIdx);
+      }
       for (let i = 0; i < CHOROBOBO_CIRCUIT_DEFS.length; i++) {
         const d = CHOROBOBO_CIRCUIT_DEFS[i];
         CHOROBOBO_CIRCUITS[i] = buildOrientedCircuit(d.id, d.name, d.shortCode, d.lineCol565, d.palIdx, d.uvList);
@@ -2551,6 +2626,9 @@
       CIRCUIT_GATES = CHOROBOBO_CIRCUITS[safeIdx].gates;
       if (typeof worldObjectsInitialized !== 'undefined' && worldObjectsInitialized) {
         rebuildWorldObjectsForScale();
+      }
+      if (typeof window !== 'undefined' && typeof window.syncMapEditorCircuitLabels === 'function') {
+        window.syncMapEditorCircuitLabels();
       }
     }
 
@@ -2841,15 +2919,20 @@
 
     // Genera el Domo de Cielo Azul con Nubes Voxel (512x512) y actualiza la escala física del Terreno Voxel 2048x1024
     function generateGentleVoxelMap(themeIdx) {
-      const prevWorldW = WORLD_W_M;
-      const prevWorldH = WORLD_H_M;
-      const prevTheme  = TERRAIN_THEMES[currentThemeIdx];
-      const wasChoro   = !!(prevTheme && prevTheme.isChorobobo);
-      const wasFpvMap  = (activeWorldMapMode === 'fpv');
+      const prevWorldW   = WORLD_W_M;
+      const prevWorldH   = WORLD_H_M;
+      const prevTheme    = TERRAIN_THEMES[currentThemeIdx];
+      const prevGroupKey = prevTheme ? (prevTheme.isChorobobo ? 'chorobobo' : prevTheme.id) : 'chorobobo';
+      const wasFpvMap    = (activeWorldMapMode === 'fpv');
       activeWorldMapMode = 'fpv';
       currentThemeIdx = ((themeIdx % TERRAIN_THEMES.length) + TERRAIN_THEMES.length) % TERRAIN_THEMES.length;
       const theme = TERRAIN_THEMES[currentThemeIdx];
+      const newGroupKey = theme.isChorobobo ? 'chorobobo' : theme.id;
       isChoroboboThemeActive = !!theme.isChorobobo;
+
+      if (typeof syncActiveMapGroupState === 'function') {
+        syncActiveMapGroupState(currentThemeIdx);
+      }
 
       // Actualizar dimensiones físicas del mundo, escala vertical y resolución por voxel
       WORLD_W_M    = theme.worldW || 1650.0;
@@ -2858,26 +2941,14 @@
       MAP_SCALE_X  = MAP_W / WORLD_W_M;
       MAP_SCALE_Z  = MAP_H / WORLD_H_M;
 
-      // Si cambia entre dos mapas procedurales (no Chorobobo) de distinto tamaño, ajustar la posición proporcionalmente.
-      // Si cambia entre dos escalas de Chorobobo (PARK 715x484m / HD 1.65x1.1km / LR 6.6x4.4km), conservar la posición exacta (u, v) sobre chorobobo.jpg.
-      if (wasFpvMap && prevWorldW !== WORLD_W_M && typeof fpvDroneSim !== 'undefined' && typeof fpvWingSim !== 'undefined') {
-        if (wasChoro && theme.isChorobobo) {
-          const oldB = getChoroboboActiveUvBounds(prevWorldW, prevWorldH);
-          const newB = getChoroboboActiveUvBounds(WORLD_W_M, WORLD_H_M);
-          const dxM  = (oldB.anchorU - newB.anchorU) * CHORO_FULL_W_M;
-          const dzM  = (newB.anchorV - oldB.anchorV) * CHORO_FULL_H_M;
-          fpvDroneSim.px += dxM;
-          fpvDroneSim.pz += dzM;
-          fpvWingSim.px  += dxM;
-          fpvWingSim.pz  += dzM;
-        } else {
-          const ratioX = WORLD_W_M / prevWorldW;
-          const ratioZ = WORLD_H_M / prevWorldH;
-          fpvDroneSim.px *= ratioX;
-          fpvDroneSim.pz *= ratioZ;
-          fpvWingSim.px  *= ratioX;
-          fpvWingSim.pz  *= ratioZ;
-        }
+      // Si cambia entre las 3 escalas de Chorobobo (PARK 715x484m / HD 1.65x1.1km / LR 6.6x4.4km), escalar (px, pz) para mantener el mismo punto (u, v) sobre chorobobo.jpg
+      if (wasFpvMap && prevGroupKey === newGroupKey && prevWorldW !== WORLD_W_M && typeof fpvDroneSim !== 'undefined' && typeof fpvWingSim !== 'undefined') {
+        const ratioX = WORLD_W_M / prevWorldW;
+        const ratioZ = WORLD_H_M / prevWorldH;
+        fpvDroneSim.px *= ratioX;
+        fpvDroneSim.pz *= ratioZ;
+        fpvWingSim.px  *= ratioX;
+        fpvWingSim.pz  *= ratioZ;
       }
 
       // 1. Generar siempre el Domo de Cielo Azul + Nubes 512x512 para el tema activo
@@ -2894,15 +2965,17 @@
         }
       }
 
-      // Si el tema usa la ortofoto de CHOROBOBO (PARK 715x484m, HD 1.65x1.1km o LR 6.6x4.4km), recortar y volcar la región exacta en PSRAM
+      // Si el tema usa la ortofoto completa de CHOROBOBO (PARK 715x484m, HD 1.65x1.1km o LR 6.6x4.4km), volcarla en PSRAM
       if (theme.isChorobobo && choroDecodedImg) {
         HEIGHT_SCALE = 0.125;
-        const b = getChoroboboActiveUvBounds(WORLD_W_M, WORLD_H_M);
-        const targetKey = `${WORLD_W_M}_${b.uMin.toFixed(4)}_${b.vMin.toFixed(4)}`;
-        if (!choroBakedInPsram || choroBakedKey !== targetKey) {
+        if (!choroBakedInPsram) {
           bakeChoroboboToPsram(choroDecodedImg);
         } else {
           rebuildChoroboboCircuitsForScale();
+        }
+        if (wasFpvMap && prevGroupKey !== newGroupKey && typeof fpvDroneSim !== 'undefined' && typeof fpvWingSim !== 'undefined') {
+          fpvDroneSim.reset();
+          fpvWingSim.reset();
         }
         return;
       }
@@ -3116,32 +3189,30 @@
         }
       }
       rebuildChoroboboCircuitsForScale();
+      if (wasFpvMap && prevGroupKey !== newGroupKey && typeof fpvDroneSim !== 'undefined' && typeof fpvWingSim !== 'undefined') {
+        fpvDroneSim.reset();
+        fpvWingSim.reset();
+      }
     }
 
-    // Decodifica la región activa de la ortofoto satelital (chorobobo.jpg) en el mapa PSRAM 2048x1024 a escala 1:1 real
+    // Decodifica la ortofoto satelital completa (chorobobo.jpg) en el mapa PSRAM 2048x1024
     function bakeChoroboboToPsram(img) {
       HEIGHT_SCALE = 0.125;
-      const bounds = getChoroboboActiveUvBounds(WORLD_W_M, WORLD_H_M);
       const cnv = document.createElement('canvas');
       cnv.width = MAP_W;
       cnv.height = MAP_H;
       const ctx = cnv.getContext('2d');
-      const imgW = img.naturalWidth || img.width || MAP_W;
-      const imgH = img.naturalHeight || img.height || MAP_H;
-      const srcX = bounds.uMin * imgW;
-      const srcY = bounds.vMin * imgH;
-      const srcW = Math.max(1, (bounds.uMax - bounds.uMin) * imgW);
-      const srcH = Math.max(1, (bounds.vMax - bounds.vMin) * imgH);
-      // Invertir eje vertical del recorte activo para que +mz (+wz) apunte exactamente al NORTE (Río Turbio arriba)
+      // Invertir eje vertical para que +mz (+wz) apunte exactamente al NORTE (Río Turbio arriba)
       ctx.save();
       ctx.translate(0, MAP_H);
       ctx.scale(1, -1);
-      ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, MAP_W, MAP_H);
+      ctx.drawImage(img, 0, 0, MAP_W, MAP_H);
       ctx.restore();
       const rgba = ctx.getImageData(0, 0, MAP_W, MAP_H).data;
 
-      const scaleRefX = WORLD_W_M / MAP_W;
-      const scaleRefZ = WORLD_H_M / MAP_H;
+      // Escala de referencia fija 6600x4400m para que el relieve sea idéntico en las 3 escalas (PARK, HD y LR)
+      const scaleRefX = 6600.0 / MAP_W;
+      const scaleRefZ = 4400.0 / MAP_H;
 
       for (let mz = 0; mz < MAP_H; mz++) {
         const zOff = mz << MAP_SHIFT_X;
@@ -3163,7 +3234,7 @@
             b = b * edgeW + rgba[oppIdx + 2] * (1 - edgeW);
           }
 
-          // Extraer relieve Voxel 3D limpio (suelo agrícola plano h = 2 en todo el valle para fidelidad 1:1 con la ortofoto,
+          // Extraer relieve Voxel 3D limpio (suelo agrícola plano h = 2 en todo el valle para fidelidad con la ortofoto,
           // y lomas lejanas suavizadas con edgeW en los bordes para evitar escalones/líneas verticales al envolver el mapa):
           const luma = (r * 77 + g * 150 + b * 29) >> 8;
           let h = 2; // Suelo agrícola base: 0.25 m uniforme
@@ -3199,7 +3270,7 @@
         }
       }
       choroBakedInPsram = true;
-      choroBakedKey = `${WORLD_W_M}_${bounds.uMin.toFixed(4)}_${bounds.vMin.toFixed(4)}`;
+      choroBakedKey = 'full_1_1x';
       rebuildChoroboboCircuitsForScale();
     }
 
@@ -3213,11 +3284,14 @@
           if (TERRAIN_THEMES[currentThemeIdx].isChorobobo) {
             bakeChoroboboToPsram(img);
           }
+          if (typeof window !== 'undefined' && typeof window.refreshMapEditorCanvas === 'function') {
+            window.refreshMapEditorCanvas();
+          }
         } catch (err) {
           console.warn('No se pudo decodificar chorobobo.jpg:', err);
         }
       };
-      img.src = 'chorobobo.jpg?v=19';
+      img.src = 'chorobobo.jpg?v=20';
     }
 
     generateGentleVoxelMap(0);
@@ -4389,19 +4463,158 @@
       altM: 12.0
     };
 
-    let BUILDING_UV_DEFS         = JSON.parse(JSON.stringify(DEFAULT_BUILDING_UV_DEFS));
-    let CHOROBOBO_CUSTOM_TREES_UV = DEFAULT_CHOROBOBO_TREES_UV.map(t => ({ ...t }));
-    let choroboboRandomTreeCount = 0; // Diseño oficial de chorobobo_mapa_2026-10-31.json (0 random, 15,652 árboles colocados)
-    let CHOROBOBO_SPAWN_DEF      = { ...DEFAULT_CHOROBOBO_SPAWN_DEF };
+    const NUM_WORLD_TREES = 180;
+
+    function getMapGroupKey(themeIdx = currentThemeIdx) {
+      const th = TERRAIN_THEMES[themeIdx] || TERRAIN_THEMES[0];
+      return th.isChorobobo ? 'chorobobo' : th.id;
+    }
+
+    function buildDefaultMapGroupBuildings(groupKey) {
+      if (groupKey === 'chorobobo') {
+        return JSON.parse(JSON.stringify(DEFAULT_BUILDING_UV_DEFS));
+      }
+      const toBldgUv = (wM, hM, list, defWallL, defWallD, defRoof) => list.map(bd => ({
+        u: Number((SPAWN_U + bd.x / wM).toFixed(4)),
+        v: Number((SPAWN_V - bd.z / hM).toFixed(4)),
+        w: bd.w,
+        d: bd.d,
+        h: bd.h,
+        roofH: bd.roofH,
+        yaw: bd.yaw || 0.0,
+        kind: bd.kind || 'standard',
+        wallL: bd.wallL || defWallL,
+        wallD: bd.wallD || defWallD,
+        roofCol: bd.roofCol || defRoof
+      }));
+
+      if (groupKey === 'bando_edificio' || groupKey === 'bando_arena') {
+        const wM = groupKey === 'bando_edificio' ? 500.0 : 550.0;
+        const hM = groupKey === 'bando_edificio' ? 360.0 : 380.0;
+        return toBldgUv(wM, hM, [
+          { x:   0.0, z:   8.0, w: 28.0, d: 20.0, h: 6.2, roofH: 5.8, yaw:  0.00, kind: 'open_bando', wallL: rgb565(178, 184, 192), wallD: rgb565(118, 124, 132), roofCol: rgb565(235, 118, 24) },
+          { x: -34.0, z:  42.0, w: 24.0, d: 16.0, h: 5.6, roofH: 5.2, yaw:  0.22, kind: 'open_bando', wallL: rgb565(168, 176, 186), wallD: rgb565(112, 118, 128), roofCol: rgb565(42, 178, 235) },
+          { x:  38.0, z:  34.0, w: 22.0, d: 16.0, h: 5.6, roofH: 5.0, yaw: -0.25, kind: 'open_bando', wallL: rgb565(184, 180, 172), wallD: rgb565(124, 120, 112), roofCol: rgb565(228, 58, 48) },
+          { x: -38.0, z: -26.0, w: 20.0, d: 16.0, h: 6.8, roofH: 6.4, yaw:  0.10, kind: 'open_bando', wallL: rgb565(172, 178, 186), wallD: rgb565(114, 120, 128), roofCol: rgb565(242, 188, 24) },
+          { x:   0.0, z:  46.0, w: 22.0, d:  7.5, h: 6.5, roofH: 2.2, yaw:  0.00, kind: 'bando_arch', wallL: rgb565(192, 142, 42),  wallD: rgb565(136, 96, 28),   roofCol: rgb565(82, 88, 98) },
+          { x:  24.0, z: -18.0, w: 20.0, d:  7.0, h: 6.0, roofH: 2.0, yaw:  0.78, kind: 'bando_arch', wallL: rgb565(186, 62, 44),   wallD: rgb565(128, 42, 30),   roofCol: rgb565(86, 92, 102) },
+          { x: -72.0, z:  12.0, w: 18.0, d: 11.0, h: 5.4, roofH: 1.4, yaw:  0.05, kind: 'standard',   wallL: rgb565(156, 162, 170), wallD: rgb565(104, 110, 118), roofCol: rgb565(92, 46, 36) },
+          { x:  74.0, z:  -8.0, w: 18.0, d: 11.0, h: 5.4, roofH: 1.4, yaw: -0.12, kind: 'standard',   wallL: rgb565(162, 158, 152), wallD: rgb565(108, 104, 98),  roofCol: rgb565(64, 88, 108) },
+          { x:   6.0, z:  84.0, w: 22.0, d: 10.0, h: 5.2, roofH: 1.5, yaw:  0.00, kind: 'standard',   wallL: rgb565(168, 172, 178), wallD: rgb565(112, 116, 122), roofCol: rgb565(118, 54, 38) }
+        ], rgb565(172, 178, 186), rgb565(114, 120, 128), rgb565(185, 62, 44));
+      }
+      if (groupKey === 'comanche_canyon') {
+        return toBldgUv(2800.0, 2000.0, [
+          { x:    8.0, z:   88.0, w: 30.0, d:  8.5, h: 8.5, roofH: 2.4, yaw:  0.12, kind: 'bando_arch', wallL: rgb565(198, 146, 86), wallD: rgb565(138, 94, 52),  roofCol: rgb565(92, 84, 78) },
+          { x:  -52.0, z:  220.0, w: 32.0, d:  9.0, h: 9.0, roofH: 2.5, yaw: -0.35, kind: 'bando_arch', wallL: rgb565(188, 128, 74), wallD: rgb565(128, 82, 46),  roofCol: rgb565(84, 78, 72) },
+          { x:   64.0, z: -135.0, w: 28.0, d:  8.5, h: 8.0, roofH: 2.2, yaw:  0.28, kind: 'bando_arch', wallL: rgb565(198, 146, 86), wallD: rgb565(138, 94, 52),  roofCol: rgb565(92, 84, 78) },
+          { x:  -26.0, z:   34.0, w: 16.0, d: 11.0, h: 4.5, roofH: 1.2, yaw:  0.18, kind: 'standard',   wallL: rgb565(208, 168, 122), wallD: rgb565(148, 114, 78), roofCol: rgb565(112, 104, 92) },
+          { x:   42.0, z:  155.0, w: 18.0, d: 12.0, h: 4.8, roofH: 1.4, yaw: -0.24, kind: 'standard',   wallL: rgb565(198, 158, 114), wallD: rgb565(142, 108, 72), roofCol: rgb565(128, 72, 48) },
+          { x:  -88.0, z:  -65.0, w: 18.0, d: 12.0, h: 4.8, roofH: 1.4, yaw:  0.40, kind: 'standard',   wallL: rgb565(208, 168, 122), wallD: rgb565(148, 114, 78), roofCol: rgb565(112, 104, 92) }
+        ], rgb565(208, 168, 122), rgb565(148, 114, 78), rgb565(112, 104, 92));
+      }
+      if (groupKey === 'alpes_cumbres') {
+        return toBldgUv(3200.0, 2200.0, [
+          { x: -24.0, z:  32.0, w: 13.0, d:  9.5, h: 4.6, roofH: 3.4, yaw:  0.15 },
+          { x: -42.0, z:  48.0, w: 11.0, d:  8.5, h: 4.2, roofH: 3.1, yaw: -0.20 },
+          { x:  28.0, z:  64.0, w: 14.0, d: 10.0, h: 4.8, roofH: 3.5, yaw:  0.32 },
+          { x:  18.0, z: -44.0, w: 12.5, d:  9.0, h: 4.4, roofH: 3.2, yaw: -0.12 },
+          { x: -55.0, z: -32.0, w: 13.0, d:  9.0, h: 4.5, roofH: 3.3, yaw:  0.45 },
+          { x:   6.0, z: 128.0, w: 15.0, d: 10.5, h: 5.0, roofH: 3.6, yaw:  0.05 }
+        ], rgb565(168, 122, 78), rgb565(114, 78, 46), rgb565(228, 236, 246));
+      }
+      if (groupKey === 'isla_volcan') {
+        return toBldgUv(2000.0, 1400.0, [
+          { x:  -18.0, z:  -42.0, w: 12.0, d: 8.5, h: 3.8, roofH: 2.4, yaw:  0.20, roofCol: rgb565(196, 154, 76) },
+          { x:  -38.0, z:  -28.0, w: 10.5, d: 8.0, h: 3.6, roofH: 2.2, yaw: -0.15, roofCol: rgb565(196, 154, 76) },
+          { x:   46.0, z:  -35.0, w: 13.0, d: 9.0, h: 4.0, roofH: 2.4, yaw:  0.35, roofCol: rgb565(184, 72, 48) },
+          { x:  -68.0, z:   35.0, w: 14.0, d: 9.5, h: 4.2, roofH: 1.8, yaw: -0.28, roofCol: rgb565(64, 128, 168) },
+          { x:   62.0, z:   42.0, w: 12.0, d: 8.5, h: 3.8, roofH: 2.2, yaw:  0.12, roofCol: rgb565(196, 154, 76) }
+        ], rgb565(238, 228, 206), rgb565(176, 164, 142), rgb565(196, 154, 76));
+      }
+      if (groupKey === 'dunas_sunset') {
+        return toBldgUv(700.0, 480.0, [
+          { x:   0.0, z:  38.0, w: 20.0, d: 7.0, h: 6.2, roofH: 2.0, yaw:  0.00, kind: 'bando_arch', roofCol: rgb565(214, 158, 92) },
+          { x: -32.0, z:  18.0, w: 13.0, d: 9.5, h: 4.4, roofH: 1.0, yaw:  0.22, kind: 'standard',   roofCol: rgb565(192, 134, 76) },
+          { x:  36.0, z:  24.0, w: 12.0, d: 9.0, h: 4.2, roofH: 1.0, yaw: -0.18, kind: 'standard',   roofCol: rgb565(192, 134, 76) },
+          { x: -24.0, z: -48.0, w: 14.0, d: 9.5, h: 4.5, roofH: 1.1, yaw:  0.35, kind: 'standard',   roofCol: rgb565(178, 84, 52) },
+          { x:  44.0, z: -38.0, w: 12.5, d: 8.5, h: 4.0, roofH: 1.0, yaw: -0.28, kind: 'standard',   roofCol: rgb565(192, 134, 76) }
+        ], rgb565(228, 182, 124), rgb565(168, 122, 74), rgb565(192, 134, 76));
+      }
+      if (groupKey === 'bosque_slalom') {
+        return toBldgUv(600.0, 420.0, [
+          { x:   0.0, z:  42.0, w: 18.0, d: 6.5, h: 5.5, roofH: 1.8, yaw:  0.00, kind: 'bando_arch', roofCol: rgb565(92, 62, 36) },
+          { x: -28.0, z:  16.0, w: 11.0, d: 8.0, h: 3.8, roofH: 2.2, yaw:  0.25, kind: 'standard',   roofCol: rgb565(68, 112, 58) },
+          { x:  32.0, z: -22.0, w: 11.5, d: 8.5, h: 4.0, roofH: 2.3, yaw: -0.20, kind: 'standard',   roofCol: rgb565(138, 64, 42) },
+          { x: -36.0, z: -44.0, w: 12.0, d: 8.5, h: 4.0, roofH: 2.2, yaw:  0.15, kind: 'standard',   roofCol: rgb565(68, 112, 58) }
+        ], rgb565(156, 112, 68), rgb565(106, 74, 42), rgb565(68, 112, 58));
+      }
+      return [];
+    }
+
+    function createDefaultMapGroupEntry(groupKey) {
+      const isChoro = (groupKey === 'chorobobo');
+      const circDefs = DEFAULT_MAP_CIRCUITS_BY_GROUP[groupKey] || DEFAULT_CHOROBOBO_CIRCUIT_DEFS;
+      return {
+        circuits: JSON.parse(JSON.stringify(circDefs)),
+        buildings: buildDefaultMapGroupBuildings(groupKey),
+        trees: isChoro ? DEFAULT_CHOROBOBO_TREES_UV.map(t => ({ ...t })) : [],
+        randomTreeCount: isChoro ? 0 : NUM_WORLD_TREES,
+        spawn: isChoro
+          ? { ...DEFAULT_CHOROBOBO_SPAWN_DEF }
+          : { enabled: false, u: SPAWN_U, v: SPAWN_V, hdgDeg: -162, altM: 12.0 }
+      };
+    }
+
+    const MAP_GROUP_STATE = {
+      chorobobo:       createDefaultMapGroupEntry('chorobobo'),
+      bando_edificio:  createDefaultMapGroupEntry('bando_edificio'),
+      comanche_canyon: createDefaultMapGroupEntry('comanche_canyon'),
+      alpes_cumbres:   createDefaultMapGroupEntry('alpes_cumbres'),
+      isla_volcan:     createDefaultMapGroupEntry('isla_volcan'),
+      bando_arena:     createDefaultMapGroupEntry('bando_arena'),
+      bosque_slalom:   createDefaultMapGroupEntry('bosque_slalom'),
+      dunas_sunset:    createDefaultMapGroupEntry('dunas_sunset')
+    };
+    let activeMapGroupKey        = 'chorobobo';
+    let BUILDING_UV_DEFS         = MAP_GROUP_STATE.chorobobo.buildings;
+    let CHOROBOBO_CUSTOM_TREES_UV = MAP_GROUP_STATE.chorobobo.trees;
+    let choroboboRandomTreeCount = MAP_GROUP_STATE.chorobobo.randomTreeCount;
+    let CHOROBOBO_SPAWN_DEF      = MAP_GROUP_STATE.chorobobo.spawn;
+    CHOROBOBO_CIRCUIT_DEFS       = MAP_GROUP_STATE.chorobobo.circuits;
+
+    function syncActiveMapGroupState(themeIdx = currentThemeIdx) {
+      const prevEntry = MAP_GROUP_STATE[activeMapGroupKey];
+      if (prevEntry) {
+        prevEntry.buildings       = BUILDING_UV_DEFS;
+        prevEntry.trees           = CHOROBOBO_CUSTOM_TREES_UV;
+        prevEntry.randomTreeCount = choroboboRandomTreeCount;
+        prevEntry.circuits        = CHOROBOBO_CIRCUIT_DEFS;
+        prevEntry.spawn           = CHOROBOBO_SPAWN_DEF;
+      }
+      const nextKey = getMapGroupKey(themeIdx);
+      if (!MAP_GROUP_STATE[nextKey]) {
+        MAP_GROUP_STATE[nextKey] = createDefaultMapGroupEntry(nextKey);
+      }
+      activeMapGroupKey         = nextKey;
+      const nextEntry           = MAP_GROUP_STATE[nextKey];
+      BUILDING_UV_DEFS          = nextEntry.buildings;
+      CHOROBOBO_CUSTOM_TREES_UV = nextEntry.trees;
+      choroboboRandomTreeCount  = nextEntry.randomTreeCount;
+      CHOROBOBO_CIRCUIT_DEFS    = nextEntry.circuits;
+      CHOROBOBO_SPAWN_DEF       = nextEntry.spawn;
+    }
 
     (function loadCustomChoroboboLayoutFromStorage() {
       try {
+        // 1. Cargar estado de Chorobobo (compatible con v3 existente)
         const rawV3 = localStorage.getItem('fpvsim_chorobobo_layout_v3');
         if (rawV3) {
           const parsed = JSON.parse(rawV3);
+          const choroEntry = MAP_GROUP_STATE.chorobobo;
           const needsScale11Migration = !parsed.scale11Migrated;
           if (Array.isArray(parsed.buildings)) {
-            BUILDING_UV_DEFS = parsed.buildings.map(b => {
+            choroEntry.buildings = parsed.buildings.map(b => {
               if (!needsScale11Migration) return b;
               return {
                 ...b,
@@ -4410,47 +4623,84 @@
               };
             });
           }
-          if (Array.isArray(parsed.trees))     CHOROBOBO_CUSTOM_TREES_UV = parsed.trees;
-          if (typeof parsed.randomTreeCount === 'number') choroboboRandomTreeCount = parsed.randomTreeCount;
+          if (Array.isArray(parsed.trees)) choroEntry.trees = parsed.trees;
+          if (typeof parsed.randomTreeCount === 'number') choroEntry.randomTreeCount = parsed.randomTreeCount;
           if (parsed.spawn && typeof parsed.spawn === 'object') {
-            CHOROBOBO_SPAWN_DEF = { ...DEFAULT_CHOROBOBO_SPAWN_DEF, ...parsed.spawn };
+            choroEntry.spawn = { ...DEFAULT_CHOROBOBO_SPAWN_DEF, ...parsed.spawn };
           }
-          if (parsed.cropDefs && typeof parsed.cropDefs === 'object') {
-            if (parsed.cropDefs.park) CHOROBOBO_CROP_DEFS.park = { ...DEFAULT_CHOROBOBO_CROP_DEFS.park, ...parsed.cropDefs.park };
-            if (parsed.cropDefs.hd)   CHOROBOBO_CROP_DEFS.hd   = { ...DEFAULT_CHOROBOBO_CROP_DEFS.hd,   ...parsed.cropDefs.hd };
-          }
-          if (Array.isArray(parsed.circuits) && parsed.circuits.length === CHOROBOBO_CIRCUIT_DEFS.length) {
-            for (let c = 0; c < CHOROBOBO_CIRCUIT_DEFS.length; c++) {
+          if (Array.isArray(parsed.circuits) && parsed.circuits.length === choroEntry.circuits.length) {
+            for (let c = 0; c < choroEntry.circuits.length; c++) {
               if (parsed.circuits[c] && Array.isArray(parsed.circuits[c].uvList)) {
-                CHOROBOBO_CIRCUIT_DEFS[c].uvList = parsed.circuits[c].uvList;
+                choroEntry.circuits[c].uvList = parsed.circuits[c].uvList;
               }
             }
           }
-          rebuildChoroboboCircuitsForScale();
-          if (needsScale11Migration) {
-            saveCustomChoroboboLayoutToStorage();
+        }
+        // 2. Cargar estados independientes por mapa si existen
+        const rawGroups = localStorage.getItem('fpvsim_map_groups_v1');
+        if (rawGroups) {
+          const groupsObj = JSON.parse(rawGroups);
+          for (const gKey of Object.keys(groupsObj)) {
+            if (gKey === 'chorobobo') continue; // Ya cargado desde v3
+            const src = groupsObj[gKey];
+            if (!src || typeof src !== 'object') continue;
+            if (!MAP_GROUP_STATE[gKey]) MAP_GROUP_STATE[gKey] = createDefaultMapGroupEntry(gKey);
+            const dst = MAP_GROUP_STATE[gKey];
+            if (Array.isArray(src.buildings)) dst.buildings = src.buildings;
+            if (Array.isArray(src.trees))     dst.trees     = src.trees;
+            if (typeof src.randomTreeCount === 'number') dst.randomTreeCount = src.randomTreeCount;
+            if (src.spawn && typeof src.spawn === 'object') dst.spawn = { ...dst.spawn, ...src.spawn };
+            if (Array.isArray(src.circuits) && src.circuits.length === dst.circuits.length) {
+              for (let c = 0; c < dst.circuits.length; c++) {
+                if (src.circuits[c] && Array.isArray(src.circuits[c].uvList)) {
+                  dst.circuits[c].uvList = src.circuits[c].uvList;
+                }
+              }
+            }
           }
         }
+        activeMapGroupKey = getMapGroupKey(currentThemeIdx);
+        const curEntry = MAP_GROUP_STATE[activeMapGroupKey];
+        BUILDING_UV_DEFS          = curEntry.buildings;
+        CHOROBOBO_CUSTOM_TREES_UV = curEntry.trees;
+        choroboboRandomTreeCount  = curEntry.randomTreeCount;
+        CHOROBOBO_CIRCUIT_DEFS    = curEntry.circuits;
+        CHOROBOBO_SPAWN_DEF       = curEntry.spawn;
+        rebuildChoroboboCircuitsForScale();
       } catch (e) {
-        console.warn('No se pudo cargar layout personalizado de Chorobobo:', e);
+        console.warn('No se pudo cargar layout personalizado por mapa:', e);
       }
     })();
 
     function saveCustomChoroboboLayoutToStorage() {
       try {
+        const curEntry = MAP_GROUP_STATE[activeMapGroupKey];
+        if (curEntry) {
+          curEntry.buildings       = BUILDING_UV_DEFS;
+          curEntry.trees           = CHOROBOBO_CUSTOM_TREES_UV;
+          curEntry.randomTreeCount = choroboboRandomTreeCount;
+          curEntry.circuits        = CHOROBOBO_CIRCUIT_DEFS;
+          curEntry.spawn           = CHOROBOBO_SPAWN_DEF;
+        }
+        const choro = MAP_GROUP_STATE.chorobobo;
         localStorage.setItem('fpvsim_chorobobo_layout_v3', JSON.stringify({
           scale11Migrated: true,
-          buildings: BUILDING_UV_DEFS,
-          trees: CHOROBOBO_CUSTOM_TREES_UV,
-          randomTreeCount: choroboboRandomTreeCount,
-          circuits: CHOROBOBO_CIRCUIT_DEFS,
-          spawn: CHOROBOBO_SPAWN_DEF,
+          buildings: choro.buildings,
+          trees: choro.trees,
+          randomTreeCount: choro.randomTreeCount,
+          circuits: choro.circuits,
+          spawn: choro.spawn,
           cropDefs: CHOROBOBO_CROP_DEFS
         }));
+        const nonChoroGroups = {};
+        for (const k of Object.keys(MAP_GROUP_STATE)) {
+          if (k === 'chorobobo') continue;
+          nonChoroGroups[k] = MAP_GROUP_STATE[k];
+        }
+        localStorage.setItem('fpvsim_map_groups_v1', JSON.stringify(nonChoroGroups));
       } catch (e) {}
     }
 
-    const NUM_WORLD_TREES = 180;
     const WORLD_TREES     = [];
     const WORLD_BUILDINGS = [];
     var worldObjectsInitialized = true;
@@ -4478,107 +4728,19 @@
       WORLD_TREES.length = 0;
       const curTheme = TERRAIN_THEMES[currentThemeIdx] || TERRAIN_THEMES[0];
       const tid = curTheme.id;
-      const bScale = WORLD_W_M <= 2400.0 ? 0.78 : 1.15;
 
-      // 1. EDIFICIOS ESPECÍFICOS POR BIOMA / MAPA (sin repetir los galpones de Chorobobo en otros mundos)
-      if (tid === 'bando_edificio' || tid === 'bando_arena') {
-        const BANDO_COMPLEX_DEFS = [
-          { x:   0.0, z:   8.0, w: 28.0, d: 20.0, h: 6.2, roofH: 5.8, yaw:  0.00, kind: 'open_bando', wallL: rgb565(178, 184, 192), wallD: rgb565(118, 124, 132), roofCol: rgb565(235, 118, 24) },
-          { x: -34.0, z:  42.0, w: 24.0, d: 16.0, h: 5.6, roofH: 5.2, yaw:  0.22, kind: 'open_bando', wallL: rgb565(168, 176, 186), wallD: rgb565(112, 118, 128), roofCol: rgb565(42, 178, 235) },
-          { x:  38.0, z:  34.0, w: 22.0, d: 16.0, h: 5.6, roofH: 5.0, yaw: -0.25, kind: 'open_bando', wallL: rgb565(184, 180, 172), wallD: rgb565(124, 120, 112), roofCol: rgb565(228, 58, 48) },
-          { x: -38.0, z: -26.0, w: 20.0, d: 16.0, h: 6.8, roofH: 6.4, yaw:  0.10, kind: 'open_bando', wallL: rgb565(172, 178, 186), wallD: rgb565(114, 120, 128), roofCol: rgb565(242, 188, 24) },
-          { x:   0.0, z:  46.0, w: 22.0, d:  7.5, h: 6.5, roofH: 2.2, yaw:  0.00, kind: 'bando_arch', wallL: rgb565(192, 142, 42),  wallD: rgb565(136, 96, 28),   roofCol: rgb565(82, 88, 98) },
-          { x:  24.0, z: -18.0, w: 20.0, d:  7.0, h: 6.0, roofH: 2.0, yaw:  0.78, kind: 'bando_arch', wallL: rgb565(186, 62, 44),   wallD: rgb565(128, 42, 30),   roofCol: rgb565(86, 92, 102) },
-          // Subestaciones y almacenes industriales perimetrales del Bando
-          { x: -72.0, z:  12.0, w: 18.0, d: 11.0, h: 5.4, roofH: 1.4, yaw:  0.05, kind: 'standard',   wallL: rgb565(156, 162, 170), wallD: rgb565(104, 110, 118), roofCol: rgb565(92, 46, 36) },
-          { x:  74.0, z:  -8.0, w: 18.0, d: 11.0, h: 5.4, roofH: 1.4, yaw: -0.12, kind: 'standard',   wallL: rgb565(162, 158, 152), wallD: rgb565(108, 104, 98),  roofCol: rgb565(64, 88, 108) },
-          { x:   6.0, z:  84.0, w: 22.0, d: 10.0, h: 5.2, roofH: 1.5, yaw:  0.00, kind: 'standard',   wallL: rgb565(168, 172, 178), wallD: rgb565(112, 116, 122), roofCol: rgb565(118, 54, 38) }
-        ];
-        for (let i = 0; i < BANDO_COMPLEX_DEFS.length; i++) {
-          const bd = BANDO_COMPLEX_DEFS[i];
-          pushWorldBldg(bd.x, bd.z, bd.w, bd.d, bd.h, bd.roofH, bd.yaw, bd.kind, bd.wallL, bd.wallD, bd.roofCol);
-        }
-      } else if (tid === 'comanche_canyon') {
-        // Puentes tácticos sobre el cañón y bases/búnkeres militares del desierto rojo
-        const CANYON_BLDGS = [
-          { x:    8.0, z:   88.0, w: 30.0, d:  8.5, h: 8.5, roofH: 2.4, yaw:  0.12, kind: 'bando_arch', wallL: rgb565(198, 146, 86), wallD: rgb565(138, 94, 52),  roofCol: rgb565(92, 84, 78) },
-          { x:  -52.0, z:  220.0, w: 32.0, d:  9.0, h: 9.0, roofH: 2.5, yaw: -0.35, kind: 'bando_arch', wallL: rgb565(188, 128, 74), wallD: rgb565(128, 82, 46),  roofCol: rgb565(84, 78, 72) },
-          { x:   64.0, z: -135.0, w: 28.0, d:  8.5, h: 8.0, roofH: 2.2, yaw:  0.28, kind: 'bando_arch', wallL: rgb565(198, 146, 86), wallD: rgb565(138, 94, 52),  roofCol: rgb565(92, 84, 78) },
-          { x:  -26.0, z:   34.0, w: 16.0, d: 11.0, h: 4.5, roofH: 1.2, yaw:  0.18, kind: 'standard',   wallL: rgb565(208, 168, 122), wallD: rgb565(148, 114, 78), roofCol: rgb565(112, 104, 92) },
-          { x:   42.0, z:  155.0, w: 18.0, d: 12.0, h: 4.8, roofH: 1.4, yaw: -0.24, kind: 'standard',   wallL: rgb565(198, 158, 114), wallD: rgb565(142, 108, 72), roofCol: rgb565(128, 72, 48) },
-          { x:  -88.0, z:  -65.0, w: 18.0, d: 12.0, h: 4.8, roofH: 1.4, yaw:  0.40, kind: 'standard',   wallL: rgb565(208, 168, 122), wallD: rgb565(148, 114, 78), roofCol: rgb565(112, 104, 92) }
-        ];
-        for (let i = 0; i < CANYON_BLDGS.length; i++) {
-          const bd = CANYON_BLDGS[i];
-          pushWorldBldg(bd.x, bd.z, bd.w, bd.d, bd.h, bd.roofH, bd.yaw, bd.kind, bd.wallL, bd.wallD, bd.roofCol);
-        }
-      } else if (tid === 'alpes_cumbres') {
-        // Chalets alpinos de madera con techos empinados nevados en el valle glaciar
-        const ALPINE_BLDGS = [
-          { x: -24.0, z:  32.0, w: 13.0, d:  9.5, h: 4.6, roofH: 3.4, yaw:  0.15 },
-          { x: -42.0, z:  48.0, w: 11.0, d:  8.5, h: 4.2, roofH: 3.1, yaw: -0.20 },
-          { x:  28.0, z:  64.0, w: 14.0, d: 10.0, h: 4.8, roofH: 3.5, yaw:  0.32 },
-          { x:  18.0, z: -44.0, w: 12.5, d:  9.0, h: 4.4, roofH: 3.2, yaw: -0.12 },
-          { x: -55.0, z: -32.0, w: 13.0, d:  9.0, h: 4.5, roofH: 3.3, yaw:  0.45 },
-          { x:   6.0, z: 128.0, w: 15.0, d: 10.5, h: 5.0, roofH: 3.6, yaw:  0.05 }
-        ];
-        for (let i = 0; i < ALPINE_BLDGS.length; i++) {
-          const bd = ALPINE_BLDGS[i];
-          pushWorldBldg(bd.x, bd.z, bd.w, bd.d, bd.h, bd.roofH, bd.yaw, 'standard',
-            rgb565(168, 122, 78), rgb565(114, 78, 46), rgb565(228, 236, 246));
-        }
-      } else if (tid === 'isla_volcan') {
-        // Cabañas tropicales costeras y estación vulcanológica
-        const ISLAND_BLDGS = [
-          { x:  -18.0, z:  -42.0, w: 12.0, d: 8.5, h: 3.8, roofH: 2.4, yaw:  0.20, roofCol: rgb565(196, 154, 76) },
-          { x:  -38.0, z:  -28.0, w: 10.5, d: 8.0, h: 3.6, roofH: 2.2, yaw: -0.15, roofCol: rgb565(196, 154, 76) },
-          { x:   46.0, z:  -35.0, w: 13.0, d: 9.0, h: 4.0, roofH: 2.4, yaw:  0.35, roofCol: rgb565(184, 72, 48) },
-          { x:  -68.0, z:   35.0, w: 14.0, d: 9.5, h: 4.2, roofH: 1.8, yaw: -0.28, roofCol: rgb565(64, 128, 168) },
-          { x:   62.0, z:   42.0, w: 12.0, d: 8.5, h: 3.8, roofH: 2.2, yaw:  0.12, roofCol: rgb565(196, 154, 76) }
-        ];
-        for (let i = 0; i < ISLAND_BLDGS.length; i++) {
-          const bd = ISLAND_BLDGS[i];
-          pushWorldBldg(bd.x, bd.z, bd.w, bd.d, bd.h, bd.roofH, bd.yaw, 'standard',
-            rgb565(238, 228, 206), rgb565(176, 164, 142), bd.roofCol);
-        }
-      } else if (tid === 'dunas_sunset') {
-        // Kasbahs de adobe y arcos de piedra arenisca en los oasis
-        const DESERT_BLDGS = [
-          { x:   0.0, z:  38.0, w: 20.0, d: 7.0, h: 6.2, roofH: 2.0, yaw:  0.00, kind: 'bando_arch', roofCol: rgb565(214, 158, 92) },
-          { x: -32.0, z:  18.0, w: 13.0, d: 9.5, h: 4.4, roofH: 1.0, yaw:  0.22, kind: 'standard',   roofCol: rgb565(192, 134, 76) },
-          { x:  36.0, z:  24.0, w: 12.0, d: 9.0, h: 4.2, roofH: 1.0, yaw: -0.18, kind: 'standard',   roofCol: rgb565(192, 134, 76) },
-          { x: -24.0, z: -48.0, w: 14.0, d: 9.5, h: 4.5, roofH: 1.1, yaw:  0.35, kind: 'standard',   roofCol: rgb565(178, 84, 52) },
-          { x:  44.0, z: -38.0, w: 12.5, d: 8.5, h: 4.0, roofH: 1.0, yaw: -0.28, kind: 'standard',   roofCol: rgb565(192, 134, 76) }
-        ];
-        for (let i = 0; i < DESERT_BLDGS.length; i++) {
-          const bd = DESERT_BLDGS[i];
-          pushWorldBldg(bd.x, bd.z, bd.w, bd.d, bd.h, bd.roofH, bd.yaw, bd.kind,
-            rgb565(228, 182, 124), rgb565(168, 122, 74), bd.roofCol);
-        }
-      } else if (tid === 'bosque_slalom') {
-        // Cabañas forestales de troncos y puente de madera
-        const FOREST_BLDGS = [
-          { x:   0.0, z:  42.0, w: 18.0, d: 6.5, h: 5.5, roofH: 1.8, yaw:  0.00, kind: 'bando_arch', roofCol: rgb565(92, 62, 36) },
-          { x: -28.0, z:  16.0, w: 11.0, d: 8.0, h: 3.8, roofH: 2.2, yaw:  0.25, kind: 'standard',   roofCol: rgb565(68, 112, 58) },
-          { x:  32.0, z: -22.0, w: 11.5, d: 8.5, h: 4.0, roofH: 2.3, yaw: -0.20, kind: 'standard',   roofCol: rgb565(138, 64, 42) },
-          { x: -36.0, z: -44.0, w: 12.0, d: 8.5, h: 4.0, roofH: 2.2, yaw:  0.15, kind: 'standard',   roofCol: rgb565(68, 112, 58) }
-        ];
-        for (let i = 0; i < FOREST_BLDGS.length; i++) {
-          const bd = FOREST_BLDGS[i];
-          pushWorldBldg(bd.x, bd.z, bd.w, bd.d, bd.h, bd.roofH, bd.yaw, bd.kind,
-            rgb565(156, 112, 68), rgb565(106, 74, 42), bd.roofCol);
-        }
-      } else {
-        // Mapas de Chorobobo (PARK 910x620m / HD 2.1x1.4km / LR 8.4x5.6km): Todos los edificios presentes en los 3 mapas a escala 1:1
+      // 1. EDIFICIOS PROPIOS DEL MAPA ACTIVO (las 3 escalas de Chorobobo comparten su grupo 'chorobobo')
+      const choroFootprintScale = curTheme.isChorobobo ? (WORLD_W_M / 1650.0) : 1.0;
+      if (Array.isArray(BUILDING_UV_DEFS)) {
         for (let i = 0; i < BUILDING_UV_DEFS.length; i++) {
           const b = BUILDING_UV_DEFS[i];
           const pos = uvToWorld(b.u, b.v);
           pushWorldBldg(
             pos.x, pos.z,
-            b.w,
-            b.d,
+            Math.max(4.0, b.w * (curTheme.isChorobobo ? Math.max(0.55, Math.min(1.6, choroFootprintScale)) : 1.0)),
+            Math.max(4.0, b.d * (curTheme.isChorobobo ? Math.max(0.55, Math.min(1.6, choroFootprintScale)) : 1.0)),
             Math.min(11.0, b.h),
-            Math.min(4.0, b.roofH),
+            Math.min(6.8, b.roofH),
             b.yaw || 0.0,
             b.kind || 'standard',
             b.wallL || rgb565(220, 218, 210),
@@ -4588,9 +4750,8 @@
         }
       }
 
-      // 2A. Árboles y Sprites de Chorobobo presentes en los 3 mapas de Chorobobo (PARK, HD y LR) a escala 1:1
-      const activeChoroBounds = curTheme.isChorobobo ? getChoroboboActiveUvBounds(WORLD_W_M, WORLD_H_M) : null;
-      if (curTheme.isChorobobo && Array.isArray(CHOROBOBO_CUSTOM_TREES_UV)) {
+      // 2A. Árboles y Sprites personalizados propios del mapa activo (15,652 en las 3 escalas de Chorobobo, independientes en los demás mapas)
+      if (Array.isArray(CHOROBOBO_CUSTOM_TREES_UV)) {
         for (let i = 0; i < CHOROBOBO_CUSTOM_TREES_UV.length; i++) {
           const ct = CHOROBOBO_CUSTOM_TREES_UV[i];
           const pos = uvToWorld(ct.u, ct.v);
@@ -4613,8 +4774,8 @@
 
       // 2B. SEMILLA Y DISTRIBUCIÓN DE SPRITES PROCEDURALES PROPIA DE CADA MAPA Y SENSIBLE AL RELIEVE
       let seed = ((0x13579BDF ^ Math.imul(currentThemeIdx + 1, 0x45D9F3B)) >>> 0) || 0x13579BDF;
-      const c0 = CHOROBOBO_CIRCUITS[0].gates;
-      const numProcTrees = curTheme.isChorobobo ? Math.max(0, choroboboRandomTreeCount | 0) : NUM_WORLD_TREES;
+      const c0 = (CHOROBOBO_CIRCUITS[0] && CHOROBOBO_CIRCUITS[0].gates) ? CHOROBOBO_CIRCUITS[0].gates : [];
+      const numProcTrees = Math.max(0, choroboboRandomTreeCount | 0);
 
       for (let i = 0; i < numProcTrees; i++) {
         let pos = null;
@@ -4630,12 +4791,8 @@
           seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5;
           r3 = ((seed >>> 0) & 0xFFFF) / 65536.0;
 
-          const u = activeChoroBounds
-            ? (activeChoroBounds.uMin + (0.04 + r1 * 0.92) * (activeChoroBounds.uMax - activeChoroBounds.uMin))
-            : (0.12 + r1 * 0.74);
-          const v = activeChoroBounds
-            ? (activeChoroBounds.vMin + (0.04 + r2 * 0.92) * (activeChoroBounds.vMax - activeChoroBounds.vMin))
-            : (0.12 + r2 * 0.72);
+          const u = curTheme.isChorobobo ? (0.04 + r1 * 0.92) : (0.12 + r1 * 0.74);
+          const v = curTheme.isChorobobo ? (0.04 + r2 * 0.92) : (0.12 + r2 * 0.72);
           const cand = uvToWorld(u, v);
           const hM = getTerrainHeightMeters(cand.x, cand.z);
 
@@ -12348,66 +12505,79 @@
         const vb = getViewBox();
         const u = (px - vb.ox) / vb.drawW;
         const v = (py - vb.oy) / vb.drawH;
-        if (meTool === 'crop') {
-          return {
-            u: Math.max(0.01, Math.min(0.99, u)),
-            v: Math.max(0.01, Math.min(0.99, v))
-          };
-        }
-        const bounds = getChoroboboActiveUvBounds(WORLD_W_M, WORLD_H_M);
-        const padU = (bounds.uMax - bounds.uMin) * 0.015;
-        const padV = (bounds.vMax - bounds.vMin) * 0.015;
         return {
-          u: Math.max(bounds.uMin + padU, Math.min(bounds.uMax - padU, u)),
-          v: Math.max(bounds.vMin + padV, Math.min(bounds.vMax - padV, v))
+          u: Math.max(0.015, Math.min(0.985, u)),
+          v: Math.max(0.015, Math.min(0.985, v))
         };
       }
 
       function setActiveCropAnchorUv(targetU, targetV, bakeNow = true) {
-        if (WORLD_W_M > 2400.0) {
-          generateGentleVoxelMap(0); // Pasar a HD 2.1x1.4km si estaba en LR 8.4x5.6km completo
-          syncScaleButtonsUI();
-        }
-        const rx = Math.min(1.0, Math.max(0.05, WORLD_W_M / CHORO_FULL_W_M));
-        const rz = Math.min(1.0, Math.max(0.05, WORLD_H_M / CHORO_FULL_H_M));
-        const uMin = Number(Math.max(0.0, Math.min(1.0 - rx, targetU - SPAWN_U * rx)).toFixed(4));
-        const vMin = Number(Math.max(0.0, Math.min(1.0 - rz, targetV - SPAWN_V * rz)).toFixed(4));
-        if (WORLD_W_M <= 950.0) {
-          CHOROBOBO_CROP_DEFS.park = { uMin, vMin };
-        } else {
-          CHOROBOBO_CROP_DEFS.hd = { uMin, vMin };
-        }
-        const bounds = getChoroboboActiveUvBounds(WORLD_W_M, WORLD_H_M);
-        // Si la aeronave quedó fuera del nuevo recorte, moverla al punto central de despegue del nuevo recorte
-        if (CHOROBOBO_SPAWN_DEF.u < bounds.uMin || CHOROBOBO_SPAWN_DEF.u > bounds.uMax ||
-            CHOROBOBO_SPAWN_DEF.v < bounds.vMin || CHOROBOBO_SPAWN_DEF.v > bounds.vMax) {
-          CHOROBOBO_SPAWN_DEF.u = Number(bounds.anchorU.toFixed(4));
-          CHOROBOBO_SPAWN_DEF.v = Number(bounds.anchorV.toFixed(4));
-        }
-        applySpawnDefToActiveCraft();
-        syncTeleportInspectorUI();
-        if (bakeNow) {
-          if (choroDecodedImg) bakeChoroboboToPsram(choroDecodedImg);
-          saveCustomChoroboboLayoutToStorage();
-          updateEditorStatsBadge();
-        } else {
-          rebuildChoroboboCircuitsForScale();
-        }
+        camU = Math.max(0.1, Math.min(0.9, targetU));
+        camV = Math.max(0.1, Math.min(0.9, targetV));
         renderMapEditorCanvas();
       }
+
+      function syncMapEditorCircuitLabels() {
+        const selCircEl = document.getElementById('meSelCircuit');
+        if (!selCircEl) return;
+        const opts = selCircEl.options;
+        for (let i = 0; i < CHOROBOBO_CIRCUIT_DEFS.length && i < opts.length; i++) {
+          const d = CHOROBOBO_CIRCUIT_DEFS[i];
+          if (d) opts[i].textContent = `${d.shortCode}: ${d.name.replace(/^C\d\s+/, '')}`;
+        }
+      }
+      window.syncMapEditorCircuitLabels = syncMapEditorCircuitLabels;
 
       function syncScaleButtonsUI() {
         document.querySelectorAll('[data-me-scale]').forEach((btn) => {
           const idx = Number(btn.getAttribute('data-me-scale'));
           btn.classList.toggle('active', idx === currentThemeIdx);
         });
+        const selMapEl = document.getElementById('meSelMapTheme');
+        if (selMapEl) selMapEl.value = String(currentThemeIdx);
+        const rngRand = document.getElementById('meRngRandCount');
+        const lblRand = document.getElementById('meLblRandCount');
+        if (rngRand) rngRand.value = choroboboRandomTreeCount;
+        if (lblRand) lblRand.textContent = `${choroboboRandomTreeCount}`;
+        syncMapEditorCircuitLabels();
       }
 
       function fitEditorCameraToActiveScale() {
-        const bounds = getChoroboboActiveUvBounds(WORLD_W_M, WORLD_H_M);
-        camU = (bounds.uMin + bounds.uMax) * 0.5;
-        camV = (bounds.vMin + bounds.vMax) * 0.5;
-        zoom = Math.max(0.9, Math.min(20.0, 0.92 / bounds.rx));
+        camU = SPAWN_U;
+        camV = SPAWN_V;
+        zoom = 1.85;
+      }
+
+      let voxPreviewCnv = null;
+      let voxPreviewThemeIdx = -1;
+      function getProceduralTopDownCanvas() {
+        if (!voxPreviewCnv) {
+          voxPreviewCnv = document.createElement('canvas');
+          voxPreviewCnv.width = 512;
+          voxPreviewCnv.height = 256;
+        }
+        if (voxPreviewThemeIdx !== currentThemeIdx) {
+          voxPreviewThemeIdx = currentThemeIdx;
+          const pCtx = voxPreviewCnv.getContext('2d');
+          const imgD = pCtx.createImageData(512, 256);
+          const data = imgD.data;
+          for (let y = 0; y < 256; y++) {
+            const mz = ((255 - y) << 2) & MAP_MASK_Z;
+            const zOff = mz << MAP_SHIFT_X;
+            const rowOff = y * 512;
+            for (let x = 0; x < 512; x++) {
+              const mx = (x << 2) & MAP_MASK_X;
+              const c565 = voxColor[zOff + mx];
+              const dIdx = (rowOff + x) << 2;
+              data[dIdx]     = LUT_R[c565];
+              data[dIdx + 1] = LUT_G[c565];
+              data[dIdx + 2] = LUT_B[c565];
+              data[dIdx + 3] = 255;
+            }
+          }
+          pCtx.putImageData(imgD, 0, 0);
+        }
+        return voxPreviewCnv;
       }
 
       function renderMapEditorCanvas() {
@@ -12426,57 +12596,37 @@
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
         const vb = getViewBox();
-        const bounds = getChoroboboActiveUvBounds(WORLD_W_M, WORLD_H_M);
-        const cropX = vb.ox + bounds.uMin * vb.drawW;
-        const cropY = vb.oy + bounds.vMin * vb.drawH;
-        const cropW = (bounds.uMax - bounds.uMin) * vb.drawW;
-        const cropH = (bounds.vMax - bounds.vMin) * vb.drawH;
-        const showOutsideEl = document.getElementById('meChkShowOutside');
-        const showOutside = !!(showOutsideEl && showOutsideEl.checked) || (meTool === 'crop');
+        const curTheme = TERRAIN_THEMES[currentThemeIdx] || TERRAIN_THEMES[0];
 
-        if (choroDecodedImg) {
-          if (showOutside && bounds.rx < 0.99) {
-            ctx.save();
-            ctx.globalAlpha = (meTool === 'crop') ? 0.34 : 0.18;
-            ctx.drawImage(choroDecodedImg, vb.ox, vb.oy, vb.drawW, vb.drawH);
-            ctx.restore();
-          }
-          const imgW = choroDecodedImg.naturalWidth || choroDecodedImg.width || MAP_W;
-          const imgH = choroDecodedImg.naturalHeight || choroDecodedImg.height || MAP_H;
-          const sx = bounds.uMin * imgW;
-          const sy = bounds.vMin * imgH;
-          const sw = Math.max(1, (bounds.uMax - bounds.uMin) * imgW);
-          const sh = Math.max(1, (bounds.vMax - bounds.vMin) * imgH);
-          ctx.drawImage(choroDecodedImg, sx, sy, sw, sh, cropX, cropY, cropW, cropH);
+        if (curTheme.isChorobobo && choroDecodedImg) {
+          ctx.drawImage(choroDecodedImg, vb.ox, vb.oy, vb.drawW, vb.drawH);
         } else {
-          ctx.fillStyle = '#253524';
-          ctx.fillRect(cropX, cropY, cropW, cropH);
+          const procCnv = getProceduralTopDownCanvas();
+          ctx.drawImage(procCnv, vb.ox, vb.oy, vb.drawW, vb.drawH);
         }
 
-        // Marco visual brillante de los límites exactos del mapa activo (910x620m, 2.1x1.4km o 8.4x5.6km)
+        // Marco visual brillante de los límites exactos del mapa activo
         ctx.save();
-        ctx.strokeStyle = (meTool === 'crop') ? '#ffea00' : '#00f5ff';
-        ctx.lineWidth = (meTool === 'crop') ? 3.2 : 2.4;
-        ctx.strokeRect(cropX, cropY, cropW, cropH);
+        ctx.strokeStyle = '#00f5ff';
+        ctx.lineWidth = 2.2;
+        ctx.strokeRect(vb.ox, vb.oy, vb.drawW, vb.drawH);
         ctx.fillStyle = 'rgba(10, 16, 24, 0.85)';
-        const badgeText = (meTool === 'crop')
-          ? `✥ ARRASTRA EL RECORTE (${Math.round(WORLD_W_M)}×${Math.round(WORLD_H_M)}m) A CUALQUIER ZONA DE LA FOTO`
-          : `📐 LÍMITE DEL MAPA ACTIVO: ${Math.round(WORLD_W_M)}m × ${Math.round(WORLD_H_M)}m (${TERRAIN_THEMES[currentThemeIdx].name})`;
+        const badgeText = `📐 MAPA ACTIVO: ${curTheme.name} (${Math.round(WORLD_W_M)}m × ${Math.round(WORLD_H_M)}m)`;
         ctx.font = 'bold 11px sans-serif';
         const tw = ctx.measureText(badgeText).width + 14;
-        const bx = Math.max(8, cropX + 6);
-        const by = Math.max(8, cropY + 6);
+        const bx = Math.max(8, vb.ox + 6);
+        const by = Math.max(8, vb.oy + 6);
         ctx.fillRect(bx, by, tw, 22);
-        ctx.strokeStyle = (meTool === 'crop') ? '#ffea00' : '#00f5ff';
+        ctx.strokeStyle = '#00f5ff';
         ctx.lineWidth = 1.2;
         ctx.strokeRect(bx, by, tw, 22);
-        ctx.fillStyle = (meTool === 'crop') ? '#ffea00' : '#00f5ff';
+        ctx.fillStyle = '#00f5ff';
         ctx.textAlign = 'left';
         ctx.fillText(badgeText, bx + 7, by + 15);
         ctx.restore();
 
-        const pxPerMeterX = vb.drawW / CHORO_FULL_W_M;
-        const pxPerMeterZ = vb.drawH / CHORO_FULL_H_M;
+        const pxPerMeterX = vb.drawW / WORLD_W_M;
+        const pxPerMeterZ = vb.drawH / WORLD_H_M;
 
         // 1. Dibujar circuitos de Gates si está activo o si estamos en modo edición de Gates
         const showGates = document.getElementById('meChkShowGates').checked || (meTool === 'gate');
@@ -12527,7 +12677,7 @@
               const gUv = activeDef.uvList[i] || [worldToUv(g.x, g.z).u, worldToUv(g.x, g.z).v];
               const pt = uvToCanvas(gUv[0], gUv[1]);
               const isSel = (meTool === 'gate' && i === meSelectedGate);
-              const barHalfPx = Math.max(9, g.halfW * pxPerMeterX * 1.4);
+              const barHalfPx = Math.max(9, ((g.w || 12.0) * 0.5) * pxPerMeterX * 1.4);
 
               // En el canvas 2D: +X mundo es +X canvas, +Z mundo es -Y canvas
               const nx2d = g.nx;
@@ -12793,6 +12943,7 @@
           ctx.restore();
         }
       }
+      window.refreshMapEditorCanvas = renderMapEditorCanvas;
 
       function findNearestBuildingIdx(u, v, maxDistPx = 22) {
         const clickPt = uvToCanvas(u, v);
@@ -12850,7 +13001,7 @@
         }
 
         const vb = getViewBox();
-        const pxPerMeterX = vb.drawW / CHORO_FULL_W_M;
+        const pxPerMeterX = vb.drawW / WORLD_W_M;
         const radiusPx = meBrushRadiusM > 0 ? Math.max(baseRadiusPx, meBrushRadiusM * pxPerMeterX) : baseRadiusPx;
 
         const clickPt = uvToCanvas(u, v);
@@ -13456,12 +13607,27 @@
           generateGentleVoxelMap(idx);
           syncScaleButtonsUI();
           fitEditorCameraToActiveScale();
+          syncBldgInspectorFromSelected();
           syncGateInspectorFromSelected();
           updateEditorStatsBadge();
           renderMapEditorCanvas();
-          showToast(`RECORTE ACTIVO: ${TERRAIN_THEMES[currentThemeIdx].name} (${WORLD_W_M}x${WORLD_H_M}M)`);
+          showToast(`MAPA ACTIVO: ${TERRAIN_THEMES[currentThemeIdx].name} (${WORLD_W_M}x${WORLD_H_M}M)`);
         });
       });
+      const selMapThemeEl = document.getElementById('meSelMapTheme');
+      if (selMapThemeEl) {
+        selMapThemeEl.addEventListener('change', (e) => {
+          const idx = Number(e.target.value) | 0;
+          generateGentleVoxelMap(idx);
+          syncScaleButtonsUI();
+          fitEditorCameraToActiveScale();
+          syncBldgInspectorFromSelected();
+          syncGateInspectorFromSelected();
+          updateEditorStatsBadge();
+          renderMapEditorCanvas();
+          showToast(`MAPA ACTIVO: ${TERRAIN_THEMES[currentThemeIdx].name} (${WORLD_W_M}x${WORLD_H_M}M)`);
+        });
+      }
       const chkOutsideEl = document.getElementById('meChkShowOutside');
       if (chkOutsideEl) {
         chkOutsideEl.addEventListener('change', renderMapEditorCanvas);
@@ -13633,20 +13799,19 @@
       });
 
       document.getElementById('meBtnResetDefault').addEventListener('click', () => {
-        BUILDING_UV_DEFS = JSON.parse(JSON.stringify(DEFAULT_BUILDING_UV_DEFS));
-        CHOROBOBO_CUSTOM_TREES_UV = DEFAULT_CHOROBOBO_TREES_UV.map(t => ({ ...t }));
-        CHOROBOBO_CIRCUIT_DEFS = JSON.parse(JSON.stringify(DEFAULT_CHOROBOBO_CIRCUIT_DEFS));
-        CHOROBOBO_SPAWN_DEF = { ...DEFAULT_CHOROBOBO_SPAWN_DEF };
+        const gKey = getMapGroupKey(currentThemeIdx);
+        MAP_GROUP_STATE[gKey] = createDefaultMapGroupEntry(gKey);
+        syncActiveMapGroupState(currentThemeIdx);
         CHOROBOBO_CROP_DEFS = JSON.parse(JSON.stringify(DEFAULT_CHOROBOBO_CROP_DEFS));
-        choroboboRandomTreeCount = 0;
-        document.getElementById('meRngRandCount').value = 0;
-        document.getElementById('meLblRandCount').textContent = '0';
-        if (choroDecodedImg) bakeChoroboboToPsram(choroDecodedImg);
+        document.getElementById('meRngRandCount').value = choroboboRandomTreeCount;
+        document.getElementById('meLblRandCount').textContent = `${choroboboRandomTreeCount}`;
+        if (choroDecodedImg && TERRAIN_THEMES[currentThemeIdx].isChorobobo) bakeChoroboboToPsram(choroDecodedImg);
         fitEditorCameraToActiveScale();
+        syncBldgInspectorFromSelected();
         syncGateInspectorFromSelected();
         syncTeleportInspectorUI();
         applyAndSaveChanges();
-        showToast('MAPA, RECORTE Y CIRCUITOS RESTAURADOS');
+        showToast('MAPA Y CIRCUITOS RESTAURADOS');
       });
 
       function buildFullMapExportJsonString() {
@@ -13752,9 +13917,6 @@
       });
 
       btnOpenEl.addEventListener('click', () => {
-        if (!TERRAIN_THEMES[currentThemeIdx].isChorobobo) {
-          generateGentleVoxelMap(0);
-        }
         meOpen = true;
         mapEditorOpen = true;
         modalEl.classList.add('open');
