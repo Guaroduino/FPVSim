@@ -718,11 +718,11 @@
     </section>
   </div>
 
-  <!-- MODAL EDITOR VISUAL SATELITAL DE CHOROBOBO (Solo herramienta de diseño en navegador) -->
+    <!-- MODAL EDITOR VISUAL SATELITAL DE CHOROBOBO (Solo herramienta de diseño en navegador) -->
   <div id="mapEditorModal" class="map-editor-modal">
     <div class="me-header">
       <div class="me-title">
-        <span>🗺️ EDITOR SATELITAL CHOROBOBO (3×2 KM / 1.5×1 KM / 750×500 M)</span>
+        <span>🗺️ EDITOR SATELITAL CHOROBOBO (8.4×5.6 KM / 2.1×1.4 KM / 910×620 M)</span>
         <span id="meStatsBadge" style="font-size:11px;color:#98a4b8;font-weight:600;"></span>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
@@ -825,9 +825,9 @@
         <div class="me-card">
           <h4>Escala Activa de Chorobobo</h4>
           <div style="display:flex;gap:4px;">
-            <button class="me-btn" data-me-scale="0" style="flex:1;">HD 750×500m</button>
-            <button class="me-btn" data-me-scale="5" style="flex:1;">MED 1.5×1km</button>
-            <button class="me-btn" data-me-scale="9" style="flex:1;">LR 3×2km</button>
+            <button class="me-btn" data-me-scale="5" style="flex:1;">PARK 910×620m</button>
+            <button class="me-btn" data-me-scale="0" style="flex:1;">HD 2.1×1.4km</button>
+            <button class="me-btn" data-me-scale="9" style="flex:1;">LR 8.4×5.6km</button>
           </div>
           <small style="color:#98a4b8;line-height:1.35;">
             💡 <b>Tip:</b> Arrastra con clic izquierdo para plantar filas de árboles. Arrastra con <b>clic derecho</b> (o dos dedos) para mover el mapa, y usa la rueda para hacer Zoom.
@@ -2109,10 +2109,10 @@
     const MAP_MASK_X   = 2047;
     const MAP_MASK_Z   = 1023;
     const MAP_SHIFT_X  = 11;           // mz << 11 == mz * 2048
-    let   WORLD_W_M    = 750.0;        // Escala activa Este-Oeste (750m en Chorobobo HD / 1.5km Medio / 3.0km en Chorobobo LR)
-    let   WORLD_H_M    = 500.0;        // Escala activa Norte-Sur  (500m en Chorobobo HD / 1.0km Medio / 2.0km en Chorobobo LR)
-    let   MAP_SCALE_X  = MAP_W / WORLD_W_M; // 2.730667 texels/m en 750x500m (0.37m/voxel) | 0.682667 en 3x2km (1.46m/voxel)
-    let   MAP_SCALE_Z  = MAP_H / WORLD_H_M; // 2.048000 texels/m en 750x500m (0.49m/voxel) | 0.512000 en 3x2km (1.95m/voxel)
+    let   WORLD_W_M    = 2100.0;       // Escala activa Este-Oeste (2.1 km en Chorobobo HD / 910m en Park / 8.4 km en Chorobobo LR)
+    let   WORLD_H_M    = 1400.0;       // Escala activa Norte-Sur  (1.4 km en Chorobobo HD / 620m en Park / 5.6 km en Chorobobo LR)
+    let   MAP_SCALE_X  = MAP_W / WORLD_W_M; // 0.975238 texels/m en 2.1x1.4km (1.02m/voxel) | 0.243810 en 8.4x5.6km (4.10m/voxel)
+    let   MAP_SCALE_Z  = MAP_H / WORLD_H_M; // 0.731429 texels/m en 2.1x1.4km (1.37m/voxel) | 0.182857 en 8.4x5.6km (5.47m/voxel)
     let   HEIGHT_SCALE = 0.125;        // Escala vertical por unidad uint8 (0.125m en pistas planas, hasta 0.42m = 105m en alta montaña Comanche 3)
 
     // Coordenada exacta de la Pista Aeromodelismo A.I.A Chorobobo en el ortomosaico
@@ -2177,8 +2177,8 @@
     // Construye un circuito de 15 Gates 3D orientados perpendicularmente a la tangente de vuelo (con altura 3D y tipo de gate por puerta)
     function buildOrientedCircuit(id, name, shortCode, lineCol565, palIdx, uvList) {
       const n = uvList.length;
-      const isUltraCompact = WORLD_W_M <= 800.0;
-      const isCompact      = WORLD_W_M <= 2000.0;
+      const isUltraCompact = WORLD_W_M <= 950.0;
+      const isCompact      = WORLD_W_M <= 2400.0;
       const baseGateY = isUltraCompact ? 6.8 : (isCompact ? 9.0 : 12.0);
       const gateW     = isUltraCompact ? 9.6 : (isCompact ? 12.0 : 18.0);
       const gateH     = isUltraCompact ? 7.2 : (isCompact ? 9.0 : 12.0);
@@ -2446,10 +2446,10 @@
     const TERRAIN_THEMES = [
       {
         id: 'chorobobo_hd',
-        name: 'CHOROBOBO HD 750M',
+        name: 'CHOROBOBO HD 2.1KM',
         isChorobobo: true,
-        worldW: 750.0,
-        worldH: 500.0,
+        worldW: 2100.0,
+        worldH: 1400.0,
         hScale: 0.125,
         skyZenith:  [44, 92, 178],
         skyHorizon: [166, 198, 228],
@@ -2525,10 +2525,10 @@
       },
       {
         id: 'chorobobo_park',
-        name: 'CHORO MEDIO 1.5KM',
+        name: 'CHORO PARK 910M',
         isChorobobo: true,
-        worldW: 1500.0,
-        worldH: 1000.0,
+        worldW: 910.0,
+        worldH: 620.0,
         hScale: 0.125,
         skyZenith:  [38, 88, 182],
         skyHorizon: [162, 198, 230],
@@ -2588,10 +2588,10 @@
       },
       {
         id: 'chorobobo',
-        name: 'CHOROBOBO LR 3X2KM',
+        name: 'CHOROBOBO LR 8.4X5.6KM',
         isChorobobo: true,
-        worldW: 3000.0,
-        worldH: 2000.0,
+        worldW: 8400.0,
+        worldH: 5600.0,
         hScale: 0.125,
         skyZenith:  [44, 92, 178],
         skyHorizon: [166, 198, 228],
@@ -4184,7 +4184,7 @@
       WORLD_TREES.length = 0;
       const curTheme = TERRAIN_THEMES[currentThemeIdx] || TERRAIN_THEMES[0];
       const tid = curTheme.id;
-      const bScale = WORLD_W_M <= 2000.0 ? 0.78 : 1.15;
+      const bScale = WORLD_W_M <= 2400.0 ? 0.78 : 1.15;
 
       // 1. EDIFICIOS ESPECÍFICOS POR BIOMA / MAPA (sin repetir los galpones de Chorobobo en otros mundos)
       if (tid === 'bando_edificio' || tid === 'bando_arena') {
@@ -11858,7 +11858,7 @@
         }
 
         // 4. Dibujar Edificios 3D con su huella en metros, orientación yaw y tipo
-        const bScale = WORLD_W_M <= 2000.0 ? 0.78 : 1.15;
+        const bScale = WORLD_W_M <= 2400.0 ? 0.78 : 1.15;
         for (let i = 0; i < BUILDING_UV_DEFS.length; i++) {
           const b = BUILDING_UV_DEFS[i];
           const pt = uvToCanvas(b.u, b.v);
