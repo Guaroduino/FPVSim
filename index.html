@@ -952,11 +952,20 @@
             <button class="me-btn active" data-me-scale="0" style="flex:1;">HD 2.1×1.4km</button>
             <button class="me-btn" data-me-scale="9" style="flex:1;">LR 8.4×5.6km</button>
           </div>
+          <div style="display:flex;gap:4px;margin-top:3px;">
+            <button id="meBtnMoveCrop" class="me-btn" data-me-tool="crop" style="flex:1;border-color:#00f5ff;color:#00f5ff;" title="Haz clic o arrastra sobre la foto completa de 8.4×5.6km para elegir qué zona recortan los mapas HD y PARK">📐 Mover Área de Corte</button>
+            <button id="meBtnFitCrop" class="me-btn" title="Hacer Zoom para encuadrar el área de corte activa en pantalla">🔍 Encuadrar</button>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:2px;">
+            <button class="me-btn" data-me-crop-preset="0.585,0.365" style="font-size:10px;padding:4px 2px;" title="Centrar recorte en la Pista A.I.A Chorobobo">🛬 Pista A.I.A</button>
+            <button class="me-btn" data-me-crop-preset="0.500,0.220" style="font-size:10px;padding:4px 2px;" title="Mover recorte al cauce del Río Turbio (Norte)">🌊 Río Turbio</button>
+            <button class="me-btn" data-me-crop-preset="0.310,0.420" style="font-size:10px;padding:4px 2px;" title="Mover recorte a la Planta de Etanol y Silos (Oeste)">🏭 Planta Etanol</button>
+          </div>
           <div class="me-row" style="margin-top:3px;">
             <label title="Muestra en tono oscuro el resto de la foto satelital de 8.4×5.6 km fuera del recorte del mapa activo"><input type="checkbox" id="meChkShowOutside" /> 👁️ Ver exterior de 8.4×5.6km (atenuado)</label>
           </div>
           <small style="color:#98a4b8;line-height:1.35;">
-            💡 <b>Escala Real 1:1:</b> La foto completa mide <b>8.4×5.6 km</b>. Al elegir <b>HD (2.1×1.4km)</b> o <b>PARK (910×620m)</b>, el mapa recorta esa área alrededor de la Pista A.I.A con mucha más nitidez por metro.
+            💡 Pulsa <b>📐 Mover Área de Corte</b> y arrastra el recorte sobre cualquier lugar de la foto de <b>8.4×5.6 km</b> para volar en esa zona en modo <b>HD</b> o <b>PARK</b>.
           </small>
         </div>
       </aside>
@@ -2254,27 +2263,55 @@
     const CHORO_FULL_H_M = 5600.0;       // Alto físico real 1:1 (Norte-Sur) de la ortofoto completa chorobobo.jpg (5.6 km)
     var   isChoroboboThemeActive = true; // Activo cuando el mapa actual es Chorobobo (PARK, HD o LR)
 
-    // Calcula el recorte UV [uMin..uMax, vMin..vMax] de chorobobo.jpg que cubre el mapa activo alrededor de la Pista A.I.A
+    // Posición configurable del recorte (esquina superior izquierda uMin, vMin en 0..1) para los mapas HD (2.1x1.4km) y PARK (910x620m)
+    const DEFAULT_CHOROBOBO_CROP_DEFS = {
+      park: {
+        uMin: Number((SPAWN_U * (1.0 - 910.0 / CHORO_FULL_W_M)).toFixed(4)),
+        vMin: Number((SPAWN_V * (1.0 - 620.0 / CHORO_FULL_H_M)).toFixed(4))
+      },
+      hd: {
+        uMin: Number((SPAWN_U * (1.0 - 2100.0 / CHORO_FULL_W_M)).toFixed(4)),
+        vMin: Number((SPAWN_V * (1.0 - 1400.0 / CHORO_FULL_H_M)).toFixed(4))
+      }
+    };
+    var CHOROBOBO_CROP_DEFS = JSON.parse(JSON.stringify(DEFAULT_CHOROBOBO_CROP_DEFS));
+
+    // Calcula el recorte UV [uMin..uMax, vMin..vMax] y el punto ancla (anchorU, anchorV -> wx=0, wz=0) sobre chorobobo.jpg
     function getChoroboboActiveUvBounds(wM = WORLD_W_M, hM = WORLD_H_M) {
       const rx = Math.min(1.0, Math.max(0.05, wM / CHORO_FULL_W_M));
       const rz = Math.min(1.0, Math.max(0.05, hM / CHORO_FULL_H_M));
-      return {
-        rx,
-        rz,
-        uMin: SPAWN_U * (1.0 - rx),
-        uMax: SPAWN_U + (1.0 - SPAWN_U) * rx,
-        vMin: SPAWN_V * (1.0 - rz),
-        vMax: SPAWN_V + (1.0 - SPAWN_V) * rz
-      };
+      let uMin = SPAWN_U * (1.0 - rx);
+      let vMin = SPAWN_V * (1.0 - rz);
+      if (CHOROBOBO_CROP_DEFS) {
+        if (wM <= 950.0 && CHOROBOBO_CROP_DEFS.park) {
+          uMin = Number(CHOROBOBO_CROP_DEFS.park.uMin);
+          vMin = Number(CHOROBOBO_CROP_DEFS.park.vMin);
+        } else if (wM <= 2400.0 && CHOROBOBO_CROP_DEFS.hd) {
+          uMin = Number(CHOROBOBO_CROP_DEFS.hd.uMin);
+          vMin = Number(CHOROBOBO_CROP_DEFS.hd.vMin);
+        }
+      }
+      uMin = Math.max(0.0, Math.min(1.0 - rx, isFinite(uMin) ? uMin : 0.0));
+      vMin = Math.max(0.0, Math.min(1.0 - rz, isFinite(vMin) ? vMin : 0.0));
+      const uMax = uMin + rx;
+      const vMax = vMin + rz;
+      const anchorU = uMin + SPAWN_U * rx;
+      const anchorV = vMin + SPAWN_V * rz;
+      return { rx, rz, uMin, uMax, vMin, vMax, anchorU, anchorV };
     }
 
     // Conversión inversa exacta de metros del mundo (wx, wz) a coordenada normalizada (u, v) sobre chorobobo.jpg (escala 1:1 real)
     function worldToUv(wx, wz) {
-      const refW = isChoroboboThemeActive ? CHORO_FULL_W_M : WORLD_W_M;
-      const refH = isChoroboboThemeActive ? CHORO_FULL_H_M : WORLD_H_M;
+      if (isChoroboboThemeActive) {
+        const b = getChoroboboActiveUvBounds(WORLD_W_M, WORLD_H_M);
+        return {
+          u: b.anchorU + (wx / CHORO_FULL_W_M),
+          v: b.anchorV - (wz / CHORO_FULL_H_M)
+        };
+      }
       return {
-        u: SPAWN_U + (wx / refW),
-        v: SPAWN_V - (wz / refH)
+        u: SPAWN_U + (wx / WORLD_W_M),
+        v: SPAWN_V - (wz / WORLD_H_M)
       };
     }
 
@@ -2290,7 +2327,7 @@
     let choroDecodedImg = null;
     let choroSatelliteReady = false;
     let choroBakedInPsram = false;
-    let choroBakedScaleW = 0;
+    let choroBakedKey = '';
 
     // Buffer intermedio des-rotado 256x256 en SRAM Interna (128 KB) para permitir Roll de 360° + Z-Buffer Q4 (1/16m)
     const VOX_W = 256;
@@ -2302,11 +2339,16 @@
 
     // Conversión exacta 1:1 de coordenada normalizada (u, v) sobre chorobobo.jpg a metros reales (wx, wz)
     function uvToWorld(u, v) {
-      const refW = isChoroboboThemeActive ? CHORO_FULL_W_M : WORLD_W_M;
-      const refH = isChoroboboThemeActive ? CHORO_FULL_H_M : WORLD_H_M;
+      if (isChoroboboThemeActive) {
+        const b = getChoroboboActiveUvBounds(WORLD_W_M, WORLD_H_M);
+        return {
+          x: Math.round((u - b.anchorU) * CHORO_FULL_W_M * 10) / 10,
+          z: Math.round((b.anchorV - v) * CHORO_FULL_H_M * 10) / 10
+        };
+      }
       return {
-        x: Math.round((u - SPAWN_U) * refW * 10) / 10,
-        z: Math.round((SPAWN_V - v) * refH * 10) / 10
+        x: Math.round((u - SPAWN_U) * WORLD_W_M * 10) / 10,
+        z: Math.round((SPAWN_V - v) * WORLD_H_M * 10) / 10
       };
     }
 
@@ -2843,7 +2885,9 @@
       // Si el tema usa la ortofoto de CHOROBOBO (PARK 910x620m, HD 2.1x1.4km o LR 8.4x5.6km), recortar y volcar la región exacta en PSRAM
       if (theme.isChorobobo && choroDecodedImg) {
         HEIGHT_SCALE = 0.125;
-        if (!choroBakedInPsram || choroBakedScaleW !== WORLD_W_M) {
+        const b = getChoroboboActiveUvBounds(WORLD_W_M, WORLD_H_M);
+        const targetKey = `${WORLD_W_M}_${b.uMin.toFixed(4)}_${b.vMin.toFixed(4)}`;
+        if (!choroBakedInPsram || choroBakedKey !== targetKey) {
           bakeChoroboboToPsram(choroDecodedImg);
         } else {
           rebuildChoroboboCircuitsForScale();
@@ -2852,7 +2896,7 @@
       }
 
       choroBakedInPsram = false;
-      choroBakedScaleW = 0;
+      choroBakedKey = '';
 
       // 2. Generador procedural especializado:
       //    - Mapas compactos Freestyle: BANDO EDIFICIO, BANDO ARENA, BOSQUE SLALOM, DUNAS SUNSET
@@ -3143,7 +3187,7 @@
         }
       }
       choroBakedInPsram = true;
-      choroBakedScaleW = WORLD_W_M;
+      choroBakedKey = `${WORLD_W_M}_${bounds.uMin.toFixed(4)}_${bounds.vMin.toFixed(4)}`;
       rebuildChoroboboCircuitsForScale();
     }
 
@@ -4345,6 +4389,10 @@
           if (parsed.spawn && typeof parsed.spawn === 'object') {
             CHOROBOBO_SPAWN_DEF = { ...DEFAULT_CHOROBOBO_SPAWN_DEF, ...parsed.spawn };
           }
+          if (parsed.cropDefs && typeof parsed.cropDefs === 'object') {
+            if (parsed.cropDefs.park) CHOROBOBO_CROP_DEFS.park = { ...DEFAULT_CHOROBOBO_CROP_DEFS.park, ...parsed.cropDefs.park };
+            if (parsed.cropDefs.hd)   CHOROBOBO_CROP_DEFS.hd   = { ...DEFAULT_CHOROBOBO_CROP_DEFS.hd,   ...parsed.cropDefs.hd };
+          }
           if (Array.isArray(parsed.circuits) && parsed.circuits.length === CHOROBOBO_CIRCUIT_DEFS.length) {
             for (let c = 0; c < CHOROBOBO_CIRCUIT_DEFS.length; c++) {
               if (parsed.circuits[c] && Array.isArray(parsed.circuits[c].uvList)) {
@@ -4380,7 +4428,8 @@
           trees: CHOROBOBO_CUSTOM_TREES_UV,
           randomTreeCount: choroboboRandomTreeCount,
           circuits: CHOROBOBO_CIRCUIT_DEFS,
-          spawn: CHOROBOBO_SPAWN_DEF
+          spawn: CHOROBOBO_SPAWN_DEF,
+          cropDefs: CHOROBOBO_CROP_DEFS
         }));
       } catch (e) {}
     }
@@ -11960,6 +12009,7 @@
       let isPainting     = false;
       let isDraggingBldg = false;
       let isDraggingGate = false;
+      let isDraggingCrop = false;
       let isAimingCraft  = false;
       let customCraftPlaced = false;
       let panStartX      = 0, panStartY = 0;
@@ -12141,15 +12191,54 @@
 
       function canvasToUv(px, py) {
         const vb = getViewBox();
+        const u = (px - vb.ox) / vb.drawW;
+        const v = (py - vb.oy) / vb.drawH;
+        if (meTool === 'crop') {
+          return {
+            u: Math.max(0.01, Math.min(0.99, u)),
+            v: Math.max(0.01, Math.min(0.99, v))
+          };
+        }
         const bounds = getChoroboboActiveUvBounds(WORLD_W_M, WORLD_H_M);
         const padU = (bounds.uMax - bounds.uMin) * 0.015;
         const padV = (bounds.vMax - bounds.vMin) * 0.015;
-        const u = (px - vb.ox) / vb.drawW;
-        const v = (py - vb.oy) / vb.drawH;
         return {
           u: Math.max(bounds.uMin + padU, Math.min(bounds.uMax - padU, u)),
           v: Math.max(bounds.vMin + padV, Math.min(bounds.vMax - padV, v))
         };
+      }
+
+      function setActiveCropAnchorUv(targetU, targetV, bakeNow = true) {
+        if (WORLD_W_M > 2400.0) {
+          generateGentleVoxelMap(0); // Pasar a HD 2.1x1.4km si estaba en LR 8.4x5.6km completo
+          syncScaleButtonsUI();
+        }
+        const rx = Math.min(1.0, Math.max(0.05, WORLD_W_M / CHORO_FULL_W_M));
+        const rz = Math.min(1.0, Math.max(0.05, WORLD_H_M / CHORO_FULL_H_M));
+        const uMin = Number(Math.max(0.0, Math.min(1.0 - rx, targetU - SPAWN_U * rx)).toFixed(4));
+        const vMin = Number(Math.max(0.0, Math.min(1.0 - rz, targetV - SPAWN_V * rz)).toFixed(4));
+        if (WORLD_W_M <= 950.0) {
+          CHOROBOBO_CROP_DEFS.park = { uMin, vMin };
+        } else {
+          CHOROBOBO_CROP_DEFS.hd = { uMin, vMin };
+        }
+        const bounds = getChoroboboActiveUvBounds(WORLD_W_M, WORLD_H_M);
+        // Si la aeronave quedó fuera del nuevo recorte, moverla al punto central de despegue del nuevo recorte
+        if (CHOROBOBO_SPAWN_DEF.u < bounds.uMin || CHOROBOBO_SPAWN_DEF.u > bounds.uMax ||
+            CHOROBOBO_SPAWN_DEF.v < bounds.vMin || CHOROBOBO_SPAWN_DEF.v > bounds.vMax) {
+          CHOROBOBO_SPAWN_DEF.u = Number(bounds.anchorU.toFixed(4));
+          CHOROBOBO_SPAWN_DEF.v = Number(bounds.anchorV.toFixed(4));
+        }
+        applySpawnDefToActiveCraft();
+        syncTeleportInspectorUI();
+        if (bakeNow) {
+          if (choroDecodedImg) bakeChoroboboToPsram(choroDecodedImg);
+          saveCustomChoroboboLayoutToStorage();
+          updateEditorStatsBadge();
+        } else {
+          rebuildChoroboboCircuitsForScale();
+        }
+        renderMapEditorCanvas();
       }
 
       function syncScaleButtonsUI() {
@@ -12188,12 +12277,12 @@
         const cropW = (bounds.uMax - bounds.uMin) * vb.drawW;
         const cropH = (bounds.vMax - bounds.vMin) * vb.drawH;
         const showOutsideEl = document.getElementById('meChkShowOutside');
-        const showOutside = !!(showOutsideEl && showOutsideEl.checked);
+        const showOutside = !!(showOutsideEl && showOutsideEl.checked) || (meTool === 'crop');
 
         if (choroDecodedImg) {
           if (showOutside && bounds.rx < 0.99) {
             ctx.save();
-            ctx.globalAlpha = 0.18;
+            ctx.globalAlpha = (meTool === 'crop') ? 0.34 : 0.18;
             ctx.drawImage(choroDecodedImg, vb.ox, vb.oy, vb.drawW, vb.drawH);
             ctx.restore();
           }
@@ -12211,20 +12300,22 @@
 
         // Marco visual brillante de los límites exactos del mapa activo (910x620m, 2.1x1.4km o 8.4x5.6km)
         ctx.save();
-        ctx.strokeStyle = '#00f5ff';
-        ctx.lineWidth = 2.4;
+        ctx.strokeStyle = (meTool === 'crop') ? '#ffea00' : '#00f5ff';
+        ctx.lineWidth = (meTool === 'crop') ? 3.2 : 2.4;
         ctx.strokeRect(cropX, cropY, cropW, cropH);
-        ctx.fillStyle = 'rgba(10, 16, 24, 0.82)';
-        const badgeText = `📐 LÍMITE DEL MAPA ACTIVO: ${Math.round(WORLD_W_M)}m × ${Math.round(WORLD_H_M)}m (${TERRAIN_THEMES[currentThemeIdx].name})`;
+        ctx.fillStyle = 'rgba(10, 16, 24, 0.85)';
+        const badgeText = (meTool === 'crop')
+          ? `✥ ARRASTRA EL RECORTE (${Math.round(WORLD_W_M)}×${Math.round(WORLD_H_M)}m) A CUALQUIER ZONA DE LA FOTO`
+          : `📐 LÍMITE DEL MAPA ACTIVO: ${Math.round(WORLD_W_M)}m × ${Math.round(WORLD_H_M)}m (${TERRAIN_THEMES[currentThemeIdx].name})`;
         ctx.font = 'bold 11px sans-serif';
         const tw = ctx.measureText(badgeText).width + 14;
         const bx = Math.max(8, cropX + 6);
         const by = Math.max(8, cropY + 6);
         ctx.fillRect(bx, by, tw, 22);
-        ctx.strokeStyle = '#00f5ff';
+        ctx.strokeStyle = (meTool === 'crop') ? '#ffea00' : '#00f5ff';
         ctx.lineWidth = 1.2;
         ctx.strokeRect(bx, by, tw, 22);
-        ctx.fillStyle = '#00f5ff';
+        ctx.fillStyle = (meTool === 'crop') ? '#ffea00' : '#00f5ff';
         ctx.textAlign = 'left';
         ctx.fillText(badgeText, bx + 7, by + 15);
         ctx.restore();
@@ -12785,7 +12876,16 @@
         const uv = canvasToUv(px, py);
         const wPos = uvToWorld(uv.u, uv.v);
 
-        if (meTool === 'tree') {
+        if (meTool === 'crop') {
+          if (WORLD_W_M > 2400) {
+            showToast('SELECCIONA PARK (910x620m) O HD (2.1x1.4km) PARA RECORTAR');
+            return;
+          }
+          isDraggingCrop = true;
+          setActiveCropAnchorUv(uv.u, uv.v, false);
+          renderMapEditorCanvas();
+          canvas.setPointerCapture(e.pointerId);
+        } else if (meTool === 'tree') {
           isPainting = true;
           plantTreeAtUv(uv.u, uv.v);
           canvas.setPointerCapture(e.pointerId);
@@ -12913,7 +13013,10 @@
           return;
         }
 
-        if (isPainting && meTool === 'tree') {
+        if (isDraggingCrop && meTool === 'crop') {
+          setActiveCropAnchorUv(uv.u, uv.v, false);
+          renderMapEditorCanvas();
+        } else if (isPainting && meTool === 'tree') {
           if (!lastPaintWorld || Math.hypot(wPos.x - lastPaintWorld.x, wPos.z - lastPaintWorld.z) >= meBrushStepM) {
             plantTreeAtUv(uv.u, uv.v);
           } else {
@@ -12951,6 +13054,17 @@
       });
 
       const stopPointer = () => {
+        if (isDraggingCrop) {
+          isDraggingCrop = false;
+          if (choroDecodedImg) {
+            bakeChoroboboToPsram(choroDecodedImg);
+          }
+          saveCustomChoroboboLayoutToStorage();
+          updateEditorStatsBadge();
+          renderMapEditorCanvas();
+          const b = getChoroboboActiveUvBounds();
+          showToast(`AREA DE CORTE ACTUALIZADA EN 3D (ANCLA UV: ${b.anchorU.toFixed(3)}, ${b.anchorV.toFixed(3)})`);
+        }
         isPanning = false;
         isPainting = false;
         isDraggingBldg = false;
@@ -12984,7 +13098,38 @@
           }
           if (meTool === 'gate') syncGateInspectorFromSelected();
           if (meTool === 'teleport') syncTeleportInspectorUI();
+          if (meTool === 'crop') {
+            if (WORLD_W_M > 2400) {
+              generateGentleVoxelMap(0);
+              syncScaleButtonsUI();
+            }
+            camU = 0.5;
+            camV = 0.5;
+            zoom = 0.96;
+            showToast('HAZ CLIC O ARRASTRA EN EL MAPA PARA MOVER EL AREA DE RECORTE');
+          }
           renderMapEditorCanvas();
+        });
+      });
+
+      const btnFitCropEl = document.getElementById('meBtnFitCrop');
+      if (btnFitCropEl) {
+        btnFitCropEl.addEventListener('click', () => {
+          fitEditorCameraToActiveScale();
+          renderMapEditorCanvas();
+        });
+      }
+      document.querySelectorAll('[data-me-crop-preset]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          if (WORLD_W_M > 2400) {
+            generateGentleVoxelMap(0);
+            syncScaleButtonsUI();
+          }
+          const [u, v] = btn.getAttribute('data-me-crop-preset').split(',').map(Number);
+          setActiveCropAnchorUv(u, v, true);
+          fitEditorCameraToActiveScale();
+          renderMapEditorCanvas();
+          showToast(`RECORTE EN ${btn.textContent.trim().toUpperCase()} (${WORLD_W_M}x${WORLD_H_M}M)`);
         });
       });
 
@@ -13328,20 +13473,24 @@
         CHOROBOBO_CUSTOM_TREES_UV = JSON.parse(JSON.stringify(DEFAULT_CHOROBOBO_TREES_UV));
         CHOROBOBO_CIRCUIT_DEFS = JSON.parse(JSON.stringify(DEFAULT_CHOROBOBO_CIRCUIT_DEFS));
         CHOROBOBO_SPAWN_DEF = { ...DEFAULT_CHOROBOBO_SPAWN_DEF };
+        CHOROBOBO_CROP_DEFS = JSON.parse(JSON.stringify(DEFAULT_CHOROBOBO_CROP_DEFS));
         choroboboRandomTreeCount = 180;
         document.getElementById('meRngRandCount').value = 180;
         document.getElementById('meLblRandCount').textContent = '180';
+        if (choroDecodedImg) bakeChoroboboToPsram(choroDecodedImg);
+        fitEditorCameraToActiveScale();
         syncGateInspectorFromSelected();
         syncTeleportInspectorUI();
         applyAndSaveChanges();
-        showToast('MAPA Y CIRCUITOS RESTAURADOS');
+        showToast('MAPA, RECORTE Y CIRCUITOS RESTAURADOS');
       });
 
       function buildFullMapExportJsonString() {
         return JSON.stringify({
-          version: 2,
+          version: 3,
           exportedAt: new Date().toISOString(),
           scaleMeters: { w: WORLD_W_M, h: WORLD_H_M },
+          cropDefs: CHOROBOBO_CROP_DEFS,
           spawn: CHOROBOBO_SPAWN_DEF,
           randomTreeCount: choroboboRandomTreeCount,
           buildings: BUILDING_UV_DEFS,
@@ -13388,6 +13537,17 @@
                 choroboboRandomTreeCount = parsed.randomTreeCount;
                 document.getElementById('meRngRandCount').value = choroboboRandomTreeCount;
                 document.getElementById('meLblRandCount').textContent = `${choroboboRandomTreeCount}`;
+              }
+              if (parsed.cropDefs && typeof parsed.cropDefs === 'object') {
+                for (const k of Object.keys(DEFAULT_CHOROBOBO_CROP_DEFS)) {
+                  if (parsed.cropDefs[k] && typeof parsed.cropDefs[k].u === 'number' && typeof parsed.cropDefs[k].v === 'number') {
+                    CHOROBOBO_CROP_DEFS[k] = {
+                      u: Math.max(0.02, Math.min(0.98, parsed.cropDefs[k].u)),
+                      v: Math.max(0.02, Math.min(0.98, parsed.cropDefs[k].v))
+                    };
+                  }
+                }
+                if (choroDecodedImg) bakeChoroboboToPsram(choroDecodedImg);
               }
               if (parsed.spawn && typeof parsed.spawn === 'object') {
                 CHOROBOBO_SPAWN_DEF = { ...DEFAULT_CHOROBOBO_SPAWN_DEF, ...parsed.spawn };
