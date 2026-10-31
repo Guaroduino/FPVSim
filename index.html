@@ -729,8 +729,11 @@
         <button id="meBtnZoomIn" class="me-btn" title="Acercar Zoom">🔍 +</button>
         <button id="meBtnZoomOut" class="me-btn" title="Alejar Zoom">🔍 −</button>
         <button id="meBtnResetView" class="me-btn" title="Centrar Vista en Pista A.I.A">🎯 PISTA A.I.A</button>
-        <button id="meBtnWipeAll" class="me-btn" style="background:#b81d2a;border-color:#ff5c6a;color:#fff;" title="Dejar el mapa 100% limpio (0 árboles, 0 edificios, 0 random) para empezar desde cero">🗑️ VACIAR TODO (DESDE CERO)</button>
-        <button id="meBtnExport" class="me-btn green" title="Copiar JSON / Código para pegarlo en el chat o en firmware ESP32-S3">📋 COPIAR DISEÑO</button>
+        <button id="meBtnWipeAll" class="me-btn" style="background:#b81d2a;border-color:#ff5c6a;color:#fff;" title="Dejar el mapa 100% limpio (0 árboles, 0 edificios, 0 random) para empezar desde cero">🗑️ VACIAR TODO</button>
+        <button id="meBtnDownloadFile" class="me-btn green" title="Descargar un archivo .json con todo tu mapa, edificios, árboles, circuitos y punto de salida para enviarlo o respaldarlo">💾 EXPORTAR ARCHIVO (.JSON)</button>
+        <button id="meBtnImportFile" class="me-btn" title="Cargar un archivo .json de mapa previamente exportado">📂 IMPORTAR (.JSON)</button>
+        <input type="file" id="meInpImportFile" accept=".json,application/json" style="display:none;" />
+        <button id="meBtnExport" class="me-btn" title="Copiar JSON al portapapeles para pegarlo en el chat">📋 COPIAR</button>
         <button id="meBtnResetDefault" class="me-btn" title="Restaurar los edificios y árboles por defecto">↺ POR DEFECTO</button>
         <button id="meBtnClose" class="me-btn active" title="Cerrar Editor y Volar en 3D">✕ CERRAR Y VOLAR</button>
       </div>
@@ -13222,19 +13225,89 @@
         showToast('MAPA Y CIRCUITOS RESTAURADOS');
       });
 
-      document.getElementById('meBtnExport').addEventListener('click', () => {
-        const payload = JSON.stringify({
+      function buildFullMapExportJsonString() {
+        return JSON.stringify({
+          version: 2,
+          exportedAt: new Date().toISOString(),
+          scaleMeters: { w: WORLD_W_M, h: WORLD_H_M },
+          spawn: CHOROBOBO_SPAWN_DEF,
+          randomTreeCount: choroboboRandomTreeCount,
           buildings: BUILDING_UV_DEFS,
           trees: CHOROBOBO_CUSTOM_TREES_UV,
-          randomTreeCount: choroboboRandomTreeCount,
-          circuits: CHOROBOBO_CIRCUIT_DEFS,
-          spawn: CHOROBOBO_SPAWN_DEF
+          circuits: CHOROBOBO_CIRCUIT_DEFS
         }, null, 2);
+      }
+
+      document.getElementById('meBtnDownloadFile').addEventListener('click', () => {
+        const payload = buildFullMapExportJsonString();
+        const blob = new Blob([payload], { type: 'application/json;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const dateTag = new Date().toISOString().slice(0, 10);
+        a.href = url;
+        a.download = `chorobobo_mapa_${dateTag}.json`;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }, 150);
+        showToast('ARCHIVO .JSON DESCARGADO');
+      });
+
+      const inpImportEl = document.getElementById('meInpImportFile');
+      document.getElementById('meBtnImportFile').addEventListener('click', () => {
+        if (inpImportEl) {
+          inpImportEl.value = '';
+          inpImportEl.click();
+        }
+      });
+      if (inpImportEl) {
+        inpImportEl.addEventListener('change', (e) => {
+          const file = e.target.files && e.target.files[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = (ev) => {
+            try {
+              const parsed = JSON.parse(String(ev.target.result || ''));
+              if (Array.isArray(parsed.buildings)) BUILDING_UV_DEFS = parsed.buildings;
+              if (Array.isArray(parsed.trees))     CHOROBOBO_CUSTOM_TREES_UV = parsed.trees;
+              if (typeof parsed.randomTreeCount === 'number') {
+                choroboboRandomTreeCount = parsed.randomTreeCount;
+                document.getElementById('meRngRandCount').value = choroboboRandomTreeCount;
+                document.getElementById('meLblRandCount').textContent = `${choroboboRandomTreeCount}`;
+              }
+              if (parsed.spawn && typeof parsed.spawn === 'object') {
+                CHOROBOBO_SPAWN_DEF = { ...DEFAULT_CHOROBOBO_SPAWN_DEF, ...parsed.spawn };
+                if (CHOROBOBO_SPAWN_DEF.enabled) applySpawnDefToActiveCraft();
+              }
+              if (Array.isArray(parsed.circuits) && parsed.circuits.length === CHOROBOBO_CIRCUIT_DEFS.length) {
+                for (let c = 0; c < CHOROBOBO_CIRCUIT_DEFS.length; c++) {
+                  if (parsed.circuits[c] && Array.isArray(parsed.circuits[c].uvList)) {
+                    CHOROBOBO_CIRCUIT_DEFS[c].uvList = parsed.circuits[c].uvList;
+                  }
+                }
+              }
+              syncBldgInspectorFromSelected();
+              syncGateInspectorFromSelected();
+              syncTeleportInspectorUI();
+              applyAndSaveChanges();
+              showToast('ARCHIVO .JSON IMPORTADO CON EXITO');
+            } catch (err) {
+              alert('El archivo seleccionado no es un JSON válido de mapa Chorobobo.');
+            }
+          };
+          reader.readAsText(file);
+        });
+      }
+
+      document.getElementById('meBtnExport').addEventListener('click', () => {
+        const payload = buildFullMapExportJsonString();
         if (navigator.clipboard && navigator.clipboard.writeText) {
           navigator.clipboard.writeText(payload).then(() => {
             const btn = document.getElementById('meBtnExport');
-            btn.textContent = '✅ ¡COPIADO AL PORTAPAPELES!';
-            setTimeout(() => { btn.textContent = '📋 COPIAR DISEÑO'; }, 2400);
+            btn.textContent = '✅ ¡COPIADO!';
+            setTimeout(() => { btn.textContent = '📋 COPIAR'; }, 2400);
           });
         }
       });
