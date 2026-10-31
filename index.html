@@ -5546,44 +5546,65 @@
         0, 1
       );
 
-      // 4. VECTORES FÍSICOS 3D EN VIVO (Viento Aparente, Fuerza Vela Mayor, Fuerza Foque, Fuerza Quilla y Fuerza Timón)
-      // a) Vector de Viento Aparente en el tope del mástil (Cian = hacia dónde fluye el aire sobre las velas)
+      // Trazador 3D ultrafino de 1 solo píxel de grosor en 320x240 para vectores aerodinámicos/hidrodinámicos
+      function projThinVec320(x0, y0, z0, x1, y1, z1, c565) {
+        const p0 = projPoint320(x0, y0, z0);
+        const p1 = projPoint320(x1, y1, z1);
+        if (!p0 || !p1) return;
+        let ix0 = Math.max(0, Math.min(DISP_W - 1, Math.round(p0.sx)));
+        let iy0 = Math.max(0, Math.min(DISP_H - 1, Math.round(p0.sy)));
+        const ix1 = Math.max(0, Math.min(DISP_W - 1, Math.round(p1.sx)));
+        const iy1 = Math.max(0, Math.min(DISP_H - 1, Math.round(p1.sy)));
+        const dx = Math.abs(ix1 - ix0), sx = ix0 < ix1 ? 1 : -1;
+        const dy = -Math.abs(iy1 - iy0), sy = iy0 < iy1 ? 1 : -1;
+        let err = dx + dy, steps = 0;
+        while (steps++ < 240) {
+          vram565[iy0 * DISP_W + ix0] = c565;
+          if (ix0 === ix1 && iy0 === iy1) break;
+          const e2 = err << 1;
+          if (e2 >= dy) { err += dy; ix0 += sx; }
+          if (e2 <= dx) { err += dx; iy0 += sy; }
+        }
+      }
+
+      // 4. VECTORES FÍSICOS 3D EN LÍNEA FINA DE 1 PÍXEL (Viento Aparente, Fuerza Mayor, Fuerza Foque, Quilla y Timón)
+      // a) Vector de Viento Aparente en el tope del mástil (Cian fino 1px = hacia dónde fluye el aire sobre las velas)
       const topX = px + ux * 3.52 + fx * 0.25;
       const topY = py + uy * 3.52 + fy * 0.25;
       const topZ = pz + uz * 3.52 + fz * 0.25;
       const awLen = Math.max(0.5, sim.appWindSpd);
       const awDirX = sim.appWX / awLen, awDirZ = sim.appWZ / awLen;
-      projLine(topX - awDirX * 0.45, topY, topZ - awDirZ * 0.45, topX + awDirX * 0.75, topY, topZ + awDirZ * 0.75, 0, 5);
+      projThinVec320(topX - awDirX * 0.38, topY, topZ - awDirZ * 0.38, topX + awDirX * 0.62, topY, topZ + awDirZ * 0.62, C565.CYAN);
 
-      // b) Vector Aerodinámico de la Vela Mayor (Verde = empuje de la Mayor desde su centro vélico)
+      // b) Vector Aerodinámico de la Vela Mayor (Verde fino 1px = empuje de la Mayor desde su centro vélico)
       const mCeX = px + rx * (sSin * 0.65) + ux * 1.40 + fx * (0.30 - sCos * 0.65);
       const mCeY = py + ry * (sSin * 0.65) + uy * 1.40 + fy * (0.30 - sCos * 0.65);
       const mCeZ = pz + rz * (sSin * 0.65) + uz * 1.40 + fz * (0.30 - sCos * 0.65);
-      projLine(
+      projThinVec320(
         mCeX, mCeY, mCeZ,
-        mCeX + (rx * sim.mainForceR + fx * sim.mainForceF) * 0.42,
-        mCeY + (ry * sim.mainForceR + fy * sim.mainForceF) * 0.42,
-        mCeZ + (rz * sim.mainForceR + fz * sim.mainForceF) * 0.42,
-        0, 3
+        mCeX + (rx * sim.mainForceR + fx * sim.mainForceF) * 0.34,
+        mCeY + (ry * sim.mainForceR + fy * sim.mainForceF) * 0.34,
+        mCeZ + (rz * sim.mainForceR + fz * sim.mainForceF) * 0.34,
+        C565.GREEN
       );
 
-      // c) Vector Aerodinámico del Foque (Verde = empuje independiente del Foque en proa)
+      // c) Vector Aerodinámico del Foque (Verde fino 1px = empuje independiente del Foque en proa)
       const jCeX = px + rx * (jSin * 0.48) + ux * 1.20 + fx * (1.15 - jCos * 0.48);
       const jCeY = py + ry * (jSin * 0.48) + uy * 1.20 + fy * (1.15 - jCos * 0.48);
       const jCeZ = pz + rz * (jSin * 0.48) + uz * 1.20 + fz * (1.15 - jCos * 0.48);
-      projLine(
+      projThinVec320(
         jCeX, jCeY, jCeZ,
-        jCeX + (rx * sim.jibForceR + fx * sim.jibForceF) * 0.55,
-        jCeY + (ry * sim.jibForceR + fy * sim.jibForceF) * 0.55,
-        jCeZ + (rz * sim.jibForceR + fz * sim.jibForceF) * 0.55,
-        0, 3
+        jCeX + (rx * sim.jibForceR + fx * sim.jibForceF) * 0.44,
+        jCeY + (ry * sim.jibForceR + fy * sim.jibForceF) * 0.44,
+        jCeZ + (rz * sim.jibForceR + fz * sim.jibForceF) * 0.44,
+        C565.GREEN
       );
 
-      // d) Vectores Hidrodinámicos de la Quilla y del Timón bajo el casco (Dorado = resistencia anti-deriva y par de giro)
+      // d) Vectores Hidrodinámicos de la Quilla y del Timón bajo el casco (Dorado fino 1px)
       const kCeX = px - ux * 0.55, kCeY = py - uy * 0.55, kCeZ = pz - uz * 0.55;
-      projLine(kCeX, kCeY, kCeZ, kCeX + rx * sim.keelForceR * 0.35, kCeY + ry * sim.keelForceR * 0.35, kCeZ + rz * sim.keelForceR * 0.35, 0, 2);
+      projThinVec320(kCeX, kCeY, kCeZ, kCeX + rx * sim.keelForceR * 0.28, kCeY + ry * sim.keelForceR * 0.28, kCeZ + rz * sim.keelForceR * 0.28, C565.GOLD);
       const rCeX = px - ux * 0.32 - fx * 1.25, rCeY = py - uy * 0.32 - fy * 1.25, rCeZ = pz - uz * 0.32 - fz * 1.25;
-      projLine(rCeX, rCeY, rCeZ, rCeX + rx * sim.rudForceR * 0.65, rCeY + ry * sim.rudForceR * 0.65, rCeZ + rz * sim.rudForceR * 0.65, 0, 2);
+      projThinVec320(rCeX, rCeY, rCeZ, rCeX + rx * sim.rudForceR * 0.52, rCeY + ry * sim.rudForceR * 0.52, rCeZ + rz * sim.rudForceR * 0.52, C565.GOLD);
     }
 
     function renderSailBuoysAndWake320(sim, projPoint320, projLine) {
@@ -6294,13 +6315,15 @@
           const dirHz = rawDz / horizDist;
 
           if (this.camMode === 0) {
-            // MIRADOR ALTO AUTO-ZOOM + ZOOM DE USUARIO: mantiene el acimut LOS del muelle y acerca/aleja sobre el rayo LOS
-            const baseEff = horizDist > 14.0 ? (14.0 + (horizDist - 14.0) * 0.28) : horizDist;
-            const effHoriz = Math.max(4.2, Math.min(85.0, baseEff / userZoom));
+            // MIRADOR ALTO AUTO-ZOOM DE TAMAÑO CONSTANTE:
+            // Conserva el ángulo de visión LOS real desde el muelle (dirHx, dirHz), pero mantiene la distancia óptica
+            // prácticamente constante (~9.5m..11.2m / userZoom) para que el velero conserve siempre el mismo tamaño en pantalla.
+            const baseEff = 9.4 + Math.min(1.8, horizDist * 0.020);
+            const effHoriz = Math.max(3.8, Math.min(32.0, baseEff / userZoom));
             zoomFactor = horizDist / Math.max(1.0, effHoriz);
             camX = this.px - dirHx * effHoriz;
             camZ = this.pz - dirHz * effHoriz;
-            camY = Math.max(4.5, Math.min(24.0, 4.2 + effHoriz * 0.72));
+            camY = Math.max(3.4, Math.min(14.0, this.py + 2.1 + effHoriz * 0.42));
           } else {
             // MIRADOR ZOOM MANUAL (camMode === 1): zoom directo sobre la distancia real desde el muelle
             const effHoriz = Math.max(4.5, Math.min(90.0, horizDist / userZoom));
