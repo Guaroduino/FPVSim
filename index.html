@@ -2121,15 +2121,21 @@
     let   MAP_SCALE_Z  = MAP_H / WORLD_H_M; // 0.731429 texels/m en 2.1x1.4km (1.37m/voxel) | 0.182857 en 8.4x5.6km (5.47m/voxel)
     let   HEIGHT_SCALE = 0.125;        // Escala vertical por unidad uint8 (0.125m en pistas planas, hasta 0.42m = 105m en alta montaña Comanche 3)
 
-    // Coordenada exacta de la Pista Aeromodelismo A.I.A Chorobobo en el ortomosaico
+    // Coordenada exacta de la Pista Aeromodelismo A.I.A Chorobobo en el ortomosaico (chorobobo.jpg)
+    // En chorobobo.jpg: u = 0..1 (Oeste -> Este), v = 0..1 (borde superior Norte -> borde inferior Sur)
+    // Como bakeChoroboboToPsram invierte verticalmente la imagen al volcarla en PSRAM (mz = (1 - v) * MAP_H):
+    // - SPAWN_U = 1198 / 2048 = 0.5849609375 (~0.585 desde la izquierda)
+    // - SPAWN_V = 1.0 - (650 / 1024) = 0.365234375 (~0.365 desde arriba)
     const SPAWN_MX     = 1198;         // u = 0.585 * 2048
-    const SPAWN_MZ     = 650;          // v = (1 - 0.365) * 1024 (Norte hacia +wz)
+    const SPAWN_MZ     = 650;          // mz = (1 - 0.365) * 1024 (Norte hacia +wz)
+    const SPAWN_U      = SPAWN_MX / MAP_W;
+    const SPAWN_V      = 1.0 - (SPAWN_MZ / MAP_H);
 
-    // Conversión inversa de metros del mundo (wx, wz) a coordenada normalizada (u, v) sobre chorobobo.jpg
+    // Conversión inversa exacta de metros del mundo (wx, wz) a coordenada normalizada (u, v) sobre chorobobo.jpg
     function worldToUv(wx, wz) {
       return {
-        u: (SPAWN_MX / MAP_W) + (wx / WORLD_W_M),
-        v: (SPAWN_MZ / MAP_H) - (wz / WORLD_H_M)
+        u: SPAWN_U + (wx / WORLD_W_M),
+        v: SPAWN_V - (wz / WORLD_H_M)
       };
     }
 
@@ -2154,11 +2160,11 @@
     const vramDepthQ4 = new Uint16Array(DISP_W * DISP_H);
     let   activeObjCzQ4 = 0; // > 0 durante el renderizado de objetos 3D (árboles, edificios, gates) para oclusión exacta tras montañas
 
-    // Conversión exacta de coordenada normalizada (u, v) sobre la ortofoto a metros (wx, wz) según la escala activa
+    // Conversión exacta 1:1 de coordenada normalizada (u, v) sobre chorobobo.jpg a metros (wx, wz) según la escala activa
     function uvToWorld(u, v) {
       return {
-        x: Math.round((u - (SPAWN_MX / MAP_W)) * WORLD_W_M),
-        z: Math.round(((SPAWN_MZ / MAP_H) - v) * WORLD_H_M)
+        x: Math.round((u - SPAWN_U) * WORLD_W_M * 10) / 10,
+        z: Math.round((SPAWN_V - v) * WORLD_H_M * 10) / 10
       };
     }
 
@@ -4143,12 +4149,27 @@
 
     (function loadCustomChoroboboLayoutFromStorage() {
       try {
-        const raw = localStorage.getItem('fpvsim_chorobobo_layout_v1');
-        if (!raw) return;
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed.buildings)) BUILDING_UV_DEFS = parsed.buildings;
-        if (Array.isArray(parsed.trees))     CHOROBOBO_CUSTOM_TREES_UV = parsed.trees;
-        if (typeof parsed.randomTreeCount === 'number') choroboboRandomTreeCount = parsed.randomTreeCount;
+        const rawV2 = localStorage.getItem('fpvsim_chorobobo_layout_v2');
+        if (rawV2) {
+          const parsed = JSON.parse(rawV2);
+          if (Array.isArray(parsed.buildings)) BUILDING_UV_DEFS = parsed.buildings;
+          if (Array.isArray(parsed.trees))     CHOROBOBO_CUSTOM_TREES_UV = parsed.trees;
+          if (typeof parsed.randomTreeCount === 'number') choroboboRandomTreeCount = parsed.randomTreeCount;
+          return;
+        }
+        // Migrar automáticamente el diseño guardado en v1 (corrigiendo la inversión vertical v = 1 - v de lo que el usuario plantó en el canvas)
+        const rawV1 = localStorage.getItem('fpvsim_chorobobo_layout_v1');
+        if (rawV1) {
+          const parsed = JSON.parse(rawV1);
+          if (Array.isArray(parsed.buildings)) {
+            BUILDING_UV_DEFS = parsed.buildings.map(b => ({ ...b, v: Number((1.0 - b.v).toFixed(4)) }));
+          }
+          if (Array.isArray(parsed.trees)) {
+            CHOROBOBO_CUSTOM_TREES_UV = parsed.trees.map(t => ({ ...t, v: Number((1.0 - t.v).toFixed(4)) }));
+          }
+          if (typeof parsed.randomTreeCount === 'number') choroboboRandomTreeCount = parsed.randomTreeCount;
+          saveCustomChoroboboLayoutToStorage();
+        }
       } catch (e) {
         console.warn('No se pudo cargar layout personalizado de Chorobobo:', e);
       }
@@ -4156,7 +4177,7 @@
 
     function saveCustomChoroboboLayoutToStorage() {
       try {
-        localStorage.setItem('fpvsim_chorobobo_layout_v1', JSON.stringify({
+        localStorage.setItem('fpvsim_chorobobo_layout_v2', JSON.stringify({
           buildings: BUILDING_UV_DEFS,
           trees: CHOROBOBO_CUSTOM_TREES_UV,
           randomTreeCount: choroboboRandomTreeCount
@@ -11642,12 +11663,14 @@
       let meSelectedBldg = 0;
 
       // Estado de cámara 2D sobre la ortofoto (zoom y centro en coordenadas normalizadas u,v 0..1)
-      let camU           = SPAWN_MX / MAP_W; // 0.585
-      let camV           = 1.0 - (SPAWN_MZ / MAP_H); // 0.365
+      let camU           = SPAWN_U; // 0.585
+      let camV           = SPAWN_V; // 0.365
       let zoom           = 2.6;
       let isPanning      = false;
       let isPainting     = false;
       let isDraggingBldg = false;
+      let isAimingCraft  = false;
+      let customCraftPlaced = false;
       let panStartX      = 0, panStartY = 0;
       let panStartU      = 0, panStartV = 0;
       let lastPaintWorld = null;
@@ -11768,15 +11791,14 @@
         const vb = getViewBox();
         return {
           x: vb.ox + u * vb.drawW,
-          y: vb.oy + (1.0 - v) * vb.drawH
+          y: vb.oy + v * vb.drawH
         };
       }
 
       function canvasToUv(px, py) {
         const vb = getViewBox();
         const u = (px - vb.ox) / vb.drawW;
-        const imgY = (py - vb.oy) / vb.drawH;
-        const v = 1.0 - imgY;
+        const v = (py - vb.oy) / vb.drawH;
         return {
           u: Math.max(0.02, Math.min(0.98, u)),
           v: Math.max(0.02, Math.min(0.98, v))
@@ -11897,8 +11919,8 @@
           ctx.restore();
         }
 
-        // 5. Punto de Despegue (SPAWN Pista A.I.A Chorobobo) y Aeronave Activa
-        const spPt = uvToCanvas(SPAWN_MX / MAP_W, SPAWN_MZ / MAP_H);
+        // 5. Punto de Despegue (SPAWN Pista A.I.A Chorobobo) y Aeronave Activa con Cono de Visión 3D
+        const spPt = uvToCanvas(SPAWN_U, SPAWN_V);
         ctx.fillStyle = '#ffcb3b';
         ctx.strokeStyle = '#000';
         ctx.lineWidth = 2;
@@ -11915,8 +11937,33 @@
         if (craft) {
           const cUv = worldToUv(craft.px, craft.pz);
           const cPt = uvToCanvas(cUv.u, cUv.v);
+          // En el mapa 2D: +wx es derecha (+x) y +wz (Norte) es arriba (-y)
+          const hdgAng = Math.atan2(-(craft.fz || 1), craft.fx || 0);
           ctx.save();
           ctx.translate(cPt.x, cPt.y);
+
+          // Cono de visión FPV (FOV) para ver exactamente hacia dónde mira la cámara 3D
+          ctx.save();
+          ctx.rotate(hdgAng);
+          ctx.fillStyle = 'rgba(0, 245, 255, 0.18)';
+          ctx.strokeStyle = 'rgba(0, 245, 255, 0.75)';
+          ctx.lineWidth = 1.4;
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.lineTo(42, -22);
+          ctx.lineTo(42,  22);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+          // Flecha central de rumbo del morro
+          ctx.strokeStyle = '#ffea00';
+          ctx.lineWidth = 2.4;
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.lineTo(26, 0);
+          ctx.stroke();
+          ctx.restore();
+
           ctx.fillStyle = '#00f5ff';
           ctx.strokeStyle = '#000';
           ctx.lineWidth = 1.8;
@@ -11926,7 +11973,7 @@
           ctx.stroke();
           ctx.fillStyle = '#00f5ff';
           ctx.font = 'bold 10px sans-serif';
-          ctx.fillText('🚁 AERONAVE', 8, -4);
+          ctx.fillText('🚁 AERONAVE', 8, -6);
           ctx.restore();
         }
       }
@@ -12036,20 +12083,23 @@
           eraseAtUv(uv.u, uv.v, 20);
           canvas.setPointerCapture(e.pointerId);
         } else if (meTool === 'teleport') {
+          isAimingCraft = true;
+          customCraftPlaced = true;
           const hFloor = getTerrainHeightMeters(wPos.x, wPos.z);
           if (typeof fpvDroneSim !== 'undefined') {
             fpvDroneSim.px = wPos.x;
             fpvDroneSim.pz = wPos.z;
-            fpvDroneSim.py = hFloor + 12.0;
+            fpvDroneSim.py = hFloor + 10.0;
             fpvDroneSim.vx = 0; fpvDroneSim.vy = 0; fpvDroneSim.vz = 0;
           }
           if (typeof fpvWingSim !== 'undefined') {
             fpvWingSim.px = wPos.x;
             fpvWingSim.pz = wPos.z;
-            fpvWingSim.py = hFloor + 18.0;
+            fpvWingSim.py = hFloor + 14.0;
           }
-          showToast(`AERONAVE EN X:${wPos.x}M Z:${wPos.z}M`);
+          showToast(`AERONAVE EN X:${wPos.x}M Z:${wPos.z}M (ARRASTRA PARA APUNTAR)`);
           renderMapEditorCanvas();
+          canvas.setPointerCapture(e.pointerId);
         } else if (meTool === 'bldg') {
           const hitIdx = findNearestBuildingIdx(uv.u, uv.v, 24);
           if (hitIdx >= 0) {
@@ -12115,6 +12165,31 @@
           BUILDING_UV_DEFS[meSelectedBldg].u = Number(uv.u.toFixed(4));
           BUILDING_UV_DEFS[meSelectedBldg].v = Number(uv.v.toFixed(4));
           applyAndSaveChanges();
+        } else if (isAimingCraft && meTool === 'teleport') {
+          const craft = (activeRomId === 'fpv_wing' && typeof fpvWingSim !== 'undefined') ? fpvWingSim : (typeof fpvDroneSim !== 'undefined' ? fpvDroneSim : null);
+          if (craft) {
+            const dx = wPos.x - craft.px;
+            const dz = wPos.z - craft.pz;
+            const dLen = Math.hypot(dx, dz);
+            if (dLen > 2.0) {
+              const fx = dx / dLen;
+              const fz = dz / dLen;
+              const rx = fz;
+              const rz = -fx;
+              if (typeof fpvDroneSim !== 'undefined') {
+                fpvDroneSim.fx = fx; fpvDroneSim.fy = 0; fpvDroneSim.fz = fz;
+                fpvDroneSim.ux = 0;  fpvDroneSim.uy = 1; fpvDroneSim.uz = 0;
+                fpvDroneSim.rx = rx; fpvDroneSim.ry = 0; fpvDroneSim.rz = rz;
+              }
+              if (typeof fpvWingSim !== 'undefined') {
+                fpvWingSim.fx = fx; fpvWingSim.fy = 0; fpvWingSim.fz = fz;
+                fpvWingSim.ux = 0;  fpvWingSim.uy = 1; fpvWingSim.uz = 0;
+                fpvWingSim.rx = rx; fpvWingSim.ry = 0; fpvWingSim.rz = rz;
+                fpvWingSim.vx = fx * 15.0; fpvWingSim.vy = 0; fpvWingSim.vz = fz * 15.0;
+              }
+              renderMapEditorCanvas();
+            }
+          }
         }
       });
 
@@ -12122,6 +12197,7 @@
         isPanning = false;
         isPainting = false;
         isDraggingBldg = false;
+        isAimingCraft = false;
         lastPaintWorld = null;
       };
       canvas.addEventListener('pointerup', stopPointer);
@@ -12255,8 +12331,8 @@
       document.getElementById('meBtnZoomIn').addEventListener('click', () => { zoom = Math.min(10.0, zoom * 1.3); renderMapEditorCanvas(); });
       document.getElementById('meBtnZoomOut').addEventListener('click', () => { zoom = Math.max(0.9, zoom / 1.3); renderMapEditorCanvas(); });
       document.getElementById('meBtnResetView').addEventListener('click', () => {
-        camU = SPAWN_MX / MAP_W;
-        camV = 1.0 - (SPAWN_MZ / MAP_H);
+        camU = SPAWN_U;
+        camV = SPAWN_V;
         zoom = 2.6;
         renderMapEditorCanvas();
       });
@@ -12300,6 +12376,21 @@
       btnCloseEl.addEventListener('click', () => {
         meOpen = false;
         modalEl.classList.remove('open');
+        // Si el usuario estaba en el menú inicial o de ajustes, entrar directo a volar sobre el mapa de Chorobobo
+        if (osState !== 'ingame' || (activeRomId !== 'fpv_wing' && activeRomId !== 'fpv_drone')) {
+          const targetRom = (activeRomId === 'fpv_drone') ? 'fpv_drone' : 'fpv_wing';
+          if (!customCraftPlaced) {
+            launchRom(targetRom);
+          } else {
+            activeRomId = targetRom;
+            osState = 'ingame';
+            rgOverlayOpen = false;
+            rgTuningOpen = false;
+          }
+        } else {
+          rgOverlayOpen = false;
+          rgTuningOpen = false;
+        }
       });
     })();
 
