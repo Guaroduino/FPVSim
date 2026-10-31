@@ -729,6 +729,7 @@
         <button id="meBtnZoomIn" class="me-btn" title="Acercar Zoom">🔍 +</button>
         <button id="meBtnZoomOut" class="me-btn" title="Alejar Zoom">🔍 −</button>
         <button id="meBtnResetView" class="me-btn" title="Centrar Vista en Pista A.I.A">🎯 PISTA A.I.A</button>
+        <button id="meBtnWipeAll" class="me-btn" style="background:#b81d2a;border-color:#ff5c6a;color:#fff;" title="Dejar el mapa 100% limpio (0 árboles, 0 edificios, 0 random) para empezar desde cero">🗑️ VACIAR TODO (DESDE CERO)</button>
         <button id="meBtnExport" class="me-btn green" title="Copiar JSON / Código para pegarlo en el chat o en firmware ESP32-S3">📋 COPIAR DISEÑO</button>
         <button id="meBtnResetDefault" class="me-btn" title="Restaurar los edificios y árboles por defecto">↺ POR DEFECTO</button>
         <button id="meBtnClose" class="me-btn active" title="Cerrar Editor y Volar en 3D">✕ CERRAR Y VOLAR</button>
@@ -757,8 +758,12 @@
           <h4>2. Catálogo de Sprites (12 Tipos RGB565)</h4>
           <div id="meSpriteGrid" class="me-sprite-grid"></div>
           <div class="me-row">
-            <span>Altura: <b id="meLblTreeH">6.8m</b></span>
-            <input type="range" id="meRngTreeH" min="2.5" max="14.0" step="0.2" value="6.8" />
+            <span>Altura Mín: <b id="meLblTreeHMin">5.2m</b></span>
+            <input type="range" id="meRngTreeHMin" min="1.5" max="18.0" step="0.2" value="5.2" />
+          </div>
+          <div class="me-row">
+            <span>Altura Máx: <b id="meLblTreeHMax">8.5m</b></span>
+            <input type="range" id="meRngTreeHMax" min="1.5" max="18.0" step="0.2" value="8.5" />
           </div>
           <div class="me-row">
             <span>Paso Brocha: <b id="meLblBrushStep">16m</b></span>
@@ -818,6 +823,7 @@
           </div>
           <div style="display:flex;gap:5px;">
             <button id="meBtnDeleteSelBldg" class="me-btn" style="flex:1;border-color:#e60012;color:#ff8088;">🗑️ Borrar Seleccionado</button>
+            <button id="meBtnClearAllBldgs" class="me-btn" style="flex:1;">Vaciar Edificios</button>
           </div>
         </div>
 
@@ -11630,7 +11636,8 @@
       let meOpen         = false;
       let meTool         = 'tree'; // 'tree' | 'bldg' | 'erase' | 'teleport'
       let meTreeType     = 0;
-      let meTreeH        = 6.8;
+      let meTreeHMin     = 5.2;
+      let meTreeHMax     = 8.5;
       let meBrushStepM   = 16.0;
       let meSelectedBldg = 0;
 
@@ -11692,9 +11699,12 @@
           item.appendChild(lbl);
           item.addEventListener('click', () => {
             meTreeType = t;
-            meTreeH = cat.defH;
-            document.getElementById('meRngTreeH').value = meTreeH;
-            document.getElementById('meLblTreeH').textContent = `${meTreeH.toFixed(1)}m`;
+            meTreeHMin = Number(Math.max(1.5, cat.defH * 0.78).toFixed(1));
+            meTreeHMax = Number(Math.min(18.0, cat.defH * 1.25).toFixed(1));
+            document.getElementById('meRngTreeHMin').value = meTreeHMin;
+            document.getElementById('meLblTreeHMin').textContent = `${meTreeHMin.toFixed(1)}m`;
+            document.getElementById('meRngTreeHMax').value = meTreeHMax;
+            document.getElementById('meLblTreeHMax').textContent = `${meTreeHMax.toFixed(1)}m`;
             document.querySelectorAll('.me-sprite-item').forEach((el, idx) => {
               el.classList.toggle('active', idx === t);
             });
@@ -11938,6 +11948,26 @@
       }
 
       function eraseAtUv(u, v, radiusPx = 18) {
+        // Si aún había árboles random procedurales activos, los convertimos a editables individuales
+        // para que el borrador pueda borrar absolutamente cualquier árbol existente del mapa.
+        if (choroboboRandomTreeCount > 0) {
+          for (let i = 0; i < WORLD_TREES.length; i++) {
+            const tr = WORLD_TREES[i];
+            if (!tr.isCustom) {
+              const uv = worldToUv(tr.x, tr.z);
+              CHOROBOBO_CUSTOM_TREES_UV.push({
+                u: Number(uv.u.toFixed(4)),
+                v: Number(uv.v.toFixed(4)),
+                h: Number(tr.h.toFixed(1)),
+                type: tr.type | 0
+              });
+            }
+          }
+          choroboboRandomTreeCount = 0;
+          document.getElementById('meRngRandCount').value = 0;
+          document.getElementById('meLblRandCount').textContent = '0';
+        }
+
         const clickPt = uvToCanvas(u, v);
         let changed = false;
         for (let i = CHOROBOBO_CUSTOM_TREES_UV.length - 1; i >= 0; i--) {
@@ -11963,10 +11993,13 @@
       }
 
       function plantTreeAtUv(u, v) {
+        const lo = Math.min(meTreeHMin, meTreeHMax);
+        const hi = Math.max(meTreeHMin, meTreeHMax);
+        const hRand = lo + Math.random() * (hi - lo);
         CHOROBOBO_CUSTOM_TREES_UV.push({
           u: Number(u.toFixed(4)),
           v: Number(v.toFixed(4)),
-          h: Number(meTreeH.toFixed(1)),
+          h: Number(hRand.toFixed(1)),
           type: meTreeType
         });
         lastPaintWorld = uvToWorld(u, v);
@@ -12122,9 +12155,13 @@
         });
       });
 
-      document.getElementById('meRngTreeH').addEventListener('input', (e) => {
-        meTreeH = Number(e.target.value);
-        document.getElementById('meLblTreeH').textContent = `${meTreeH.toFixed(1)}m`;
+      document.getElementById('meRngTreeHMin').addEventListener('input', (e) => {
+        meTreeHMin = Number(e.target.value);
+        document.getElementById('meLblTreeHMin').textContent = `${meTreeHMin.toFixed(1)}m`;
+      });
+      document.getElementById('meRngTreeHMax').addEventListener('input', (e) => {
+        meTreeHMax = Number(e.target.value);
+        document.getElementById('meLblTreeHMax').textContent = `${meTreeHMax.toFixed(1)}m`;
       });
       document.getElementById('meRngBrushStep').addEventListener('input', (e) => {
         meBrushStepM = Number(e.target.value);
@@ -12146,6 +12183,24 @@
         choroboboRandomTreeCount = 0;
         document.getElementById('meRngRandCount').value = 0;
         document.getElementById('meLblRandCount').textContent = '0';
+        applyAndSaveChanges();
+      });
+
+      // Botón superior para dejar el mapa 100% limpio desde cero (0 sprites, 0 edificios, 0 random)
+      document.getElementById('meBtnWipeAll').addEventListener('click', () => {
+        BUILDING_UV_DEFS = [];
+        CHOROBOBO_CUSTOM_TREES_UV = [];
+        choroboboRandomTreeCount = 0;
+        meSelectedBldg = 0;
+        document.getElementById('meRngRandCount').value = 0;
+        document.getElementById('meLblRandCount').textContent = '0';
+        applyAndSaveChanges();
+        showToast('MAPA EN CERO: LISTO PARA DISENAR');
+      });
+
+      document.getElementById('meBtnClearAllBldgs').addEventListener('click', () => {
+        BUILDING_UV_DEFS = [];
+        meSelectedBldg = 0;
         applyAndSaveChanges();
       });
 
