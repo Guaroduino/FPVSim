@@ -3475,7 +3475,7 @@
         let cx0 = dx0*cRx + dy0*cRy + dz0*cRz, cy0 = dx0*cUx + dy0*cUy + dz0*cUz, cz0 = dx0*cFx + dy0*cFy + dz0*cFz;
         let cx1 = dx1*cRx + dy1*cRy + dz1*cRz, cy1 = dx1*cUx + dy1*cUy + dz1*cUz, cz1 = dx1*cFx + dy1*cFy + dz1*cFz;
         if (cz0 < 0.2 && cz1 < 0.2) return;
-        if (cz0 > 950 && cz1 > 950) return;
+        if (cz0 > 1650 && cz1 > 1650) return;
         if (cz0 < 0.2) { const t = (0.2 - cz0)/(cz1 - cz0); cx0 += t*(cx1 - cx0); cy0 += t*(cy1 - cy0); cz0 = 0.2; }
         else if (cz1 < 0.2) { const t = (0.2 - cz1)/(cz0 - cz1); cx1 += t*(cx0 - cx1); cy1 += t*(cy0 - cy1); cz1 = 0.2; }
 
@@ -3587,7 +3587,7 @@
         const gFloor = getTerrainHeightMeters(g.x, g.z);
         const ptGate = projPoint320 ? projPoint320(g.x, gFloor + g.y, g.z) : null;
         const cz = ptGate ? ptGate.cz : 120.0;
-        if (ptGate && cz > 780.0) continue;
+        if (ptGate && cz > 1400.0) continue;
         GATE_SORT_ORD[visCount] = i;
         GATE_SORT_CZ[visCount]  = cz;
         visCount++;
@@ -4438,12 +4438,14 @@
     const WORLD_TREES     = [];
     const WORLD_BUILDINGS = [];
     var worldObjectsInitialized = true;
-    // Buffers estáticos en SRAM para ordenar los 128 objetos más cercanos de atrás hacia adelante sin 'new' por frame (1,024 bytes total)
-    const MAX_VIS_OBJS  = 128;
+    // Buffers estáticos en SRAM para ordenar hasta 320 objetos visibles de atrás hacia adelante sin 'new' por frame (2,880 bytes = 2.8 KB en SRAM ESP32-S3)
+    const MAX_VIS_OBJS  = 320;
     const VIS_OBJ_TYPE  = new Uint8Array(MAX_VIS_OBJS); // 0 = árbol, 1 = edificio
     const VIS_OBJ_IDX   = new Uint16Array(MAX_VIS_OBJS);
     const VIS_OBJ_CZ    = new Float32Array(MAX_VIS_OBJS);
-    const VIS_SORT_ORD  = new Uint8Array(MAX_VIS_OBJS);
+    const VIS_SORT_ORD  = new Uint16Array(MAX_VIS_OBJS);
+    let visMaxSlot      = 0;
+    let visMaxCz        = 0.0;
 
     function pushWorldBldg(x, z, w, d, h, roofH, yaw, kind, wallL, wallD, roofCol) {
       WORLD_BUILDINGS.push({
@@ -4703,12 +4705,109 @@
     }
     rebuildWorldObjectsForScale();
 
-    // Dibuja un sprite 24x28 anclado 100% perpendicular al terreno 3D (entre ptTop y ptBase) en punto fijo 16.16 con Z-Buffer por píxel
+    // LUT estática de 72 bytes en SRAM para el LOD Lejano (Micro-Billboard a 350m..1350m sin parpadeo y en <25 ciclos de reloj por árbol en ESP32-S3)
+    const TREE_LOD_TOP_565 = new Uint16Array([
+      rgb565(64, 134, 44),  // 0: Samán
+      rgb565(78, 142, 46),  // 1: Mango
+      rgb565(34,  92, 52),  // 2: Pino
+      rgb565(64, 128, 50),  // 3: Cardón
+      rgb565(76, 154, 48),  // 4: Palmera
+      rgb565(242, 92, 28),  // 5: Torre Eléctrica (baliza naranja)
+      rgb565(68, 146, 46),  // 6: Chaguaramo
+      rgb565(98, 168, 60),  // 7: Bambuzal
+      rgb565(72, 138, 42),  // 8: Arbusto
+      rgb565(172, 138, 96), // 9: Árbol Seco
+      rgb565(250, 96, 32),  // 10: Manga de viento A.I.A
+      rgb565(250, 204, 28)  // 11: Araguaney en flor
+    ]);
+    const TREE_LOD_SHADE_565 = new Uint16Array([
+      rgb565(34,  82, 28),  // 0: Samán
+      rgb565(42,  92, 30),  // 1: Mango
+      rgb565(18,  54, 32),  // 2: Pino
+      rgb565(38,  84, 36),  // 3: Cardón
+      rgb565(36,  92, 32),  // 4: Palmera
+      rgb565(138, 148, 162),// 5: Torre Eléctrica (celosía gris)
+      rgb565(36,  94, 32),  // 6: Chaguaramo
+      rgb565(48, 108, 38),  // 7: Bambuzal
+      rgb565(38,  82, 26),  // 8: Arbusto
+      rgb565(118, 90, 62),  // 9: Árbol Seco
+      rgb565(236, 240, 245),// 10: Manga de viento (franja blanca)
+      rgb565(188, 136, 14)  // 11: Araguaney sombra dorada
+    ]);
+    const TREE_LOD_TRUNK_565 = new Uint16Array([
+      rgb565(78,  52, 28),  // 0: Samán
+      rgb565(78,  52, 28),  // 1: Mango
+      rgb565(68,  44, 24),  // 2: Pino
+      rgb565(158, 74, 40),  // 3: Cardón (base roca roja)
+      rgb565(112, 84, 52),  // 4: Palmera
+      rgb565(92, 100, 112), // 5: Torre Eléctrica
+      rgb565(142, 146, 138),// 6: Chaguaramo (fuste gris claro)
+      rgb565(134, 158, 64), // 7: Bambuzal (cañas)
+      rgb565(58,  42, 24),  // 8: Arbusto
+      rgb565(104, 78, 52),  // 9: Árbol Seco
+      rgb565(168, 176, 186),// 10: Mástil manga de viento
+      rgb565(78,  52, 28)   // 11: Araguaney
+    ]);
+
+    function setLodPx320(sx, sy, col, objCzQ4) {
+      if ((sx >>> 0) < DISP_W && (sy >>> 0) < DISP_H) {
+        const pIdx = sy * DISP_W + sx;
+        if (objCzQ4 <= vramDepthQ4[pIdx]) {
+          vram565[pIdx] = col;
+          vramDepthQ4[pIdx] = objCzQ4;
+        }
+      }
+    }
+
+    // Dibuja un sprite 24x28 anclado 100% perpendicular al terreno 3D (entre ptTop y ptBase) en punto fijo 16.16 con Z-Buffer por píxel + LOD Lejano hasta 1350m
     function drawTreeBillboard320(ptBase, ptTop, wPx, type, objCzQ4) {
       const vx = ptBase.sx - ptTop.sx;
       const vy = ptBase.sy - ptTop.sy;
       const hPx = Math.hypot(vx, vy);
-      if (hPx < 3.0 || wPx < 2.5) return;
+      if (hPx < 1.05 || wPx < 0.75) return;
+
+      const safeType = ((type | 0) >= 0 && (type | 0) < NUM_TREE_SPRITE_TYPES) ? (type | 0) : 0;
+
+      // LOD 1 (Media y Larga Distancia ~340m..1350m): Silueta Micro-Billboard de 2 a 6 píxeles (0 parpadeo, <25 ciclos en ESP32-S3)
+      if (hPx < 4.2 || wPx < 3.4) {
+        const bx = Math.round(ptBase.sx);
+        const by = Math.round(ptBase.sy);
+        const tx = Math.round(ptTop.sx);
+        const ty = Math.round(ptTop.sy);
+        if ((bx < -2 && tx < -2) || (bx >= DISP_W + 2 && tx >= DISP_W + 2) || (by < -2 && ty < -2) || (by >= DISP_H + 2 && ty >= DISP_H + 2)) return;
+
+        let colTop   = TREE_LOD_TOP_565[safeType];
+        let colShade = TREE_LOD_SHADE_565[safeType];
+        const colTrk = TREE_LOD_TRUNK_565[safeType];
+
+        // Suavizado atmosférico con la niebla del horizonte a más de 850m (objCzQ4 > 13600)
+        if (objCzQ4 > 13600) {
+          const fogCol = TERRAIN_THEMES[currentThemeIdx].fogCol;
+          colTop   = blend565Half(colTop, fogCol);
+          colShade = blend565Half(colShade, fogCol);
+        }
+
+        // Base / tronco en el suelo y copa arriba
+        setLodPx320(bx, by, colTrk, objCzQ4);
+        setLodPx320(tx, ty, colTop, objCzQ4);
+
+        if (hPx >= 2.0) {
+          const mx = (bx + tx) >> 1;
+          const my = (by + ty) >> 1;
+          setLodPx320(mx, my, colShade, objCzQ4);
+          if (wPx >= 1.8) {
+            // Ensanchar la copa perpendicularmente al tronco
+            const rx = vy >= 0 ? 1 : -1;
+            const ry = vx >= 0 ? -1 : 1;
+            setLodPx320(tx + rx, ty + ry, colTop, objCzQ4);
+            setLodPx320(mx - rx, my - ry, colShade, objCzQ4);
+            if (hPx >= 3.1) {
+              setLodPx320(mx + rx, my + ry, colShade, objCzQ4);
+            }
+          }
+        }
+        return;
+      }
 
       // Vector unitario en pantalla desde la copa (tv=0) hacia la base en el suelo (tv=TREE_SP_H)
       const downX = vx / hPx;
@@ -4741,7 +4840,6 @@
       let rowU = centerU_Q16 + Math.round(dx0 * du_dx + dy0 * du_dy);
       let rowV = centerV_Q16 + Math.round(dx0 * dv_dx + dy0 * dv_dy);
 
-      const safeType = ((type | 0) >= 0 && (type | 0) < NUM_TREE_SPRITE_TYPES) ? (type | 0) : 0;
       const romOff = safeType * (TREE_SP_W * TREE_SP_H);
       for (let sy = y0; sy <= y1; sy++) {
         let uFP = rowU;
@@ -5085,16 +5183,26 @@
       }
     }
 
-    // Inserta un objeto en el buffer estático VIS_OBJ_* conservando siempre los MAX_VIS_OBJS (128) más cercanos a la cámara (0 allocs)
+    // Inserta un objeto en el buffer estático VIS_OBJ_* conservando siempre los MAX_VIS_OBJS (320) más cercanos a la cámara (0 allocs)
     function insertVisibleWorldObj(type, idx, cz, count) {
       if (count < MAX_VIS_OBJS) {
         VIS_OBJ_TYPE[count] = type;
         VIS_OBJ_IDX[count]  = idx;
         VIS_OBJ_CZ[count]   = cz;
         VIS_SORT_ORD[count] = count;
+        if (count === 0 || cz > visMaxCz) {
+          visMaxCz   = cz;
+          visMaxSlot = count;
+        }
         return count + 1;
       }
-      // Si el buffer de 128 está lleno, buscar el más lejano actual y reemplazarlo si el nuevo está más cerca
+      // Rechazo O(1) inmediato si el objeto nuevo está más lejos que el más lejano del buffer
+      if (cz >= visMaxCz) return MAX_VIS_OBJS;
+
+      VIS_OBJ_TYPE[visMaxSlot] = type;
+      VIS_OBJ_IDX[visMaxSlot]  = idx;
+      VIS_OBJ_CZ[visMaxSlot]   = cz;
+
       let maxSlot = 0;
       let maxCz   = VIS_OBJ_CZ[0];
       for (let s = 1; s < MAX_VIS_OBJS; s++) {
@@ -5103,19 +5211,18 @@
           maxSlot = s;
         }
       }
-      if (cz < maxCz) {
-        VIS_OBJ_TYPE[maxSlot] = type;
-        VIS_OBJ_IDX[maxSlot]  = idx;
-        VIS_OBJ_CZ[maxSlot]   = cz;
-      }
+      visMaxSlot = maxSlot;
+      visMaxCz   = maxCz;
       return MAX_VIS_OBJS;
     }
 
-    // Renderiza todos los Árboles Sprite y Edificios Low-Poly visibles ordenados de atrás hacia adelante con oclusión Z-Buffer
+    // Renderiza todos los Árboles Sprite y Edificios Low-Poly visibles ordenados de atrás hacia adelante con oclusión Z-Buffer (hasta 1350m..1600m)
     function renderComancheWorldObjects(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz, projPoint320) {
       let count = 0;
-      const maxDistTree = 340.0;
-      const maxDistBldg = 520.0;
+      visMaxSlot = 0;
+      visMaxCz   = 0.0;
+      const maxDistTree = 1350.0;
+      const maxDistBldg = 1600.0;
 
       // 1. Recolectar edificios dentro del frustum (corte cercano 0.8m para poder atravesar el interior de edificios/hangares/toldos abiertos)
       for (let i = 0; i < WORLD_BUILDINGS.length; i++) {
@@ -5128,7 +5235,7 @@
         count = insertVisibleWorldObj(1, i, cz, count);
       }
 
-      // 2. Recolectar árboles cercanos dentro del frustum según la densidad configurada en el menú [WORLD]
+      // 2. Recolectar árboles cercanos y lejanos dentro del frustum según la densidad configurada en el menú [WORLD]
       const treeDensity = (typeof fcProfile !== 'undefined' && fcProfile.treeDensity !== undefined) ? fcProfile.treeDensity : 1.0;
       const activeTreeLimit = Math.round(WORLD_TREES.length * treeDensity);
       for (let i = 0; i < activeTreeLimit; i++) {
@@ -5137,7 +5244,7 @@
         const cz = dx * cFx + dz * cFz;
         if (cz < 2.2 || cz > maxDistTree) continue;
         const cx = dx * cRx + dz * cRz;
-        if (Math.abs(cx) > cz * 0.95 + 8.0) continue;
+        if (Math.abs(cx) > cz * 0.98 + 10.0) continue;
         count = insertVisibleWorldObj(0, i, cz, count);
       }
 
@@ -5158,7 +5265,9 @@
         const type = VIS_OBJ_TYPE[ord];
         const idx  = VIS_OBJ_IDX[ord];
         if (type === 1) {
-          activeObjCzQ4 = Math.max(1, Math.min(65534, Math.round(VIS_OBJ_CZ[ord] * 16.0) - 24));
+          const bCz = VIS_OBJ_CZ[ord];
+          const bBiasQ4 = 24 + ((bCz * 0.45) | 0);
+          activeObjCzQ4 = Math.max(1, Math.min(65534, Math.round(bCz * 16.0) - bBiasQ4));
           renderBuildingLowPoly320(WORLD_BUILDINGS[idx], camX, camZ, projPoint320);
         } else {
           const tr = WORLD_TREES[idx];
@@ -5167,7 +5276,8 @@
           const ptTop  = projPoint320(tr.x, yFloor + tr.h, tr.z);
           if (ptBase && ptTop) {
             const wPx = (tr.w * FOCAL_240) / ptBase.cz;
-            const objCzQ4 = Math.max(1, Math.min(65534, Math.round(ptBase.cz * 16.0) - 24));
+            const tBiasQ4 = 24 + ((ptBase.cz * 0.45) | 0);
+            const objCzQ4 = Math.max(1, Math.min(65534, Math.round(ptBase.cz * 16.0) - tBiasQ4));
             drawTreeBillboard320(ptBase, ptTop, wPx, tr.type, objCzQ4);
           }
         }
