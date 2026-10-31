@@ -722,7 +722,7 @@
   <div id="mapEditorModal" class="map-editor-modal">
     <div class="me-header">
       <div class="me-title">
-        <span>🗺️ EDITOR SATELITAL CHOROBOBO (8.4×5.6 KM / 2.1×1.4 KM / 910×620 M)</span>
+        <span>🗺️ EDITOR SATELITAL CHOROBOBO (6.6×4.4 KM / 1.65×1.1 KM / 715×484 M)</span>
         <span id="meStatsBadge" style="font-size:11px;color:#98a4b8;font-weight:600;"></span>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
@@ -948,12 +948,12 @@
         <div class="me-card">
           <h4>Escala Activa (Recorte del Mapa)</h4>
           <div style="display:flex;gap:4px;">
-            <button class="me-btn" data-me-scale="5" style="flex:1;">PARK 910×620m</button>
-            <button class="me-btn active" data-me-scale="0" style="flex:1;">HD 2.1×1.4km</button>
-            <button class="me-btn" data-me-scale="9" style="flex:1;">LR 8.4×5.6km</button>
+            <button class="me-btn" data-me-scale="5" style="flex:1;">PARK 715×484m</button>
+            <button class="me-btn active" data-me-scale="0" style="flex:1;">HD 1.65×1.1km</button>
+            <button class="me-btn" data-me-scale="9" style="flex:1;">LR 6.6×4.4km</button>
           </div>
           <div style="display:flex;gap:4px;margin-top:3px;">
-            <button id="meBtnMoveCrop" class="me-btn" data-me-tool="crop" style="flex:1;border-color:#00f5ff;color:#00f5ff;" title="Haz clic o arrastra sobre la foto completa de 8.4×5.6km para elegir qué zona recortan los mapas HD y PARK">📐 Mover Área de Corte</button>
+            <button id="meBtnMoveCrop" class="me-btn" data-me-tool="crop" style="flex:1;border-color:#00f5ff;color:#00f5ff;" title="Haz clic o arrastra sobre la foto completa de 6.6×4.4km para elegir qué zona recortan los mapas HD y PARK">📐 Mover Área de Corte</button>
             <button id="meBtnFitCrop" class="me-btn" title="Hacer Zoom para encuadrar el área de corte activa en pantalla">🔍 Encuadrar</button>
           </div>
           <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:2px;">
@@ -962,10 +962,10 @@
             <button class="me-btn" data-me-crop-preset="0.310,0.420" style="font-size:10px;padding:4px 2px;" title="Mover recorte a la Planta de Etanol y Silos (Oeste)">🏭 Planta Etanol</button>
           </div>
           <div class="me-row" style="margin-top:3px;">
-            <label title="Muestra en tono oscuro el resto de la foto satelital de 8.4×5.6 km fuera del recorte del mapa activo"><input type="checkbox" id="meChkShowOutside" /> 👁️ Ver exterior de 8.4×5.6km (atenuado)</label>
+            <label title="Muestra en tono oscuro el resto de la foto satelital de 6.6×4.4 km fuera del recorte del mapa activo"><input type="checkbox" id="meChkShowOutside" /> 👁️ Ver exterior de 6.6×4.4km (atenuado)</label>
           </div>
           <small style="color:#98a4b8;line-height:1.35;">
-            💡 Pulsa <b>📐 Mover Área de Corte</b> y arrastra el recorte sobre cualquier lugar de la foto de <b>8.4×5.6 km</b> para volar en esa zona en modo <b>HD</b> o <b>PARK</b>.
+            💡 Pulsa <b>📐 Mover Área de Corte</b> y arrastra el recorte sobre cualquier lugar de la foto de <b>6.6×4.4 km</b> para volar en esa zona en modo <b>HD</b> o <b>PARK</b>.
           </small>
         </div>
       </aside>
@@ -2244,10 +2244,10 @@
     const MAP_MASK_X   = 2047;
     const MAP_MASK_Z   = 1023;
     const MAP_SHIFT_X  = 11;           // mz << 11 == mz * 2048
-    let   WORLD_W_M    = 2100.0;       // Escala activa Este-Oeste (2.1 km en Chorobobo HD / 910m en Park / 8.4 km en Chorobobo LR)
-    let   WORLD_H_M    = 1400.0;       // Escala activa Norte-Sur  (1.4 km en Chorobobo HD / 620m en Park / 5.6 km en Chorobobo LR)
-    let   MAP_SCALE_X  = MAP_W / WORLD_W_M; // 0.975238 texels/m en 2.1x1.4km (1.02m/voxel) | 0.243810 en 8.4x5.6km (4.10m/voxel)
-    let   MAP_SCALE_Z  = MAP_H / WORLD_H_M; // 0.731429 texels/m en 2.1x1.4km (1.37m/voxel) | 0.182857 en 8.4x5.6km (5.47m/voxel)
+    let   WORLD_W_M    = 1650.0;       // Escala activa Este-Oeste (1.65 km en Chorobobo HD / 715m en Park / 6.6 km en Chorobobo LR)
+    let   WORLD_H_M    = 1100.0;       // Escala activa Norte-Sur  (1.1 km en Chorobobo HD / 484m en Park / 4.4 km en Chorobobo LR)
+    let   MAP_SCALE_X  = MAP_W / WORLD_W_M; // 1.241212 texels/m en 1.65x1.1km (0.81m/voxel) | 0.310303 en 6.6x4.4km (3.22m/voxel)
+    let   MAP_SCALE_Z  = MAP_H / WORLD_H_M; // 0.930909 texels/m en 1.65x1.1km (1.07m/voxel) | 0.232727 en 6.6x4.4km (4.30m/voxel)
     let   HEIGHT_SCALE = 0.125;        // Escala vertical por unidad uint8 (0.125m en pistas planas, hasta 0.42m = 105m en alta montaña Comanche 3)
 
     // Coordenada exacta de la Pista Aeromodelismo A.I.A Chorobobo en el ortomosaico (chorobobo.jpg)
@@ -2259,11 +2259,11 @@
     const SPAWN_MZ       = 650;          // mz = (1 - 0.365) * 1024 (Norte hacia +wz)
     const SPAWN_U        = SPAWN_MX / MAP_W;
     const SPAWN_V        = 1.0 - (SPAWN_MZ / MAP_H);
-    const CHORO_FULL_W_M = 8400.0;       // Ancho físico real 1:1 (Este-Oeste) de la ortofoto completa chorobobo.jpg (8.4 km)
-    const CHORO_FULL_H_M = 5600.0;       // Alto físico real 1:1 (Norte-Sur) de la ortofoto completa chorobobo.jpg (5.6 km)
+    const CHORO_FULL_W_M = 6600.0;       // Ancho físico real 1:1 (Este-Oeste) de la ortofoto completa chorobobo.jpg (6.6 km = 1.1x)
+    const CHORO_FULL_H_M = 4400.0;       // Alto físico real 1:1 (Norte-Sur) de la ortofoto completa chorobobo.jpg (4.4 km = 1.1x)
     var   isChoroboboThemeActive = true; // Activo cuando el mapa actual es Chorobobo (PARK, HD o LR)
 
-    // Posición configurable del recorte (esquina superior izquierda uMin, vMin en 0..1) para los mapas HD (2.1x1.4km) y PARK (910x620m)
+    // Posición configurable del recorte (esquina superior izquierda uMin, vMin en 0..1) para los mapas HD (1.65x1.1km) y PARK (715x484m)
     const DEFAULT_CHOROBOBO_CROP_DEFS = {
       park: {
         uMin: 0.5424,
@@ -2664,10 +2664,10 @@
     var TERRAIN_THEMES = [
       {
         id: 'chorobobo_hd',
-        name: 'CHOROBOBO HD 2.1KM',
+        name: 'CHOROBOBO HD 1.65KM',
         isChorobobo: true,
-        worldW: 2100.0,
-        worldH: 1400.0,
+        worldW: 1650.0,
+        worldH: 1100.0,
         hScale: 0.125,
         skyZenith:  [44, 92, 178],
         skyHorizon: [166, 198, 228],
@@ -2743,10 +2743,10 @@
       },
       {
         id: 'chorobobo_park',
-        name: 'CHORO PARK 910M',
+        name: 'CHORO PARK 715M',
         isChorobobo: true,
-        worldW: 910.0,
-        worldH: 620.0,
+        worldW: 715.0,
+        worldH: 484.0,
         hScale: 0.125,
         skyZenith:  [38, 88, 182],
         skyHorizon: [162, 198, 230],
@@ -2806,10 +2806,10 @@
       },
       {
         id: 'chorobobo',
-        name: 'CHOROBOBO LR 8.4X5.6KM',
+        name: 'CHOROBOBO LR 6.6X4.4KM',
         isChorobobo: true,
-        worldW: 8400.0,
-        worldH: 5600.0,
+        worldW: 6600.0,
+        worldH: 4400.0,
         hScale: 0.125,
         skyZenith:  [44, 92, 178],
         skyHorizon: [166, 198, 228],
@@ -2852,21 +2852,32 @@
       isChoroboboThemeActive = !!theme.isChorobobo;
 
       // Actualizar dimensiones físicas del mundo, escala vertical y resolución por voxel
-      WORLD_W_M    = theme.worldW || 1500.0;
-      WORLD_H_M    = theme.worldH || 1000.0;
+      WORLD_W_M    = theme.worldW || 1650.0;
+      WORLD_H_M    = theme.worldH || 1100.0;
       HEIGHT_SCALE = theme.hScale || 0.125;
       MAP_SCALE_X  = MAP_W / WORLD_W_M;
       MAP_SCALE_Z  = MAP_H / WORLD_H_M;
 
       // Si cambia entre dos mapas procedurales (no Chorobobo) de distinto tamaño, ajustar la posición proporcionalmente.
-      // En Chorobobo (PARK / HD / LR), 1m siempre es 1m real alrededor de la Pista A.I.A (0,0), por lo que la posición se conserva 1:1.
-      if (wasFpvMap && prevWorldW !== WORLD_W_M && !(wasChoro && theme.isChorobobo) && typeof fpvDroneSim !== 'undefined' && typeof fpvWingSim !== 'undefined') {
-        const ratioX = WORLD_W_M / prevWorldW;
-        const ratioZ = WORLD_H_M / prevWorldH;
-        fpvDroneSim.px *= ratioX;
-        fpvDroneSim.pz *= ratioZ;
-        fpvWingSim.px  *= ratioX;
-        fpvWingSim.pz  *= ratioZ;
+      // Si cambia entre dos escalas de Chorobobo (PARK 715x484m / HD 1.65x1.1km / LR 6.6x4.4km), conservar la posición exacta (u, v) sobre chorobobo.jpg.
+      if (wasFpvMap && prevWorldW !== WORLD_W_M && typeof fpvDroneSim !== 'undefined' && typeof fpvWingSim !== 'undefined') {
+        if (wasChoro && theme.isChorobobo) {
+          const oldB = getChoroboboActiveUvBounds(prevWorldW, prevWorldH);
+          const newB = getChoroboboActiveUvBounds(WORLD_W_M, WORLD_H_M);
+          const dxM  = (oldB.anchorU - newB.anchorU) * CHORO_FULL_W_M;
+          const dzM  = (newB.anchorV - oldB.anchorV) * CHORO_FULL_H_M;
+          fpvDroneSim.px += dxM;
+          fpvDroneSim.pz += dzM;
+          fpvWingSim.px  += dxM;
+          fpvWingSim.pz  += dzM;
+        } else {
+          const ratioX = WORLD_W_M / prevWorldW;
+          const ratioZ = WORLD_H_M / prevWorldH;
+          fpvDroneSim.px *= ratioX;
+          fpvDroneSim.pz *= ratioZ;
+          fpvWingSim.px  *= ratioX;
+          fpvWingSim.pz  *= ratioZ;
+        }
       }
 
       // 1. Generar siempre el Domo de Cielo Azul + Nubes 512x512 para el tema activo
@@ -2883,7 +2894,7 @@
         }
       }
 
-      // Si el tema usa la ortofoto de CHOROBOBO (PARK 910x620m, HD 2.1x1.4km o LR 8.4x5.6km), recortar y volcar la región exacta en PSRAM
+      // Si el tema usa la ortofoto de CHOROBOBO (PARK 715x484m, HD 1.65x1.1km o LR 6.6x4.4km), recortar y volcar la región exacta en PSRAM
       if (theme.isChorobobo && choroDecodedImg) {
         HEIGHT_SCALE = 0.125;
         const b = getChoroboboActiveUvBounds(WORLD_W_M, WORLD_H_M);
@@ -4313,13 +4324,13 @@
       { kind: 'bando_arch',  name: 'Puente / Pórtico Elevado',           defW: 20, defD: 7,  defH: 6.2, defRoofH: 2.0 }
     ];
 
-    // Definición por defecto de Edificios Low-Poly en coordenadas UV de Chorobobo (de chorobobo_mapa_2026-10-31.json)
+    // Definición por defecto de Edificios Low-Poly en coordenadas UV de Chorobobo (de chorobobo_mapa_2026-10-31.json ajustado a escala 1.1x)
     const DEFAULT_BUILDING_UV_DEFS = [
       {
         u: 0.6212,
         v: 0.3792,
-        w: 51,
-        d: 26,
+        w: 40,
+        d: 20,
         h: 4.9,
         roofH: 1.8,
         yaw: -0.207,
@@ -4388,7 +4399,17 @@
         const rawV3 = localStorage.getItem('fpvsim_chorobobo_layout_v3');
         if (rawV3) {
           const parsed = JSON.parse(rawV3);
-          if (Array.isArray(parsed.buildings)) BUILDING_UV_DEFS = parsed.buildings;
+          const needsScale11Migration = !parsed.scale11Migrated;
+          if (Array.isArray(parsed.buildings)) {
+            BUILDING_UV_DEFS = parsed.buildings.map(b => {
+              if (!needsScale11Migration) return b;
+              return {
+                ...b,
+                w: Math.max(4, Math.round((Number(b.w) || 14) * (1.1 / 1.4))),
+                d: Math.max(4, Math.round((Number(b.d) || 9)  * (1.1 / 1.4)))
+              };
+            });
+          }
           if (Array.isArray(parsed.trees))     CHOROBOBO_CUSTOM_TREES_UV = parsed.trees;
           if (typeof parsed.randomTreeCount === 'number') choroboboRandomTreeCount = parsed.randomTreeCount;
           if (parsed.spawn && typeof parsed.spawn === 'object') {
@@ -4404,7 +4425,10 @@
                 CHOROBOBO_CIRCUIT_DEFS[c].uvList = parsed.circuits[c].uvList;
               }
             }
-            rebuildChoroboboCircuitsForScale();
+          }
+          rebuildChoroboboCircuitsForScale();
+          if (needsScale11Migration) {
+            saveCustomChoroboboLayoutToStorage();
           }
         }
       } catch (e) {
@@ -4415,6 +4439,7 @@
     function saveCustomChoroboboLayoutToStorage() {
       try {
         localStorage.setItem('fpvsim_chorobobo_layout_v3', JSON.stringify({
+          scale11Migrated: true,
           buildings: BUILDING_UV_DEFS,
           trees: CHOROBOBO_CUSTOM_TREES_UV,
           randomTreeCount: choroboboRandomTreeCount,
@@ -13017,7 +13042,7 @@
 
         if (meTool === 'crop') {
           if (WORLD_W_M > 2400) {
-            showToast('SELECCIONA PARK (910x620m) O HD (2.1x1.4km) PARA RECORTAR');
+            showToast('SELECCIONA PARK (715x484m) O HD (1.65x1.1km) PARA RECORTAR');
             return;
           }
           isDraggingCrop = true;
