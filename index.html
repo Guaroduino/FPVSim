@@ -436,13 +436,14 @@
         <span class="nin-badge">S3</span>
         <span class="led" title="Power ON"></span>
         <span id="sdLed" class="led sd-act" title="Flash / SD Activity"></span>
-        <span style="color:#a6b0bf;">N16R8 • 320×240 IPS</span>
       </div>
       <div class="top-hw-pills">
+        <button id="btnPathMode" class="pill-btn" title="Cambiar Línea Guía Punteada: Piso+3D / Solo Piso / Solo 3D / Ninguna">GUIA: PISO+3D</button>
+        <button id="btnGateVis" class="pill-btn" title="Cambiar Gates Visibles: Actual+Siguiente / +2 / Todas / Solo Actual">GATES: ACT+NXT</button>
         <button id="btnSound" class="pill-btn" title="Activar / Silenciar Sintetizador de Audio Físico I2S">🔇 AUDIO</button>
-        <button id="btnBleMp" class="pill-btn" title="Multijugador Bluetooth BLE / Pestaña Local (ESP32-S3 NimBLE)">📡 BLE MP</button>
+        <button id="btnBleMp" class="pill-btn" title="Multijugador Bluetooth BLE / Pestaña Local (ESP32-S3 NimBLE)">📡 BLE</button>
         <a href="hardware.html" class="pill-btn" style="text-decoration:none;display:inline-flex;align-items:center;" title="Ver Guía y Diagrama de Conexiones ESP32-S3 N16R8">PINOUT</a>
-        <button id="btnPalette" class="pill-btn" title="Cambiar Modo de Pantalla SPI / IPS / 1-Bit">IPS 60MHz</button>
+        <button id="btnPalette" class="pill-btn" title="Cambiar Modo de Pantalla SPI / IPS / 1-Bit">IPS</button>
       </div>
     </header>
 
@@ -2857,10 +2858,18 @@
       const nGates = gates.length;
       const baseCol = circuit.palIdx; // 4 = Rojo, 10 = Morado, 9 = Naranja
       const prevGate = (activeGate - 1 + nGates) % nGates;
+      const nextGate = (activeGate + 1) % nGates;
 
-      // 1. Camino de Puntos en el Piso + Guía Aérea 3D (Spline Catmull-Rom 3D entre las Gates; activable desde el menú [WORLD])
-      const showPath = (typeof fcProfile === 'undefined' || fcProfile.showSplinePath === undefined) ? 1 : fcProfile.showSplinePath;
-      if (showPath && projPoint320 && circuit.splinePts) {
+      // Modos configurables desde [WORLD] y barra superior:
+      // showSplinePath: 0 = NINGUNA (OFF), 1 = AMBAS (PISO + 3D), 2 = SOLO PISO, 3 = SOLO 3D
+      // gateVisMode:    0 = ACT + NEXT (2), 1 = ACT + 2 NEXT (3), 2 = TODAS (15), 3 = SOLO ACTUAL (1)
+      const showPath    = (typeof fcProfile === 'undefined' || fcProfile.showSplinePath === undefined) ? 1 : fcProfile.showSplinePath;
+      const gateVisMode = (typeof fcProfile === 'undefined' || fcProfile.gateVisMode === undefined) ? 0 : fcProfile.gateVisMode;
+      const showFloor   = (showPath === 1 || showPath === 2);
+      const showAir3D   = (showPath === 1 || showPath === 3);
+
+      // 1. Camino de Puntos en el Piso y/o Guía Aérea 3D (Spline Catmull-Rom 3D entre las Gates)
+      if ((showFloor || showAir3D) && projPoint320 && circuit.splinePts) {
         const sPts = circuit.splinePts;
         const pulseStep = (Math.floor(aeroEnv.time * 12.0) % 8) + 1;
         const CYAN_DOT  = rgb565(60, 245, 255);
@@ -2869,47 +2878,65 @@
 
         for (let i = 0; i < sPts.length; i++) {
           const sp = sPts[i];
-          const gFloor = getTerrainHeightMeters(sp.x, sp.z);
-          const yFloor = gFloor + 0.35;
           const isApproachSeg = (sp.segIdx === prevGate);
           const isNextSeg     = (sp.segIdx === activeGate);
+          const isNext2Seg    = (sp.segIdx === nextGate);
 
-          const pt = projPoint320(sp.x, yFloor, sp.z);
-          if (pt && pt.cz <= 420 && pt.sx >= 2 && pt.sx < DISP_W - 2 && pt.sy >= 2 && pt.sy < DISP_H - 2) {
-            const dotCzQ4 = Math.max(1, Math.round(pt.cz * 16.0) - 32);
-            if (dotCzQ4 <= vramDepthQ4[Math.round(pt.sy) * DISP_W + Math.round(pt.sx)]) {
-              let dotCol = circuit.lineCol565;
-              let dotRad = pt.cz < 75 ? 2 : 1;
-              if (isApproachSeg) {
-                dotCol = (sp.stepIdx === pulseStep || sp.stepIdx === pulseStep - 1) ? 0xFFFF : CYAN_DOT;
-                if (pt.cz < 140) dotRad = 2;
-              } else if (isNextSeg) {
-                dotCol = GOLD_DOT;
+          // Filtrar tramos del spline según las gates visibles elegidas por el usuario
+          if (gateVisMode === 3 && !isApproachSeg) continue;
+          if (gateVisMode === 0 && !isApproachSeg && !isNextSeg) continue;
+          if (gateVisMode === 1 && !isApproachSeg && !isNextSeg && !isNext2Seg) continue;
+
+          const gFloor = getTerrainHeightMeters(sp.x, sp.z);
+
+          // A) Línea punteada sobre el PISO
+          if (showFloor) {
+            const yFloor = gFloor + 0.35;
+            const pt = projPoint320(sp.x, yFloor, sp.z);
+            if (pt && pt.cz <= 420 && pt.sx >= 2 && pt.sx < DISP_W - 2 && pt.sy >= 2 && pt.sy < DISP_H - 2) {
+              const dotCzQ4 = Math.max(1, Math.round(pt.cz * 16.0) - 32);
+              if (dotCzQ4 <= vramDepthQ4[Math.round(pt.sy) * DISP_W + Math.round(pt.sx)]) {
+                let dotCol = circuit.lineCol565;
+                let dotRad = pt.cz < 75 ? 2 : 1;
+                if (isApproachSeg) {
+                  dotCol = (sp.stepIdx === pulseStep || sp.stepIdx === pulseStep - 1) ? 0xFFFF : CYAN_DOT;
+                  if (pt.cz < 140) dotRad = 2;
+                } else if (isNextSeg) {
+                  dotCol = GOLD_DOT;
+                }
+                drawInavCircleDot320(pt.sx, pt.sy, dotRad, dotCol);
               }
-              drawInavCircleDot320(pt.sx, pt.sy, dotRad, dotCol);
             }
           }
 
-          // Puntos Guía Aéreos 3D en el tramo activo y siguiente (muestra la subida o dive 3D hacia el centro del Gate)
-          if ((isApproachSeg || isNextSeg) && sp.yRel > 5.0 && (sp.stepIdx & 1) === 0) {
-            const yAir = gFloor + sp.yRel * 0.85;
-            const ptAir = projPoint320(sp.x, yAir, sp.z);
-            if (ptAir && ptAir.cz <= 320 && ptAir.sx >= 2 && ptAir.sx < DISP_W - 2 && ptAir.sy >= 2 && ptAir.sy < DISP_H - 2) {
-              const airCzQ4 = Math.max(1, Math.round(ptAir.cz * 16.0) - 28);
-              if (airCzQ4 <= vramDepthQ4[Math.round(ptAir.sy) * DISP_W + Math.round(ptAir.sx)]) {
-                const airCol = isApproachSeg
-                  ? ((sp.stepIdx === pulseStep || sp.stepIdx === pulseStep - 1) ? 0xFFFF : AIR_DOT)
-                  : GOLD_DOT;
-                drawInavCircleDot320(ptAir.sx, ptAir.sy, ptAir.cz < 95 ? 2 : 1, airCol);
+          // B) Línea punteada 3D AÉREA (conecta en 3D la altura exacta de cada Gate)
+          if (showAir3D && (isApproachSeg || isNextSeg || (gateVisMode === 1 && isNext2Seg))) {
+            const minAirRel = (showPath === 3) ? 0.5 : 2.5;
+            if (sp.yRel >= minAirRel && (showPath === 3 || (sp.stepIdx & 1) === 0)) {
+              const yAir = gFloor + sp.yRel * (showPath === 3 ? 1.0 : 0.88);
+              const ptAir = projPoint320(sp.x, yAir, sp.z);
+              if (ptAir && ptAir.cz <= 360 && ptAir.sx >= 2 && ptAir.sx < DISP_W - 2 && ptAir.sy >= 2 && ptAir.sy < DISP_H - 2) {
+                const airCzQ4 = Math.max(1, Math.round(ptAir.cz * 16.0) - 28);
+                if (airCzQ4 <= vramDepthQ4[Math.round(ptAir.sy) * DISP_W + Math.round(ptAir.sx)]) {
+                  const airCol = isApproachSeg
+                    ? ((sp.stepIdx === pulseStep || sp.stepIdx === pulseStep - 1) ? 0xFFFF : AIR_DOT)
+                    : (isNextSeg ? GOLD_DOT : CYAN_DOT);
+                  drawInavCircleDot320(ptAir.sx, ptAir.sy, ptAir.cz < 95 ? 2 : 1, airCol);
+                }
               }
             }
           }
         }
       }
 
-      // 2. Ordenar Gates visibles de mayor distancia a menor distancia en SRAM estática (Painter's + Z-Buffer)
+      // 2. Filtrar y ordenar Gates visibles de mayor a menor distancia en SRAM estática (Painter's + Z-Buffer)
       let visCount = 0;
       for (let i = 0; i < nGates && visCount < 16; i++) {
+        const fwdSteps = (i - activeGate + nGates) % nGates;
+        if (gateVisMode === 0 && fwdSteps > 1) continue; // Solo Actual + Siguiente (2 Gates)
+        if (gateVisMode === 1 && fwdSteps > 2) continue; // Actual + 2 Siguientes (3 Gates)
+        if (gateVisMode === 3 && fwdSteps > 0) continue; // Solo Gate Actual (1 Gate)
+
         const g = gates[i];
         const gFloor = getTerrainHeightMeters(g.x, g.z);
         const ptGate = projPoint320 ? projPoint320(g.x, gFloor + g.y, g.z) : null;
@@ -5135,12 +5162,42 @@
       carTrackIdx: 0,     // 0..5 = 6 Pistas RC Car (empezando por MEGA GP ANCHO XXL y BAJA OFFROAD XXL)
       crawlerMapIdx: 0,   // 0..2 = 3 Mapas Trial 4x4 (Moab Red Rock, Jungla Barro, Cumbre Granito)
       treeDensity: 1.0,   // 1.0 = 100%, 0.5 = 50%, 0.0 = OFF
-      showSplinePath: 1,  // 1 = ON (luces guía en el piso), 0 = OFF
+      showSplinePath: 1,  // 0 = NINGUNA (OFF), 1 = AMBAS (PISO+3D), 2 = SOLO PISO, 3 = SOLO 3D
+      gateVisMode: 0,     // 0 = ACT + NEXT (2 Gates), 1 = ACT + 2 NEXT (3 Gates), 2 = TODAS (15), 3 = SOLO ACTUAL (1)
       dronePresetIdx: 0,
       wingPresetIdx: 0,
       drone: { ...DRONE_PRESETS[0] },
       wing:  { ...WING_PRESETS[0] }
     };
+
+    const SPLINE_PATH_LABELS = ['OFF (NINGUNA)', 'AMBAS PISO+3D', 'SOLO PISO', 'SOLO 3D AIRE'];
+    const SPLINE_PATH_PILLS  = ['GUIA: OFF', 'GUIA: PISO+3D', 'GUIA: PISO', 'GUIA: 3D'];
+    const GATE_VIS_LABELS    = ['ACT + NEXT (2)', 'ACT + 2 NXT(3)', 'TODAS (15)', 'SOLO ACTUAL(1)'];
+    const GATE_VIS_PILLS     = ['GATES: ACT+NXT', 'GATES: +2 NXT', 'GATES: TODAS', 'GATES: 1 ACT'];
+
+    function syncPathAndGateButtons() {
+      const btnP = document.getElementById('btnPathMode');
+      if (btnP) btnP.textContent = SPLINE_PATH_PILLS[fcProfile.showSplinePath] || 'GUIA: PISO+3D';
+      const btnG = document.getElementById('btnGateVis');
+      if (btnG) btnG.textContent = GATE_VIS_PILLS[fcProfile.gateVisMode] || 'GATES: ACT+NXT';
+    }
+
+    function cycleSplinePathMode(dir = 1) {
+      // Orden intuitivo: 1 (AMBAS PISO+3D) -> 2 (SOLO PISO) -> 3 (SOLO 3D) -> 0 (NINGUNA)
+      const order = [1, 2, 3, 0];
+      let idx = order.indexOf(fcProfile.showSplinePath);
+      if (idx < 0) idx = 0;
+      idx = ((idx + dir) % order.length + order.length) % order.length;
+      fcProfile.showSplinePath = order[idx];
+      syncPathAndGateButtons();
+      showToast(`TRAYECTORIA: ${SPLINE_PATH_LABELS[fcProfile.showSplinePath]}`);
+    }
+
+    function cycleGateVisMode(dir = 1) {
+      fcProfile.gateVisMode = (((fcProfile.gateVisMode || 0) + dir) % 4 + 4) % 4;
+      syncPathAndGateButtons();
+      showToast(`GATES VISIBLES: ${GATE_VIS_LABELS[fcProfile.gateVisMode]}`);
+    }
 
     function applyWindPreset(idx) {
       fcProfile.windPresetIdx = ((idx % WIND_PRESETS.length) + WIND_PRESETS.length) % WIND_PRESETS.length;
@@ -8914,7 +8971,13 @@
     }
 
     function renderCrawlerGatesAndProps320(sim, projPoint320, projLine) {
-      for (let i = 0; i < CRAWLER_GATES.length; i++) {
+      const nGates = CRAWLER_GATES.length;
+      const gateVisMode = fcProfile.gateVisMode || 0;
+      for (let i = 0; i < nGates; i++) {
+        const fwdSteps = (i - sim.activeGate + nGates) % nGates;
+        if (gateVisMode === 0 && fwdSteps > 1) continue;
+        if (gateVisMode === 1 && fwdSteps > 2) continue;
+        if (gateVisMode === 3 && fwdSteps > 0) continue;
         const g = CRAWLER_GATES[i];
         const isAct = (i === sim.activeGate);
         const cY = Math.cos(g.yaw), sY = Math.sin(g.yaw);
@@ -9731,7 +9794,9 @@
       fcProfile.losZoom = 1.25;
       fcProfile.treeDensity = 1.0;
       fcProfile.showSplinePath = 1;
+      fcProfile.gateVisMode = 0;
       fpvDroneSim.propwash = 1.0;
+      syncPathAndGateButtons();
     }
 
     function adjustTuningParameter(tab, row, dir) {
@@ -9739,7 +9804,7 @@
       const activeSim = getActiveSimObject();
 
       if (tab === 0) {
-        // Pestaña 0 [WRLD]: Simulador Activo, Mapa/Clase, Circuito/Regata, Cámara, Clima/Viento, Menú Viento, Árboles, Spline y Launcher
+        // Pestaña 0 [WRLD]: Simulador Activo, Mapa/Clase, Circuito/Regata, Cámara, Clima/Viento, Trayectoria Guía, Visibilidad Gates, Árboles/Rivales y Launcher
         if (row === 0) {
           let idx = PLAYABLE_SIM_IDS.indexOf(activeRomId);
           if (idx < 0) idx = 0;
@@ -9799,13 +9864,13 @@
           applyWindPreset(fcProfile.windPresetIdx + dir);
           showToast(`CLIMA: ${fcProfile.wind.name} (${fcProfile.wind.baseKts}KT)`);
         } else if (row === 5) {
-          rgTuningTab    = 1;
-          rgTuningCursor = 0;
-          showToast('MENU COMPLETO DE VIENTO Y OLAS');
+          cycleSplinePathMode(dir);
         } else if (row === 6) {
+          cycleGateVisMode(dir);
+        } else if (row === 7) {
           if (isLosSimId(activeRomId)) {
-            fcProfile.losZoom = Math.max(0.50, Math.min(3.50, Math.round(((fcProfile.losZoom || 1.25) + dir * 0.25) * 100) / 100));
-            showToast(`ZOOM CAMARA LOS: ${fcProfile.losZoom.toFixed(2)}X`);
+            fcProfile.aiBots = fcProfile.aiBots ? 0 : 1;
+            showToast(fcProfile.aiBots ? 'RIVALES IA + BLE MP: ON' : 'MODO SOLO (IA OFF)');
           } else {
             const densities = [0.0, 0.5, 1.0];
             let curIdx = fcProfile.treeDensity <= 0.1 ? 0 : (fcProfile.treeDensity < 0.8 ? 1 : 2);
@@ -9813,9 +9878,6 @@
             fcProfile.treeDensity = densities[curIdx];
             showToast(`ARBOLES: ${Math.round(fcProfile.treeDensity * 100)}%`);
           }
-        } else if (row === 7) {
-          fcProfile.aiBots = fcProfile.aiBots ? 0 : 1;
-          showToast(fcProfile.aiBots ? 'RIVALES IA + BLE MP: ON' : 'MODO SOLO (IA OFF)');
         } else if (row === 8) {
           // Fila 8: Abrir el Selector Principal de Simuladores (Launcher)
           rgTuningOpen = false;
@@ -10271,9 +10333,9 @@
         row2World,
         row3View,
         `WIND:${wnd.name.slice(0, 9)} ${wnd.baseKts.toFixed(0)}KT`,
-        `TUNE:OPEN WIND LAB`,
-        isLosSimId(activeRomId) ? `ZOOM:${(fcProfile.losZoom || 1.25).toFixed(2)}X` : `TREE:${treeLbl}`,
-        `RIVL:${fcProfile.aiBots ? 'AI + BLE ON' : 'SOLO OFF'}`,
+        `GUIA:${SPLINE_PATH_LABELS[fcProfile.showSplinePath || 0]}`,
+        `GATE:${GATE_VIS_LABELS[fcProfile.gateVisMode || 0]}`,
+        isLosSimId(activeRomId) ? `RIVL:${fcProfile.aiBots ? 'AI + BLE ON' : 'SOLO OFF'}` : `TREE:${treeLbl}`,
         `HOME:SIM SELECTOR`
       ] : (rgTuningTab === 1 ? [
         `PSET:${wnd.name.slice(0, 14)}`,
@@ -10492,6 +10554,21 @@
     /***************************************************************************
      * 8. BUCLE PRINCIPAL DE SISTEMA RETRO-GO (CON SIMULADOR SPI DMA ILI9341V)
      ***************************************************************************/
+    const btnPathModeEl = document.getElementById('btnPathMode');
+    if (btnPathModeEl) {
+      btnPathModeEl.addEventListener('click', () => {
+        playTone(690, 0.025);
+        cycleSplinePathMode(1);
+      });
+    }
+    const btnGateVisEl = document.getElementById('btnGateVis');
+    if (btnGateVisEl) {
+      btnGateVisEl.addEventListener('click', () => {
+        playTone(690, 0.025);
+        cycleGateVisMode(1);
+      });
+    }
+    syncPathAndGateButtons();
     const btnPaletteEl = document.getElementById('btnPalette');
     if (btnPaletteEl) {
       btnPaletteEl.addEventListener('click', (e) => {
