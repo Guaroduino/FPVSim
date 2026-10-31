@@ -2650,6 +2650,11 @@
      *  3. Edificios simples Low-Poly (Galpones, Hangar, Casa de Hacienda, Silos)
      *  4. Modelos 3D sólidos de Aeronaves en vista Follow (Ala, Avión con Cola, Dron)
      ***************************************************************************/
+    function fillTriangle320(p0, p1, p2, c) {
+      if (!p0 || !p1 || !p2) return;
+      fillTri320(p0.sx, p0.sy, p1.sx, p1.sy, p2.sx, p2.sy, c);
+    }
+
     function fillTri320(x0, y0, x1, y1, x2, y2, col565) {
       let ax = Math.round(x0), ay = Math.round(y0);
       let bx = Math.round(x1), by = Math.round(y1);
@@ -7069,10 +7074,15 @@
           }
         }
 
+        // Suspensión física real:
+        // - En Pitch (+suspPitch = morro arriba): al acelerar (+longAcc) hunde la trasera y levanta el morro (squat); al frenar (-longAcc) clava el morro (dive).
+        // - En Roll (+suspRoll = lado derecho sube / lado izquierdo se hunde): al girar a la derecha (+steerAngle), la fuerza centrífuga
+        //   transfiere el peso hacia las ruedas exteriores (izquierdas), hundiendo el lado izquierdo y levantando el interior (derecho).
         const targetPitch = this.airborne
           ? Math.max(-0.28, Math.min(0.28, this.vy * 0.04))
-          : Math.max(-0.14, Math.min(0.14, (floorH - prevFloorH) * 2.2 + longAcc * 0.0045));
-        const targetRoll = Math.max(-0.22, Math.min(0.22, -this.steerAngle * (this.uFwd / preset.topSpd) * 0.38));
+          : Math.max(-0.16, Math.min(0.16, (floorH - prevFloorH) * 2.2 + longAcc * 0.0065));
+        const latG = (this.steerAngle * (this.uFwd / preset.topSpd)) - (this.vLat * 0.045);
+        const targetRoll = Math.max(-0.24, Math.min(0.24, latG * 0.46));
 
         this.suspPitch += (targetPitch - this.suspPitch) * Math.min(1.0, dt * 14.0);
         this.suspRoll  += (targetRoll  - this.suspRoll)  * Math.min(1.0, dt * 14.0);
@@ -7651,12 +7661,12 @@
           const dirHz = rawDz / horizDist;
 
           if (this.camMode === 0) {
-            const baseEff = horizDist > 14.0 ? (14.0 + (horizDist - 14.0) * 0.28) : horizDist;
-            const effHoriz = Math.max(4.2, Math.min(85.0, baseEff / userZoom));
+            const baseEff = 9.8 + Math.min(2.0, horizDist * 0.022);
+            const effHoriz = Math.max(4.0, Math.min(34.0, baseEff / userZoom));
             zoomFactor = horizDist / Math.max(1.0, effHoriz);
             camX = this.px - dirHx * effHoriz;
             camZ = this.pz - dirHz * effHoriz;
-            camY = Math.max(4.5, Math.min(24.0, 4.2 + effHoriz * 0.72));
+            camY = Math.max(3.5, Math.min(14.5, this.py + 2.2 + effHoriz * 0.44));
           } else {
             const effHoriz = Math.max(4.5, Math.min(90.0, horizDist / userZoom));
             zoomFactor = userZoom;
@@ -8317,26 +8327,6 @@
         setFaceLabels('CLASE', 'RST', 'CAM', 'GAS', 'L:GAS R:TIMON | UP/DN O R-Y:ZOOM LOS | B:CAM');
         rcBoatSim.reset();
         showToast('RC SPEEDBOAT 6S // ROOSTER TAIL');
-      } else if (romId === 'rc_boat') {
-        const cx = vx + 46, cy = vy + 46;
-        fillRect320(vx + 6, cy + 4, vw - 12, 10, rgb565(14, 58, 112));
-        // Rooster tail de espuma blanca
-        drawOutlinedLine320(cx - 18, cy + 2, cx - 36, cy - 16, NIN565.WHITE);
-        drawOutlinedLine320(cx - 18, cy + 2, cx - 34, cy - 8,  C565.CYAN);
-        // Casco Deep-V rojo/blanco en planeo
-        drawOutlinedLine320(cx - 18, cy + 2, cx + 24, cy - 6, NIN565.RED);
-        drawOutlinedLine320(cx - 14, cy + 5, cx + 24, cy - 6, NIN565.WHITE);
-        drawPillBadge320(vx + 14, vy + 66, 68, 13, NIN565.CARD_SEL, 'DEEP-V 6S', NIN565.RED, true);
-      } else if (romId === 'rc_crawler') {
-        const cx = vx + 48, cy = vy + 42;
-        // Escalones de roca roja
-        fillRect320(vx + 10, cy + 10, 34, 8, rgb565(178, 78, 38));
-        fillRect320(vx + 44, cy + 6,  42, 12, rgb565(198, 92, 44));
-        // Chasis 4x4 inclinado con ruedas grandes de tacos
-        drawRoundedCard320(cx - 18, cy - 10, 36, 14, rgb565(235, 118, 24), NIN565.WHITE);
-        drawInavCircleDot320(cx - 13, cy + 6, 5, NIN565.WHITE);
-        drawInavCircleDot320(cx + 13, cy + 2, 5, NIN565.GOLD);
-        drawPillBadge320(vx + 14, vy + 66, 68, 13, NIN565.CARD_SEL, '4X4 CRAWL', NIN565.GOLD, true);
       } else if (romId === 'rc_car') {
         setFaceLabels('SPEC', 'RST', 'CAM', 'GAS', 'L:GAS R:DIR | UP/DN O R-Y:ZOOM LOS | B:CAM');
         rcCarSim.reset();
@@ -8391,6 +8381,22 @@
         drawOutlinedLine320(cx + heel, cy - 30, cx + 18 + heel, cy - 5, NIN565.BLUE);
         drawOutlinedLine320(cx + 18 + heel, cy - 5, cx, cy - 5, NIN565.BLUE);
         drawPillBadge320(vx + 18, vy + 66, 60, 13, NIN565.CARD_SEL, 'IOM SAIL', NIN565.BLUE, true);
+      } else if (romId === 'rc_boat') {
+        const cx = vx + 46, cy = vy + 46;
+        fillRect320(vx + 6, cy + 4, vw - 12, 10, rgb565(14, 58, 112));
+        drawOutlinedLine320(cx - 18, cy + 2, cx - 36, cy - 16, NIN565.WHITE);
+        drawOutlinedLine320(cx - 18, cy + 2, cx - 34, cy - 8,  C565.CYAN);
+        drawOutlinedLine320(cx - 18, cy + 2, cx + 24, cy - 6, NIN565.RED);
+        drawOutlinedLine320(cx - 14, cy + 5, cx + 24, cy - 6, NIN565.WHITE);
+        drawPillBadge320(vx + 14, vy + 66, 68, 13, NIN565.CARD_SEL, 'DEEP-V 6S', NIN565.RED, true);
+      } else if (romId === 'rc_crawler') {
+        const cx = vx + 48, cy = vy + 42;
+        fillRect320(vx + 10, cy + 10, 34, 8, rgb565(178, 78, 38));
+        fillRect320(vx + 44, cy + 6,  42, 12, rgb565(198, 92, 44));
+        drawRoundedCard320(cx - 18, cy - 10, 36, 14, rgb565(235, 118, 24), NIN565.WHITE);
+        drawInavCircleDot320(cx - 13, cy + 6, 5, NIN565.WHITE);
+        drawInavCircleDot320(cx + 13, cy + 2, 5, NIN565.GOLD);
+        drawPillBadge320(vx + 14, vy + 66, 68, 13, NIN565.CARD_SEL, '4X4 CRAWL', NIN565.GOLD, true);
       } else if (romId === 'rc_car') {
         const cx = vx + 48 + Math.round(Math.sin(t * 3.5) * 7), cy = vy + 42;
         // Pianos de pista
