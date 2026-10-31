@@ -2030,6 +2030,85 @@
       playTone(840, 0.05);
     }
 
+    // Comprueba si el segmento 3D (prevX,prevY,prevZ) -> (px,py,pz) cruza el plano y la abertura exacta de la Gate 3D g
+    function checkCircuitGatePass3D(g, prevX, prevY, prevZ, px, py, pz) {
+      if (!g) return false;
+
+      // Distancia longitudinal con signo respecto al plano central de la puerta (normal = g.tx, g.tz)
+      const d0 = (prevX - g.x) * g.tx + (prevZ - g.z) * g.tz;
+      const d1 = (px - g.x) * g.tx + (pz - g.z) * g.tz;
+
+      const gType = g.type || 'arch';
+      const frameHalfD = gType === 'dive_cube'
+        ? Math.max(2.6, g.w * 0.34)
+        : Math.max(0.85, g.w * 0.08);
+
+      // Debe cruzar el plano de la gate (d=0) en este frame o encontrarse justo dentro del espesor físico 3D del marco
+      const crossedPlane = ((d0 <= 0.0 && d1 >= 0.0) || (d0 >= 0.0 && d1 <= 0.0)) && Math.abs(d1 - d0) < 16.0;
+      const insideFrameDepth = Math.abs(d1) <= Math.min(1.15, frameHalfD);
+      if (!crossedPlane && !insideFrameDepth) return false;
+
+      // Punto 3D exacto de cruce sobre el plano de la puerta
+      const denom = d1 - d0;
+      const t = (crossedPlane && Math.abs(denom) > 1e-5)
+        ? Math.max(0.0, Math.min(1.0, -d0 / denom))
+        : 1.0;
+      const cx = prevX + (px - prevX) * t;
+      const cy = prevY + (py - prevY) * t;
+      const cz = prevZ + (pz - prevZ) * t;
+
+      // Desplazamiento lateral exacto dentro del plano de la puerta (eje horizontal = g.nx, g.nz)
+      const lat    = (cx - g.x) * g.nx + (cz - g.z) * g.nz;
+      const absLat = Math.abs(lat);
+
+      const hw       = g.w * 0.5;
+      const hh       = g.h * 0.5;
+      const gFloor   = getTerrainHeightMeters(g.x, g.z);
+      const gCenterY = gFloor + g.y;
+      const yBot     = gFloor + Math.max(1.8, g.y - hh);
+      const yTop     = gCenterY + hh;
+      const craftPad = 0.45; // Margen del chasis/semiala al pasar junto a los postes
+
+      if (gType === 'flag_L' || gType === 'flag_R') {
+        const flagHalfW = hw * 0.85 + craftPad;
+        const flagTopY  = yTop + hh * 0.35 + craftPad;
+        return absLat <= flagHalfW && cy >= (gFloor + 0.25) && cy <= flagTopY;
+      }
+
+      if (gType === 'split_lr') {
+        if (absLat > hw + craftPad) return false;
+        const yPeak = yTop + hh * 0.22;
+        const uLat  = Math.min(1.0, absLat / Math.max(0.5, hw));
+        const yRoof = yPeak - uLat * (yPeak - yTop);
+        return cy >= (yBot - craftPad) && cy <= (yRoof + craftPad);
+      }
+
+      if (gType === 'over_under') {
+        const yHigh = yTop + hh * 0.32;
+        return absLat <= (hw + craftPad) && cy >= (yBot - craftPad) && cy <= (yHigh + craftPad);
+      }
+
+      if (gType === 'diamond') {
+        const rW = hw * 0.96 + craftPad;
+        const rH = hh * 1.02 + craftPad;
+        const dBotY = Math.max(gFloor + 1.0, gCenterY - hh * 1.02) - craftPad;
+        const dTopY = gCenterY + rH;
+        if (absLat > rW || cy < dBotY || cy > dTopY) return false;
+        return (absLat / rW) + (Math.abs(cy - gCenterY) / rH) <= 1.12;
+      }
+
+      if (gType === 'dive_cube') {
+        const dLocal  = crossedPlane ? 0.0 : d1;
+        const dySlope = dLocal * (g.pitchSlope || 0.0);
+        return absLat <= (hw + craftPad) &&
+               cy >= (yBot + dySlope - craftPad) &&
+               cy <= (yTop + dySlope + craftPad);
+      }
+
+      // 'arch' (Pórtico / Arco 3D clásico): ventana rectangular exacta entre postes [-hw, +hw] y [yBot, yTop]
+      return absLat <= (hw + craftPad) && cy >= (yBot - craftPad) && cy <= (yTop + craftPad);
+    }
+
     // 10 Mapas / Escenarios para Drones FPV y Alas (incluyendo Bando Edificio Abierto, Cañón Comanche 3, Cumbres Alpinas, Isla Volcánica y Chorobobo):
     const TERRAIN_THEMES = [
       {
@@ -5690,6 +5769,7 @@
         const gndSpd = Math.hypot(this.vx, this.vy, this.vz);
         this.totalDistKm += (gndSpd * dt) / 1000.0;
 
+        const prevX = this.px, prevY = this.py, prevZ = this.pz;
         this.px += this.vx * dt; this.py += this.vy * dt; this.pz += this.vz * dt;
         if (this.py < groundH + 0.30) {
           this.py = groundH + 0.30;
@@ -5699,8 +5779,7 @@
 
         if (!isFreeFlightNoGates()) {
           const g = CIRCUIT_GATES[this.activeGate];
-          const gFloor = getTerrainHeightMeters(g.x, g.z);
-          if (Math.hypot(this.px - g.x, this.pz - g.z) < 14.5 && Math.abs(this.py - (gFloor + g.y)) < 12.0) {
+          if (checkCircuitGatePass3D(g, prevX, prevY, prevZ, this.px, this.py, this.pz)) {
             const gLabel = GATE_TYPE_LABELS[g.type] || 'ARCO 3D';
             this.activeGate = (this.activeGate + 1) % CIRCUIT_GATES.length;
             const cShort = CHOROBOBO_CIRCUITS[currentCircuitIdx].shortCode;
@@ -6133,6 +6212,7 @@
         this.spd = Math.hypot(this.vx, this.vy, this.vz);
         this.totalDistKm += (this.spd * dt) / 1000.0;
 
+        const prevX = this.px, prevY = this.py, prevZ = this.pz;
         this.px += this.vx * dt; this.py += this.vy * dt; this.pz += this.vz * dt;
         if (this.py < groundH + 0.35) {
           this.py = groundH + 0.35;
@@ -6142,8 +6222,7 @@
 
         if (!isFreeFlightNoGates()) {
           const g = CIRCUIT_GATES[this.activeGate];
-          const gFloor = getTerrainHeightMeters(g.x, g.z);
-          if (Math.hypot(this.px - g.x, this.pz - g.z) < 15.5 && Math.abs(this.py - (gFloor + g.y)) < 12.5) {
+          if (checkCircuitGatePass3D(g, prevX, prevY, prevZ, this.px, this.py, this.pz)) {
             const gLabel = GATE_TYPE_LABELS[g.type] || 'ARCO 3D';
             this.activeGate = (this.activeGate + 1) % CIRCUIT_GATES.length;
             const cShort = CHOROBOBO_CIRCUITS[currentCircuitIdx].shortCode;
@@ -8242,10 +8321,19 @@
         // 7B. Actualizar los 2 Carros RC Rivales IA
         stepCarAiBots(dt);
 
-        // 8. Checkpoints del circuito y Cronómetro de Vuelta (Lap Timer)
-        const wp = RC_TRACK_WPS[this.activeGate];
-        const gateRad = (trk.trackHalfW || 5.5) + 2.8;
-        if (Math.hypot(this.px - wp.x, this.pz - wp.z) < gateRad) {
+        // 8. Checkpoints del circuito (cruce exacto entre los postes interior y exterior) y Cronómetro de Vuelta
+        const wpIdx = this.activeGate;
+        const wp = RC_TRACK_WPS[wpIdx];
+        const gx = RC_EDGE_IN_X[wpIdx] - wp.x;
+        const gz = RC_EDGE_IN_Z[wpIdx] - wp.z;
+        const gHalfW = Math.hypot(gx, gz) || (trk.trackHalfW || 5.5);
+        const gNx = gx / gHalfW, gNz = gz / gHalfW;
+        const gTx = gNz, gTz = -gNx;
+        const d0  = (prevX - wp.x) * gTx + (prevZ - wp.z) * gTz;
+        const d1  = (this.px - wp.x) * gTx + (this.pz - wp.z) * gTz;
+        const lat = (this.px - wp.x) * gNx + (this.pz - wp.z) * gNz;
+        const crossedGate = ((d0 <= 0.0 && d1 >= 0.0) || (d0 >= 0.0 && d1 <= 0.0) || Math.abs(d1) <= 1.1) && Math.abs(d1 - d0) < 12.0;
+        if (crossedGate && Math.abs(lat) <= gHalfW + 0.65) {
           this.activeGate = (this.activeGate + 1) % RC_TRACK_WPS.length;
           if (this.activeGate === 1) {
             // Cruzó el Pórtico de Meta (WP 1)
@@ -9234,13 +9322,19 @@
         this.spd = Math.abs(this.uFwd);
         this.totalDistKm += (this.spd * dt) / 1000.0;
 
+        const prevX = this.px, prevZ = this.pz;
         this.px = Math.max(-36.0, Math.min(36.0, this.px + this.vx * dt));
         this.pz = Math.max(-24.0, Math.min(32.0, this.pz + this.vz * dt));
         this.updateBasis();
 
-        // 4. Paso por las 10 Puertas Numeradas de Trial
+        // 4. Paso exacto entre los 2 banderines (+/-1.65m) de las 10 Puertas Numeradas de Trial
         const g = CRAWLER_GATES[this.activeGate];
-        if (Math.hypot(this.px - g.x, this.pz - g.z) < 2.35) {
+        const gSin = Math.sin(g.yaw), gCos = Math.cos(g.yaw);
+        const d0  = (prevX - g.x) * gSin + (prevZ - g.z) * gCos;
+        const d1  = (this.px - g.x) * gSin + (this.pz - g.z) * gCos;
+        const lat = (this.px - g.x) * gCos - (this.pz - g.z) * gSin;
+        const crossedGate = ((d0 <= 0.0 && d1 >= 0.0) || (d0 >= 0.0 && d1 <= 0.0) || Math.abs(d1) <= 0.50) && Math.abs(d1 - d0) < 6.0;
+        if (crossedGate && Math.abs(lat) <= 1.70) {
           this.activeGate = (this.activeGate + 1) % CRAWLER_GATES.length;
           if (this.activeGate === 0) {
             this.lapCount++;
