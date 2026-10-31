@@ -2848,55 +2848,7 @@
     const GATE_SORT_ORD = new Uint8Array(16);
     const GATE_SORT_CZ  = new Float32Array(16);
 
-    // Dibuja una columna vertical volumétrica 3D de un Gate (frente/lateral con iluminación flat-shaded RGB565)
-    function draw3DGatePillar(cx, cz, yBot, yTop, radN, radT, nx, nz, tx, tz, colMain, colDark, projPoint320) {
-      const fLx = cx - nx * radN - tx * radT, fLz = cz - nz * radN - tz * radT;
-      const fRx = cx + nx * radN - tx * radT, fRz = cz + nz * radN - tz * radT;
-      const bLx = cx - nx * radN + tx * radT, bLz = cz - nz * radN + tz * radT;
-      const bRx = cx + nx * radN + tx * radT, bRz = cz + nz * radN + tz * radT;
-
-      const pfL0 = projPoint320(fLx, yBot, fLz), pfR0 = projPoint320(fRx, yBot, fRz);
-      const pfL1 = projPoint320(fLx, yTop, fLz), pfR1 = projPoint320(fRx, yTop, fRz);
-      const pbL0 = projPoint320(bLx, yBot, bLz), pbR0 = projPoint320(bRx, yBot, bRz);
-      const pbL1 = projPoint320(bLx, yTop, bLz), pbR1 = projPoint320(bRx, yTop, bRz);
-      if (!pfL0 || !pfR0 || !pfL1 || !pfR1 || !pbL0 || !pbR0 || !pbL1 || !pbR1) return;
-
-      // Caras laterales (profundidad 3D) y cara frontal/trasera principal
-      fillQuad320(pfL0, pbL0, pbL1, pfL1, colDark);
-      fillQuad320(pfR0, pbR0, pbR1, pfR1, colDark);
-      if (pfL0.cz <= pbL0.cz) {
-        fillQuad320(pbL0, pbR0, pbR1, pbL1, colDark);
-        fillQuad320(pfL0, pfR0, pfR1, pfL1, colMain);
-      } else {
-        fillQuad320(pfL0, pfR0, pfR1, pfL1, colDark);
-        fillQuad320(pbL0, pbR0, pbR1, pbL1, colMain);
-      }
-    }
-
-    // Dibuja una viga / dintel horizontal volumétrico 3D entre (xL, zL) y (xR, zR)
-    function draw3DGateBeam(xL, zL, xR, zR, yBot, yTop, radT, tx, tz, colMain, colDark, projPoint320) {
-      const fLx = xL - tx * radT, fLz = zL - tz * radT;
-      const fRx = xR - tx * radT, fRz = zR - tz * radT;
-      const bLx = xL + tx * radT, bLz = zL + tz * radT;
-      const bRx = xR + tx * radT, bRz = zR + tz * radT;
-
-      const pfL0 = projPoint320(fLx, yBot, fLz), pfR0 = projPoint320(fRx, yBot, fRz);
-      const pfL1 = projPoint320(fLx, yTop, fLz), pfR1 = projPoint320(fRx, yTop, fRz);
-      const pbL0 = projPoint320(bLx, yBot, bLz), pbR0 = projPoint320(bRx, yBot, bRz);
-      const pbL1 = projPoint320(bLx, yTop, bLz), pbR1 = projPoint320(bRx, yTop, bRz);
-      if (!pfL0 || !pfR0 || !pfL1 || !pfR1 || !pbL0 || !pbR0 || !pbL1 || !pbR1) return;
-
-      // Cara inferior/superior del dintel (visible al pasar por debajo o en dive) y cara frontal
-      fillQuad320(pfL0, pfR0, pbR0, pbL0, colDark);
-      fillQuad320(pfL1, pfR1, pbR1, pbL1, colMain);
-      if (pfL0.cz <= pbL0.cz) {
-        fillQuad320(pfL0, pfR0, pfR1, pfL1, colMain);
-      } else {
-        fillQuad320(pbL0, pbR0, pbR1, pbL1, colMain);
-      }
-    }
-
-    // Renderiza el camino de puntos Spline (Suelo + Guía Aérea 3D) y los 6 Tipos de Gates 3D Volumétricos del circuito activo
+    // Renderiza el camino de puntos Spline (Suelo + Guía Aérea 3D) y los 6 Tipos de Gates 3D en líneas limpias (wireframe 3D)
     function renderCircuitGates(projLine, activeGate, projPoint320 = null) {
       if (isFreeFlightNoGates()) return;
 
@@ -2980,23 +2932,14 @@
         GATE_SORT_CZ[j + 1]  = kCz;
       }
 
-      const COL_ACT_L  = rgb565(56, 245, 110);
-      const COL_ACT_D  = rgb565(24, 152, 62);
-      const COL_NXT_L  = rgb565(255, 224, 52);
-      const COL_NXT_D  = rgb565(178, 142, 24);
-      const COL_BASE_L = circuit.lineCol565;
-      const COL_BASE_D = COL_BASE_L - ((COL_BASE_L >> 2) & 0x39E7);
-      const COL_WHITE  = rgb565(242, 246, 252);
-
-      // 3. Renderizar cada Gate en 3D Sólido + Marco Luminoso según su tipo ('arch', 'flag_L', 'flag_R', 'split_lr', 'over_under', 'dive_cube', 'diamond')
+      // 3. Renderizar cada Gate en líneas limpias 3D (sin polígonos gruesos) según su tipo ('arch', 'flag_L', 'flag_R', 'split_lr', 'over_under', 'dive_cube', 'diamond')
       for (let k = 0; k < visCount; k++) {
         const i = GATE_SORT_ORD[k];
         const g = gates[i];
         const isAct  = (i === activeGate);
         const isNext = (i === (activeGate + 1) % nGates);
         const col    = isAct ? 3 : (isNext ? 2 : baseCol);
-        const colMain = isAct ? COL_ACT_L : (isNext ? COL_NXT_L : COL_BASE_L);
-        const colDark = isAct ? COL_ACT_D : (isNext ? COL_NXT_D : COL_BASE_D);
+        const colAcc = isAct ? 2 : (isNext ? 3 : 2);
 
         const hw = g.w * 0.5, hh = g.h * 0.5;
         const gFloor = getTerrainHeightMeters(g.x, g.z);
@@ -3010,133 +2953,149 @@
         const czGate = ptGate ? ptGate.cz : GATE_SORT_CZ[k];
         activeObjCzQ4 = Math.max(1, Math.min(65534, Math.round(czGate * 16.0) - 28));
 
-        const radN = Math.max(0.42, g.w * 0.055);
-        const radT = Math.max(0.50, g.w * 0.068);
-        const beamH = Math.max(0.65, g.h * 0.11);
+        // Profundidad sutil en líneas para dar efecto 3D limpio sin verse tosco
+        const d3d = Math.max(0.85, g.w * 0.08);
+        const txD = g.tx * d3d, tzD = g.tz * d3d;
         const gType = g.type || 'arch';
 
-        if (projPoint320 && czGate < 460.0) {
-          if (gType === 'flag_L' || gType === 'flag_R') {
-            // GATE LATERAL / BANDERA SLALOM 3D (Mástil 3D en un costado + Vela Aerodinámica 3D + Poste Guía opuesto)
-            const side = (gType === 'flag_L') ? -1 : 1;
-            const px = g.x + g.nx * side * hw * 0.82;
-            const pz = g.z + g.nz * side * hw * 0.82;
-            const flagTipX = g.x - g.nx * side * hw * 0.28;
-            const flagTipZ = g.z - g.nz * side * hw * 0.28;
-            const flagTopY = yTop + hh * 0.32;
+        if (gType === 'flag_L' || gType === 'flag_R') {
+          // 1. GATE LATERAL / BANDERA SLALOM EN LÍNEAS 3D (Mástil lateral alto con bandera triangular + poste marcador opuesto)
+          const side = (gType === 'flag_L') ? -1 : 1;
+          const px = g.x + g.nx * side * hw * 0.85;
+          const pz = g.z + g.nz * side * hw * 0.85;
+          const ox = g.x - g.nx * side * hw * 0.85;
+          const oz = g.z - g.nz * side * hw * 0.85;
+          const flagTipX = g.x - g.nx * side * hw * 0.22 + txD * 1.2;
+          const flagTipZ = g.z - g.nz * side * hw * 0.22 + tzD * 1.2;
+          const flagTopY = yTop + hh * 0.35;
 
-            // Columna principal del mástil 3D desde el suelo
-            draw3DGatePillar(px, pz, gFloor, flagTopY, radN * 1.15, radT * 1.15, g.nx, g.nz, g.tx, g.tz, colMain, colDark, projPoint320);
+          // Mástil doble en línea fina 3D
+          projLine(px - txD * 0.5, gFloor, pz - tzD * 0.5, px - txD * 0.5, flagTopY, pz - tzD * 0.5, 0, col);
+          projLine(px + txD * 0.5, gFloor, pz + tzD * 0.5, px + txD * 0.5, flagTopY, pz + tzD * 0.5, 0, col);
+          // Vela / Bandera triangular en líneas limpias
+          projLine(px, flagTopY, pz, flagTipX, flagTopY - hh * 0.22, flagTipZ, 0, colAcc);
+          projLine(flagTipX, flagTopY - hh * 0.22, flagTipZ, px, gCenterY - hh * 0.10, pz, 0, colAcc);
+          projLine(px, gCenterY + hh * 0.35, pz, flagTipX, flagTopY - hh * 0.22, flagTipZ, 0, col);
+          // Mojón corto opuesto + línea de umbral en la base
+          projLine(ox, gFloor, oz, ox, gFloor + (yTop - gFloor) * 0.35, oz, 0, colAcc);
+          projLine(px, yBot, pz, ox, yBot, oz, 0, col);
 
-            // Vela / Bandera 3D extendida hacia el centro del carril de paso
-            const pM0 = projPoint320(px, yBot + hh * 0.15, pz);
-            const pM1 = projPoint320(px, flagTopY, pz);
-            const pT1 = projPoint320(flagTipX, flagTopY - hh * 0.18, flagTipZ);
-            const pT0 = projPoint320(flagTipX, gCenterY, flagTipZ);
-            if (pM0 && pM1 && pT1 && pT0) {
-              fillQuad320(pM0, pM1, pT1, pT0, colMain);
-              fillTriangle320(pM1, pT1, projPoint320(px, flagTopY - hh * 0.45, pz), COL_WHITE);
-            }
-
-            // Poste marcador bajo en el borde opuesto del carril lateral
-            const ox = g.x - g.nx * side * hw * 0.85;
-            const oz = g.z - g.nz * side * hw * 0.85;
-            draw3DGatePillar(ox, oz, gFloor, gCenterY, radN * 0.70, radT * 0.70, g.nx, g.nz, g.tx, g.tz, colDark, colDark, projPoint320);
-            projLine(px, flagTopY, pz, flagTipX, flagTopY - hh * 0.18, flagTipZ, 0, isAct ? 2 : col);
-            projLine(flagTipX, flagTopY - hh * 0.18, flagTipZ, flagTipX, gCenterY, flagTipZ, 0, isAct ? 2 : col);
-            projLine(px, gCenterY, pz, ox, gCenterY, oz, 1, isAct ? 2 : col);
-          } else if (gType === 'split_lr') {
-            // GATE DOBLE LATERAL IZQ/DER 3D (3 Columnas Volumétricas: Izquierda, Central Divisoria y Derecha)
-            draw3DGatePillar(lx,  lz,  gFloor, yTop, radN, radT, g.nx, g.nz, g.tx, g.tz, colMain, colDark, projPoint320);
-            draw3DGatePillar(g.x, g.z, yBot,   yTop, radN * 1.15, radT * 1.15, g.nx, g.nz, g.tx, g.tz, COL_WHITE, colDark, projPoint320);
-            draw3DGatePillar(rx,  rz,  gFloor, yTop, radN, radT, g.nx, g.nz, g.tx, g.tz, colMain, colDark, projPoint320);
-            draw3DGateBeam(lx, lz, rx, rz, yTop - beamH, yTop + beamH * 0.4, radT, g.tx, g.tz, colMain, colDark, projPoint320);
-            draw3DGateBeam(lx, lz, rx, rz, yBot - beamH * 0.4, yBot + beamH * 0.5, radT * 0.85, g.tx, g.tz, colDark, colDark, projPoint320);
-            projLine(g.x, yBot, g.z, g.x, yTop, g.z, 0, isAct ? 2 : col);
-          } else if (gType === 'over_under') {
-            // GATE DOBLE PISO ARRIBA/ABAJO 3D (2 Ventanas superpuestas con viga 3D intermedia)
-            const yMid = (yBot + yTop) * 0.5;
-            draw3DGatePillar(lx, lz, gFloor, yTop, radN, radT, g.nx, g.nz, g.tx, g.tz, colMain, colDark, projPoint320);
-            draw3DGatePillar(rx, rz, gFloor, yTop, radN, radT, g.nx, g.nz, g.tx, g.tz, colMain, colDark, projPoint320);
-            draw3DGateBeam(lx, lz, rx, rz, yTop - beamH * 0.6, yTop + beamH * 0.4, radT, g.tx, g.tz, colMain, colDark, projPoint320);
-            draw3DGateBeam(lx, lz, rx, rz, yMid - beamH * 0.5, yMid + beamH * 0.5, radT * 1.1, g.tx, g.tz, COL_WHITE, colDark, projPoint320);
-            draw3DGateBeam(lx, lz, rx, rz, yBot - beamH * 0.4, yBot + beamH * 0.4, radT * 0.85, g.tx, g.tz, colDark, colDark, projPoint320);
-            projLine(lx, yMid, lz, rx, yMid, rz, 0, isAct ? 2 : col);
-          } else if (gType === 'dive_cube') {
-            // CUBO / TÚNEL AÉREO 3D (Caja volumétrica profunda con entrada y salida inclinadas según la pendiente 3D)
-            const halfD = Math.max(2.6, g.w * 0.34);
-            const dyD   = halfD * (g.pitchSlope || 0.0);
-            const fx0 = g.x - g.tx * halfD, fz0 = g.z - g.tz * halfD;
-            const bx0 = g.x + g.tx * halfD, bz0 = g.z + g.tz * halfD;
-
-            const fL_B = projPoint320(fx0 - g.nx * hw, yBot - dyD, fz0 - g.nz * hw);
-            const fR_B = projPoint320(fx0 + g.nx * hw, yBot - dyD, fz0 + g.nz * hw);
-            const fR_T = projPoint320(fx0 + g.nx * hw, yTop - dyD, fz0 + g.nz * hw);
-            const fL_T = projPoint320(fx0 - g.nx * hw, yTop - dyD, fz0 - g.nz * hw);
-
-            const bL_B = projPoint320(bx0 - g.nx * hw, yBot + dyD, bz0 - g.nz * hw);
-            const bR_B = projPoint320(bx0 + g.nx * hw, yBot + dyD, bz0 + g.nz * hw);
-            const bR_T = projPoint320(bx0 + g.nx * hw, yTop + dyD, bz0 + g.nz * hw);
-            const bL_T = projPoint320(bx0 - g.nx * hw, yTop + dyD, bz0 - g.nz * hw);
-
-            // Marcos 3D de entrada y salida + 4 aristas longitudinales del cubo
-            draw3DGatePillar(fx0 - g.nx * hw, fz0 - g.nz * hw, yBot - dyD, yTop - dyD, radN, radN, g.nx, g.nz, g.tx, g.tz, colMain, colDark, projPoint320);
-            draw3DGatePillar(fx0 + g.nx * hw, fz0 + g.nz * hw, yBot - dyD, yTop - dyD, radN, radN, g.nx, g.nz, g.tx, g.tz, colMain, colDark, projPoint320);
-            draw3DGatePillar(bx0 - g.nx * hw, bz0 - g.nz * hw, yBot + dyD, yTop + dyD, radN, radN, g.nx, g.nz, g.tx, g.tz, colDark, colDark, projPoint320);
-            draw3DGatePillar(bx0 + g.nx * hw, bz0 + g.nz * hw, yBot + dyD, yTop + dyD, radN, radN, g.nx, g.nz, g.tx, g.tz, colDark, colDark, projPoint320);
-
-            if (fL_B && fR_B && fR_T && fL_T && bL_B && bR_B && bR_T && bL_T) {
-              // Bandas laterales/superiores semihuecas del túnel 3D
-              projLine(fx0 - g.nx * hw, yTop - dyD, fz0 - g.nz * hw, bx0 - g.nx * hw, yTop + dyD, bz0 - g.nz * hw, 0, isAct ? 2 : col);
-              projLine(fx0 + g.nx * hw, yTop - dyD, fz0 + g.nz * hw, bx0 + g.nx * hw, yTop + dyD, bz0 + g.nz * hw, 0, isAct ? 2 : col);
-              projLine(fx0 - g.nx * hw, yBot - dyD, fz0 - g.nz * hw, bx0 - g.nx * hw, yBot + dyD, bz0 - g.nz * hw, 0, col);
-              projLine(fx0 + g.nx * hw, yBot - dyD, fz0 + g.nz * hw, bx0 + g.nx * hw, yBot + dyD, bz0 + g.nz * hw, 0, col);
-              projLine(bx0 - g.nx * hw, yTop + dyD, bz0 - g.nz * hw, bx0 + g.nx * hw, yTop + dyD, bz0 + g.nz * hw, 0, isAct ? 2 : col);
-              projLine(bx0 - g.nx * hw, yBot + dyD, bz0 - g.nz * hw, bx0 + g.nx * hw, yBot + dyD, bz0 + g.nz * hw, 0, col);
-            }
-          } else if (gType === 'diamond') {
-            // ANILLO DIAMANTE / OCTÁGONO AÉREO 3D (Portal girado 45 grados sostenido por torres laterales)
-            const rOutW = hw * 1.08, rOutH = hh * 1.12;
-            const rInW  = hw * 0.78, rInH  = hh * 0.80;
-            const pTopO = projPoint320(g.x, gCenterY + rOutH, g.z);
-            const pBotO = projPoint320(g.x, gCenterY - rOutH, g.z);
-            const pLftO = projPoint320(g.x - g.nx * rOutW, gCenterY, g.z - g.nz * rOutW);
-            const pRgtO = projPoint320(g.x + g.nx * rOutW, gCenterY, g.z + g.nz * rOutW);
-
-            const pTopI = projPoint320(g.x, gCenterY + rInH, g.z);
-            const pBotI = projPoint320(g.x, gCenterY - rInH, g.z);
-            const pLftI = projPoint320(g.x - g.nx * rInW, gCenterY, g.z - g.nz * rInW);
-            const pRgtI = projPoint320(g.x + g.nx * rInW, gCenterY, g.z + g.nz * rInW);
-
-            // Postes de soporte hasta el suelo desde los vértices laterales del diamante
-            draw3DGatePillar(g.x - g.nx * rOutW, g.z - g.nz * rOutW, gFloor, gCenterY, radN * 0.75, radT * 0.75, g.nx, g.nz, g.tx, g.tz, colDark, colDark, projPoint320);
-            draw3DGatePillar(g.x + g.nx * rOutW, g.z + g.nz * rOutW, gFloor, gCenterY, radN * 0.75, radT * 0.75, g.nx, g.nz, g.tx, g.tz, colDark, colDark, projPoint320);
-
-            if (pTopO && pBotO && pLftO && pRgtO && pTopI && pBotI && pLftI && pRgtI) {
-              fillQuad320(pTopO, pRgtO, pRgtI, pTopI, colMain);
-              fillQuad320(pTopO, pLftO, pLftI, pTopI, colMain);
-              fillQuad320(pBotO, pRgtO, pRgtI, pBotI, colDark);
-              fillQuad320(pBotO, pLftO, pLftI, pBotI, colDark);
-            }
-            projLine(g.x, gCenterY + rInH, g.z, g.x + g.nx * rInW, gCenterY, g.z + g.nz * rInW, 0, isAct ? 2 : col);
-            projLine(g.x, gCenterY + rInH, g.z, g.x - g.nx * rInW, gCenterY, g.z - g.nz * rInW, 0, isAct ? 2 : col);
-            projLine(g.x, gCenterY - rInH, g.z, g.x + g.nx * rInW, gCenterY, g.z + g.nz * rInW, 0, col);
-            projLine(g.x, gCenterY - rInH, g.z, g.x - g.nx * rInW, gCenterY, g.z - g.nz * rInW, 0, col);
-          } else {
-            // ARCO 3D CLÁSICO / PÓRTICO DE CARRERA (Columnas 3D + Dintel Superior 3D + Acento de Meta en Gate 0)
-            draw3DGatePillar(lx, lz, gFloor, yTop, radN, radT, g.nx, g.nz, g.tx, g.tz, colMain, colDark, projPoint320);
-            draw3DGatePillar(rx, rz, gFloor, yTop, radN, radT, g.nx, g.nz, g.tx, g.tz, colMain, colDark, projPoint320);
-            draw3DGateBeam(lx, lz, rx, rz, yTop - beamH * 0.5, yTop + beamH * 0.5, radT, g.tx, g.tz, i === 0 ? COL_WHITE : colMain, colDark, projPoint320);
-            draw3DGateBeam(lx, lz, rx, rz, yBot - beamH * 0.35, yBot + beamH * 0.35, radT * 0.8, g.tx, g.tz, colDark, colDark, projPoint320);
+        } else if (gType === 'split_lr') {
+          // 2. GATE DOBLE LATERAL IZQ/DER EN LÍNEAS 3D (2 portales gemelos con pilar divisor central)
+          const yPeak = yTop + hh * 0.22;
+          // Marco frontal
+          projLine(lx - txD, gFloor, lz - tzD, lx - txD, yTop, lz - tzD, 0, col);
+          projLine(g.x - txD, gFloor, g.z - tzD, g.x - txD, yPeak, g.z - tzD, 0, colAcc);
+          projLine(rx - txD, gFloor, rz - tzD, rx - txD, yTop, rz - tzD, 0, col);
+          projLine(lx - txD, yTop, lz - tzD, g.x - txD, yPeak, g.z - tzD, 0, colAcc);
+          projLine(g.x - txD, yPeak, g.z - tzD, rx - txD, yTop, rz - tzD, 0, colAcc);
+          projLine(lx - txD, yBot, lz - tzD, rx - txD, yBot, rz - tzD, 0, col);
+          // Marco trasero 3D y uniones en vértices
+          if (czGate < 340.0) {
+            projLine(lx + txD, gFloor, lz + tzD, lx + txD, yTop, lz + tzD, 0, col);
+            projLine(g.x + txD, yBot, g.z + tzD, g.x + txD, yPeak, g.z + tzD, 0, col);
+            projLine(rx + txD, gFloor, rz + tzD, rx + txD, yTop, rz + tzD, 0, col);
+            projLine(lx + txD, yTop, lz + tzD, g.x + txD, yPeak, g.z + tzD, 0, col);
+            projLine(g.x + txD, yPeak, g.z + tzD, rx + txD, yTop, rz + tzD, 0, col);
+            projLine(lx - txD, yTop, lz - tzD, lx + txD, yTop, lz + tzD, 0, colAcc);
+            projLine(g.x - txD, yPeak, g.z - tzD, g.x + txD, yPeak, g.z + tzD, 0, colAcc);
+            projLine(rx - txD, yTop, rz - tzD, rx + txD, yTop, rz + tzD, 0, colAcc);
           }
-        }
 
-        // Marco luminoso LED interior de alta visibilidad (para distancias lejanas y definición de bordes)
-        if (gType !== 'diamond' && gType !== 'flag_L' && gType !== 'flag_R') {
-          projLine(lx, gFloor, lz, lx, yTop, lz, 0, col);
-          projLine(rx, gFloor, rz, rx, yTop, rz, 0, col);
-          projLine(lx, yTop,   lz, rx, yTop, rz, 0, isAct ? 2 : col);
-          projLine(lx, yBot,   lz, rx, yBot, rz, 0, col);
+        } else if (gType === 'over_under') {
+          // 3. GATE DOBLE PISO ARRIBA/ABAJO EN LÍNEAS 3D (Ventana inferior + ventana superior aérea)
+          const yMid  = (yBot + yTop) * 0.5;
+          const yHigh = yTop + hh * 0.32;
+          // Marco frontal de dos pisos
+          projLine(lx - txD, gFloor, lz - tzD, lx - txD, yHigh, lz - tzD, 0, col);
+          projLine(rx - txD, gFloor, rz - tzD, rx - txD, yHigh, rz - tzD, 0, col);
+          projLine(lx - txD, yHigh, lz - tzD, rx - txD, yHigh, rz - tzD, 0, colAcc);
+          projLine(lx - txD, yMid,  lz - tzD, rx - txD, yMid,  rz - tzD, 0, colAcc);
+          projLine(lx - txD, yBot,  lz - tzD, rx - txD, yBot,  rz - tzD, 0, col);
+          // Marco trasero 3D + conectores de profundidad
+          if (czGate < 340.0) {
+            projLine(lx + txD, gFloor, lz + tzD, lx + txD, yHigh, lz + tzD, 0, col);
+            projLine(rx + txD, gFloor, rz + tzD, rx + txD, yHigh, rz + tzD, 0, col);
+            projLine(lx + txD, yHigh, lz + tzD, rx + txD, yHigh, rz + tzD, 0, col);
+            projLine(lx + txD, yMid,  lz + tzD, rx + txD, yMid,  rz + tzD, 0, col);
+            projLine(lx - txD, yHigh, lz - tzD, lx + txD, yHigh, lz + tzD, 0, colAcc);
+            projLine(rx - txD, yHigh, rz - tzD, rx + txD, yHigh, rz + tzD, 0, colAcc);
+            projLine(lx - txD, yMid,  lz - tzD, lx + txD, yMid,  lz + tzD, 0, colAcc);
+            projLine(rx - txD, yMid,  rz - tzD, rx + txD, yMid,  rz + tzD, 0, colAcc);
+          }
+
+        } else if (gType === 'dive_cube') {
+          // 4. CUBO / TÚNEL AÉREO 3D EN WIREFRAME (Jaula espacial de dos anillos unidos por 4 aristas longitudinales)
+          const halfD = Math.max(2.6, g.w * 0.34);
+          const dyD   = halfD * (g.pitchSlope || 0.0);
+          const fx0 = g.x - g.tx * halfD, fz0 = g.z - g.tz * halfD;
+          const bx0 = g.x + g.tx * halfD, bz0 = g.z + g.tz * halfD;
+          const fLx = fx0 - g.nx * hw, fLz = fz0 - g.nz * hw;
+          const fRx = fx0 + g.nx * hw, fRz = fz0 + g.nz * hw;
+          const bLx = bx0 - g.nx * hw, bLz = bz0 - g.nz * hw;
+          const bRx = bx0 + g.nx * hw, bRz = bz0 + g.nz * hw;
+
+          // Anillo frontal de entrada
+          projLine(fLx, gFloor, fLz, fLx, yTop - dyD, fLz, 0, col);
+          projLine(fRx, gFloor, fRz, fRx, yTop - dyD, fRz, 0, col);
+          projLine(fLx, yTop - dyD, fLz, fRx, yTop - dyD, fRz, 0, colAcc);
+          projLine(fLx, yBot - dyD, fLz, fRx, yBot - dyD, fRz, 0, col);
+          // Anillo trasero de salida
+          projLine(bLx, gFloor, bLz, bLx, yTop + dyD, bLz, 0, col);
+          projLine(bRx, gFloor, bRz, bRx, yTop + dyD, bRz, 0, col);
+          projLine(bLx, yTop + dyD, bLz, bRx, yTop + dyD, bRz, 0, colAcc);
+          projLine(bLx, yBot + dyD, bLz, bRx, yBot + dyD, bRz, 0, col);
+          // 4 Largueros longitudinales que forman el cubo 3D
+          projLine(fLx, yTop - dyD, fLz, bLx, yTop + dyD, bLz, 0, colAcc);
+          projLine(fRx, yTop - dyD, fRz, bRx, yTop + dyD, bRz, 0, colAcc);
+          projLine(fLx, yBot - dyD, fLz, bLx, yBot + dyD, bLz, 0, col);
+          projLine(fRx, yBot - dyD, fRz, bRx, yBot + dyD, bRz, 0, col);
+
+        } else if (gType === 'diamond') {
+          // 5. PORTAL DIAMANTE / ROMBO AÉREO 3D EN LÍNEAS (Doble anillo en rombo 3D con postes laterales)
+          const rW = hw * 0.96, rH = hh * 1.02;
+          const dLx = g.x - g.nx * rW, dLz = g.z - g.nz * rW;
+          const dRx = g.x + g.nx * rW, dRz = g.z + g.nz * rW;
+          const dTopY = gCenterY + rH;
+          const dBotY = Math.max(gFloor + 1.0, gCenterY - rH);
+
+          // Soportes verticales laterales hasta la mitad del diamante
+          projLine(dLx, gFloor, dLz, dLx, gCenterY, dLz, 0, col);
+          projLine(dRx, gFloor, dRz, dRx, gCenterY, dRz, 0, col);
+          // Rombo frontal (4 aristas)
+          projLine(g.x - txD, dTopY, g.z - tzD, dRx - txD, gCenterY, dRz - tzD, 0, colAcc);
+          projLine(g.x - txD, dTopY, g.z - tzD, dLx - txD, gCenterY, dLz - tzD, 0, colAcc);
+          projLine(g.x - txD, dBotY, g.z - tzD, dRx - txD, gCenterY, dRz - tzD, 0, col);
+          projLine(g.x - txD, dBotY, g.z - tzD, dLx - txD, gCenterY, dLz - tzD, 0, col);
+          // Rombo trasero 3D + 4 conectores en los vértices
+          if (czGate < 340.0) {
+            projLine(g.x + txD, dTopY, g.z + tzD, dRx + txD, gCenterY, dRz + tzD, 0, col);
+            projLine(g.x + txD, dTopY, g.z + tzD, dLx + txD, gCenterY, dLz + tzD, 0, col);
+            projLine(g.x + txD, dBotY, g.z + tzD, dRx + txD, gCenterY, dRz + tzD, 0, col);
+            projLine(g.x + txD, dBotY, g.z + tzD, dLx + txD, gCenterY, dLz + tzD, 0, col);
+            projLine(g.x - txD, dTopY, g.z - tzD, g.x + txD, dTopY, g.z + tzD, 0, colAcc);
+            projLine(g.x - txD, dBotY, g.z - tzD, g.x + txD, dBotY, g.z + tzD, 0, colAcc);
+            projLine(dLx - txD, gCenterY, dLz - tzD, dLx + txD, gCenterY, dLz + tzD, 0, colAcc);
+            projLine(dRx - txD, gCenterY, dRz - tzD, dRx + txD, gCenterY, dRz + tzD, 0, colAcc);
+          }
+
+        } else {
+          // 6. ARCO CLÁSICO EN LÍNEAS 3D (Marco frontal + marco trasero sutil conectado en las esquinas)
+          projLine(lx - txD, gFloor, lz - tzD, lx - txD, yTop, lz - tzD, 0, col);
+          projLine(rx - txD, gFloor, rz - tzD, rx - txD, yTop, rz - tzD, 0, col);
+          projLine(lx - txD, yTop,   lz - tzD, rx - txD, yTop, rz - tzD, 0, colAcc);
+          projLine(lx - txD, yBot,   lz - tzD, rx - txD, yBot, rz - tzD, 0, col);
+          if (czGate < 340.0) {
+            projLine(lx + txD, gFloor, lz + tzD, lx + txD, yTop, lz + tzD, 0, col);
+            projLine(rx + txD, gFloor, rz + tzD, rx + txD, yTop, rz + tzD, 0, col);
+            projLine(lx + txD, yTop,   lz + tzD, rx + txD, yTop, rz + tzD, 0, col);
+            projLine(lx - txD, yTop,   lz - tzD, lx + txD, yTop, lz + tzD, 0, colAcc);
+            projLine(rx - txD, yTop,   rz - tzD, rx + txD, yTop, rz + tzD, 0, colAcc);
+            // Esquinas diagonales sutiles estilo Air-Gate
+            const ch = hw * 0.25;
+            projLine(lx - txD, yTop - ch, lz - tzD, lx + g.nx * ch - txD, yTop, lz + g.nz * ch - tzD, 0, colAcc);
+            projLine(rx - txD, yTop - ch, rz - tzD, rx - g.nx * ch - txD, yTop, rz - g.nz * ch - tzD, 0, colAcc);
+          }
         }
 
         if (isAct) {
@@ -3148,8 +3107,9 @@
             projLine(arrowX, yTop + 2.2, arrowZ, arrowX + g.nx * side * 3.6, yTop + 4.8, arrowZ + g.nz * side * 3.6, 0, 2);
             projLine(arrowX, yTop + 2.2, arrowZ, arrowX + g.nx * side * 3.6, yTop - 0.4, arrowZ + g.nz * side * 3.6, 0, 2);
           } else {
-            projLine(g.x, yTop + 1.8, g.z, g.x - g.nx * 3.8, yTop + 5.0, g.z - g.nz * 3.8, 0, 2);
-            projLine(g.x, yTop + 1.8, g.z, g.x + g.nx * 3.8, yTop + 5.0, g.z + g.nz * 3.8, 0, 2);
+            const yChev = (gType === 'over_under') ? (yTop + hh * 0.32) : yTop;
+            projLine(g.x, yChev + 1.8, g.z, g.x - g.nx * 3.8, yChev + 5.0, g.z - g.nz * 3.8, 0, 2);
+            projLine(g.x, yChev + 1.8, g.z, g.x + g.nx * 3.8, yChev + 5.0, g.z + g.nz * 3.8, 0, 2);
           }
         }
       }
