@@ -129,7 +129,9 @@
 
     .top-hw-pills {
       display: flex;
-      gap: 1.2cqw;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 0.8cqw;
     }
 
     .pill-btn {
@@ -137,11 +139,12 @@
       color: #e4e8f0;
       border: 1px solid #434854;
       border-radius: 999px;
-      padding: 0.45dvh 2.2cqw;
+      padding: 0.4dvh 1.5cqw;
       font-family: inherit;
-      font-size: clamp(0.6rem, 2cqw, 0.88rem);
+      font-size: clamp(0.55rem, 1.75cqw, 0.78rem);
       font-weight: 700;
-      letter-spacing: 0.3px;
+      letter-spacing: 0.2px;
+      white-space: nowrap;
       cursor: pointer;
       transition: background 0.12s, border-color 0.12s;
     }
@@ -426,6 +429,200 @@
       bottom: 0; left: 32%;
       border-color: var(--btn-b);
     }
+
+    /* Modal Editor Visual de Mapas Satelital (Solo Herramienta Web de Diseño) */
+    .map-editor-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      background: rgba(10, 12, 16, 0.92);
+      display: none;
+      flex-direction: column;
+      padding: 10px;
+      gap: 8px;
+      color: #f0f4f8;
+      font-size: 12px;
+    }
+    .map-editor-modal.open {
+      display: flex;
+    }
+    .me-header {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      background: #1b1e24;
+      border: 1px solid #353b47;
+      border-radius: 10px;
+      padding: 8px 12px;
+    }
+    .me-title {
+      font-weight: 800;
+      font-size: 14px;
+      color: #ffcb3b;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .me-body {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 300px 1fr;
+      gap: 10px;
+    }
+    @media (max-width: 820px) {
+      .me-body {
+        grid-template-columns: 1fr;
+        grid-template-rows: 240px 1fr;
+      }
+    }
+    .me-sidebar {
+      background: #1b1e24;
+      border: 1px solid #353b47;
+      border-radius: 10px;
+      padding: 10px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .me-canvas-wrap {
+      background: #0d0f13;
+      border: 1px solid #353b47;
+      border-radius: 10px;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #mapEditorCanvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      cursor: crosshair;
+      touch-action: none;
+    }
+    .me-hud-overlay {
+      position: absolute;
+      bottom: 8px;
+      left: 8px;
+      right: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      pointer-events: none;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .me-hud-badge {
+      background: rgba(18, 21, 27, 0.88);
+      border: 1px solid #414857;
+      border-radius: 6px;
+      padding: 4px 8px;
+      font-family: monospace;
+      font-size: 11px;
+      color: #a8e6ff;
+      pointer-events: auto;
+    }
+    .me-card {
+      background: #232730;
+      border: 1px solid #363c49;
+      border-radius: 8px;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .me-card h4 {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #98a4b8;
+      margin-bottom: 2px;
+    }
+    .me-tool-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 5px;
+    }
+    .me-btn {
+      background: #2d323d;
+      color: #e4e8f0;
+      border: 1px solid #454c5c;
+      border-radius: 6px;
+      padding: 6px 8px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+    }
+    .me-btn:hover {
+      background: #383e4c;
+    }
+    .me-btn.active {
+      background: #e60012;
+      border-color: #ff4d5a;
+      color: #fff;
+    }
+    .me-btn.green {
+      background: #169c46;
+      border-color: #28d164;
+      color: #fff;
+    }
+    .me-sprite-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 5px;
+    }
+    .me-sprite-item {
+      background: #191c22;
+      border: 1.5px solid #353b47;
+      border-radius: 6px;
+      padding: 4px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      cursor: pointer;
+      font-size: 10px;
+      text-align: center;
+      color: #cfd6e2;
+    }
+    .me-sprite-item.active {
+      border-color: #ffcb3b;
+      background: #2c281c;
+      color: #ffcb3b;
+      font-weight: 700;
+    }
+    .me-sprite-item canvas {
+      width: 32px;
+      height: 36px;
+      image-rendering: pixelated;
+    }
+    .me-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+    }
+    .me-row input[type="range"] {
+      flex: 1;
+    }
+    .me-row select, .me-row input[type="color"] {
+      background: #171a20;
+      color: #fff;
+      border: 1px solid #434957;
+      border-radius: 4px;
+      padding: 3px 5px;
+      font-size: 11px;
+    }
   </style>
 </head>
 <body>
@@ -440,6 +637,7 @@
       <div class="top-hw-pills">
         <button id="btnPathMode" class="pill-btn" title="Cambiar Línea Guía Punteada: Piso+3D / Solo Piso / Solo 3D / Ninguna">GUIA: PISO+3D</button>
         <button id="btnGateVis" class="pill-btn" title="Cambiar Gates Visibles: Actual+Siguiente / +2 / Todas / Solo Actual">GATES: ACT+NXT</button>
+        <button id="btnMapEditor" class="pill-btn" style="border-color:#f5b000;color:#ffdb6e;" title="Abrir Editor Visual Satelital de Chorobobo (Árboles, Hangares, Silos, Toldos)">🗺️ EDITOR</button>
         <button id="btnSound" class="pill-btn" title="Activar / Silenciar Sintetizador de Audio Físico I2S">🔇 AUDIO</button>
         <button id="btnBleMp" class="pill-btn" title="Multijugador Bluetooth BLE / Pestaña Local (ESP32-S3 NimBLE)">📡 BLE</button>
         <a href="hardware.html" class="pill-btn" style="text-decoration:none;display:inline-flex;align-items:center;" title="Ver Guía y Diagrama de Conexiones ESP32-S3 N16R8">PINOUT</a>
@@ -518,6 +716,133 @@
         </button>
       </div>
     </section>
+  </div>
+
+  <!-- MODAL EDITOR VISUAL SATELITAL DE CHOROBOBO (Solo herramienta de diseño en navegador) -->
+  <div id="mapEditorModal" class="map-editor-modal">
+    <div class="me-header">
+      <div class="me-title">
+        <span>🗺️ EDITOR SATELITAL CHOROBOBO (3×2 KM / 1.5×1 KM / 750×500 M)</span>
+        <span id="meStatsBadge" style="font-size:11px;color:#98a4b8;font-weight:600;"></span>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <button id="meBtnZoomIn" class="me-btn" title="Acercar Zoom">🔍 +</button>
+        <button id="meBtnZoomOut" class="me-btn" title="Alejar Zoom">🔍 −</button>
+        <button id="meBtnResetView" class="me-btn" title="Centrar Vista en Pista A.I.A">🎯 PISTA A.I.A</button>
+        <button id="meBtnExport" class="me-btn green" title="Copiar JSON / Código para pegarlo en el chat o en firmware ESP32-S3">📋 COPIAR DISEÑO</button>
+        <button id="meBtnResetDefault" class="me-btn" title="Restaurar los edificios y árboles por defecto">↺ POR DEFECTO</button>
+        <button id="meBtnClose" class="me-btn active" title="Cerrar Editor y Volar en 3D">✕ CERRAR Y VOLAR</button>
+      </div>
+    </div>
+
+    <div class="me-body">
+      <aside class="me-sidebar">
+        <!-- 1. Selección de Herramienta -->
+        <div class="me-card">
+          <h4>1. Herramienta Activa</h4>
+          <div class="me-tool-grid">
+            <button class="me-btn active" data-me-tool="tree">🌳 Plantar Sprite</button>
+            <button class="me-btn" data-me-tool="bldg">🏠 Poner/Editar Edificio</button>
+            <button class="me-btn" data-me-tool="erase">🧹 Borrador</button>
+            <button class="me-btn" data-me-tool="teleport">🚁 Mover Aeronave</button>
+          </div>
+          <div class="me-row" style="margin-top:4px;">
+            <label><input type="checkbox" id="meChkShowGates" checked /> Ver Circuitos C1..C5</label>
+            <label><input type="checkbox" id="meChkShowRandom" checked /> Ver Random</label>
+          </div>
+        </div>
+
+        <!-- 2. Panel de Árboles / Sprites (12 Tipos) -->
+        <div id="mePanelTree" class="me-card">
+          <h4>2. Catálogo de Sprites (12 Tipos RGB565)</h4>
+          <div id="meSpriteGrid" class="me-sprite-grid"></div>
+          <div class="me-row">
+            <span>Altura: <b id="meLblTreeH">6.8m</b></span>
+            <input type="range" id="meRngTreeH" min="2.5" max="14.0" step="0.2" value="6.8" />
+          </div>
+          <div class="me-row">
+            <span>Paso Brocha: <b id="meLblBrushStep">16m</b></span>
+            <input type="range" id="meRngBrushStep" min="6" max="50" step="2" value="16" />
+          </div>
+          <div class="me-row">
+            <span>Relleno Random: <b id="meLblRandCount">180</b></span>
+            <input type="range" id="meRngRandCount" min="0" max="320" step="10" value="180" />
+          </div>
+          <div style="display:flex;gap:5px;">
+            <button id="meBtnClearCustomTrees" class="me-btn" style="flex:1;">Borrar Mis Árboles</button>
+            <button id="meBtnZeroRandom" class="me-btn" style="flex:1;">Quitar Random (0)</button>
+          </div>
+        </div>
+
+        <!-- 3. Panel de Edificios 3D Low-Poly (8 Tipos) -->
+        <div id="mePanelBldg" class="me-card" style="display:none;">
+          <h4>2. Tipo y Medidas del Edificio 3D</h4>
+          <div class="me-row">
+            <span>Tipo:</span>
+            <select id="meSelBldgKind" style="flex:1;">
+              <option value="open_canopy">Toldo / Caney Pits (Abierto)</option>
+              <option value="open_hangar">Hangar Abierto Atravesable</option>
+              <option value="standard">Galpón / Nave Estándar</option>
+              <option value="hacienda">Casa de Hacienda Colonial</option>
+              <option value="silo">Silo Cilíndrico Agrícola</option>
+              <option value="water_tower">Torre de Agua Elevada</option>
+              <option value="open_bando">Edificio Bando 2 Plantas</option>
+              <option value="bando_arch">Puente / Pórtico Elevado</option>
+            </select>
+          </div>
+          <div class="me-row">
+            <span>Ancho (W): <b id="meLblBldgW">14m</b></span>
+            <input type="range" id="meRngBldgW" min="4" max="36" step="1" value="14" />
+          </div>
+          <div class="me-row">
+            <span>Largo (D): <b id="meLblBldgD">9m</b></span>
+            <input type="range" id="meRngBldgD" min="4" max="28" step="1" value="9" />
+          </div>
+          <div class="me-row">
+            <span>Altura Pared: <b id="meLblBldgH">4.8m</b></span>
+            <input type="range" id="meRngBldgH" min="2.5" max="11.0" step="0.2" value="4.8" />
+          </div>
+          <div class="me-row">
+            <span>Altura Techo: <b id="meLblBldgRoofH">1.8m</b></span>
+            <input type="range" id="meRngBldgRoofH" min="0.6" max="4.0" step="0.2" value="1.8" />
+          </div>
+          <div class="me-row">
+            <span>Rotación: <b id="meLblBldgYaw">15°</b></span>
+            <input type="range" id="meRngBldgYaw" min="-180" max="180" step="2" value="15" />
+          </div>
+          <div class="me-row">
+            <span>Color Techo:</span>
+            <input type="color" id="meColBldgRoof" value="#b93e2c" />
+            <span>Pared:</span>
+            <input type="color" id="meColBldgWall" value="#dcdad2" />
+          </div>
+          <div style="display:flex;gap:5px;">
+            <button id="meBtnDeleteSelBldg" class="me-btn" style="flex:1;border-color:#e60012;color:#ff8088;">🗑️ Borrar Seleccionado</button>
+          </div>
+        </div>
+
+        <!-- 4. Escala Activa de Chorobobo -->
+        <div class="me-card">
+          <h4>Escala Activa de Chorobobo</h4>
+          <div style="display:flex;gap:4px;">
+            <button class="me-btn" data-me-scale="0" style="flex:1;">HD 750×500m</button>
+            <button class="me-btn" data-me-scale="5" style="flex:1;">MED 1.5×1km</button>
+            <button class="me-btn" data-me-scale="9" style="flex:1;">LR 3×2km</button>
+          </div>
+          <small style="color:#98a4b8;line-height:1.35;">
+            💡 <b>Tip:</b> Arrastra con clic izquierdo para plantar filas de árboles. Arrastra con <b>clic derecho</b> (o dos dedos) para mover el mapa, y usa la rueda para hacer Zoom.
+          </small>
+        </div>
+      </aside>
+
+      <div class="me-canvas-wrap">
+        <canvas id="mapEditorCanvas" width="1024" height="680"></canvas>
+        <div class="me-hud-overlay">
+          <div id="meCoordReadout" class="me-hud-badge">UV: (0.585, 0.365) | X: 0m, Z: 0m</div>
+          <div class="me-hud-badge">Pista A.I.A = ⭐ | Clic Izq: Aplicar | Clic Der / Alt+Arrastrar: Mover Mapa</div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -1784,15 +2109,23 @@
     const MAP_MASK_X   = 2047;
     const MAP_MASK_Z   = 1023;
     const MAP_SHIFT_X  = 11;           // mz << 11 == mz * 2048
-    let   WORLD_W_M    = 1500.0;       // Escala activa Este-Oeste (1.5 km en Chorobobo HD / 6.0 km en Chorobobo LR)
-    let   WORLD_H_M    = 1000.0;       // Escala activa Norte-Sur  (1.0 km en Chorobobo HD / 4.0 km en Chorobobo LR)
-    let   MAP_SCALE_X  = MAP_W / WORLD_W_M; // 1.365333 texels/m en 1.5x1km (0.73m/voxel) | 0.341333 en 6x4km (2.93m/voxel)
-    let   MAP_SCALE_Z  = MAP_H / WORLD_H_M; // 1.024000 texels/m en 1.5x1km (0.98m/voxel) | 0.256000 en 6x4km (3.91m/voxel)
+    let   WORLD_W_M    = 750.0;        // Escala activa Este-Oeste (750m en Chorobobo HD / 1.5km Medio / 3.0km en Chorobobo LR)
+    let   WORLD_H_M    = 500.0;        // Escala activa Norte-Sur  (500m en Chorobobo HD / 1.0km Medio / 2.0km en Chorobobo LR)
+    let   MAP_SCALE_X  = MAP_W / WORLD_W_M; // 2.730667 texels/m en 750x500m (0.37m/voxel) | 0.682667 en 3x2km (1.46m/voxel)
+    let   MAP_SCALE_Z  = MAP_H / WORLD_H_M; // 2.048000 texels/m en 750x500m (0.49m/voxel) | 0.512000 en 3x2km (1.95m/voxel)
     let   HEIGHT_SCALE = 0.125;        // Escala vertical por unidad uint8 (0.125m en pistas planas, hasta 0.42m = 105m en alta montaña Comanche 3)
 
     // Coordenada exacta de la Pista Aeromodelismo A.I.A Chorobobo en el ortomosaico
     const SPAWN_MX     = 1198;         // u = 0.585 * 2048
     const SPAWN_MZ     = 650;          // v = (1 - 0.365) * 1024 (Norte hacia +wz)
+
+    // Conversión inversa de metros del mundo (wx, wz) a coordenada normalizada (u, v) sobre chorobobo.jpg
+    function worldToUv(wx, wz) {
+      return {
+        u: (SPAWN_MX / MAP_W) + (wx / WORLD_W_M),
+        v: (SPAWN_MZ / MAP_H) - (wz / WORLD_H_M)
+      };
+    }
 
     // Cielo Voxel 512x512 en PSRAM
     const SKY_DIM      = 512;
@@ -2113,10 +2446,10 @@
     const TERRAIN_THEMES = [
       {
         id: 'chorobobo_hd',
-        name: 'CHOROBOBO HD 1.5KM',
+        name: 'CHOROBOBO HD 750M',
         isChorobobo: true,
-        worldW: 1500.0,
-        worldH: 1000.0,
+        worldW: 750.0,
+        worldH: 500.0,
         hScale: 0.125,
         skyZenith:  [44, 92, 178],
         skyHorizon: [166, 198, 228],
@@ -2192,10 +2525,10 @@
       },
       {
         id: 'chorobobo_park',
-        name: 'CHORO PARK 650M',
+        name: 'CHORO MEDIO 1.5KM',
         isChorobobo: true,
-        worldW: 650.0,
-        worldH: 440.0,
+        worldW: 1500.0,
+        worldH: 1000.0,
         hScale: 0.125,
         skyZenith:  [38, 88, 182],
         skyHorizon: [162, 198, 230],
@@ -2255,10 +2588,10 @@
       },
       {
         id: 'chorobobo',
-        name: 'CHOROBOBO LR 6X4KM',
+        name: 'CHOROBOBO LR 3X2KM',
         isChorobobo: true,
-        worldW: 6000.0,
-        worldH: 4000.0,
+        worldW: 3000.0,
+        worldH: 2000.0,
         hScale: 0.125,
         skyZenith:  [44, 92, 178],
         skyHorizon: [166, 198, 228],
@@ -3289,11 +3622,28 @@
       fillTri320(p0.sx, p0.sy, p2.sx, p2.sy, p3.sx, p3.sy, col565);
     }
 
-    // 6 Sprites de Biomas estilo Comanche 3 (6 x 24x28 RGB565 = 8,064 bytes en SRAM Interna)
-    // 0: Samán, 1: Mango, 2: Pino Alpino Nevado, 3: Cactus Saguaro / Espira Roja, 4: Palmera Cocotero, 5: Torre Industrial Bando
+    // 12 Sprites de Biomas estilo Comanche 3 (12 x 24x28 RGB565 = 16,128 bytes = 15.75 KB en SRAM/Flash ESP32-S3)
+    // 0: Samán, 1: Mango, 2: Pino, 3: Cardón/Cactus, 4: Palmera Cocotero, 5: Torre Eléctrica,
+    // 6: Chaguaramo, 7: Bambuzal Río Turbio, 8: Arbusto/Matorral, 9: Árbol Seco, 10: Manga de Viento A.I.A, 11: Araguaney Amarillo
     const TREE_SP_W = 24;
     const TREE_SP_H = 28;
-    const TREE_SPRITE_ROM = new Uint16Array(6 * TREE_SP_W * TREE_SP_H);
+    const NUM_TREE_SPRITE_TYPES = 12;
+    const TREE_SPRITE_ROM = new Uint16Array(NUM_TREE_SPRITE_TYPES * TREE_SP_W * TREE_SP_H);
+
+    const TREE_TYPE_CATALOG = [
+      { id: 0,  name: 'Samán Venezolano',    short: 'SAMAN',   defH: 6.8, wMul: 1.12, color: '#349832' },
+      { id: 1,  name: 'Mango / Cují',        short: 'MANGO',   defH: 5.8, wMul: 0.95, color: '#4cb038' },
+      { id: 2,  name: 'Pino / Ciprés',       short: 'PINO',    defH: 7.4, wMul: 0.72, color: '#247848' },
+      { id: 3,  name: 'Cardón / Cactus',     short: 'CARDON',  defH: 5.2, wMul: 0.68, color: '#58a844' },
+      { id: 4,  name: 'Palmera Cocotero',    short: 'PALMA',   defH: 7.2, wMul: 0.85, color: '#64c242' },
+      { id: 5,  name: 'Torre Eléctrica',     short: 'TORRE',   defH: 9.5, wMul: 0.48, color: '#f25c1c' },
+      { id: 6,  name: 'Chaguaramo Real',     short: 'CHAGUAR', defH: 9.2, wMul: 0.62, color: '#2ecc71' },
+      { id: 7,  name: 'Bambuzal Río Turbio', short: 'BAMBU',   defH: 6.4, wMul: 0.98, color: '#7ed957' },
+      { id: 8,  name: 'Arbusto / Matorral',  short: 'ARBUSTO', defH: 3.2, wMul: 1.25, color: '#55a630' },
+      { id: 9,  name: 'Árbol Seco FPV',      short: 'SECO',    defH: 6.2, wMul: 0.92, color: '#b08968' },
+      { id: 10, name: 'Manga Viento A.I.A',  short: 'WINDSOCK',defH: 5.6, wMul: 0.65, color: '#ff6b35' },
+      { id: 11, name: 'Araguaney en Flor',   short: 'ARAGUAN', defH: 6.6, wMul: 1.05, color: '#f5b700' }
+    ];
 
     (function buildComancheTreeSprites() {
       const C_TRUNK_D = rgb565(68, 44, 24);
@@ -3410,7 +3760,7 @@
         }
       }
 
-      // Tipo 3: Cactus Saguaro del Desierto con Brazos y Base de Roca Roja (COMANCHE 3 CANYON y DUNAS SUNSET)
+      // Tipo 3: Cactus Saguaro / Cardón con Brazos y Base de Roca Roja
       const C_CAC_0  = rgb565(32, 74, 34);
       const C_CAC_1  = rgb565(48, 106, 44);
       const C_CAC_2  = rgb565(74, 142, 56);
@@ -3420,15 +3770,11 @@
       for (let y = 0; y < TREE_SP_H; y++) {
         for (let x = 0; x < TREE_SP_W; x++) {
           let col = 0;
-          // Base de roca roja desértica en el pie
           if (y >= 22 && y < 27 && Math.abs(x - 11.5) <= (y - 18) * 1.15) {
             col = x < 11.5 ? C_ROCK_L : C_ROCK_D;
           }
-          // Tronco central acanalado del Saguaro
           const inMain = (y >= 3 && y < 26 && Math.abs(x - 11.5) <= 2.2);
-          // Brazo izquierdo en candelabro
           const inLeftArm = ((y >= 12 && y <= 14 && x >= 5 && x <= 10) || (y >= 7 && y <= 14 && Math.abs(x - 5.5) <= 1.6));
-          // Brazo derecho en candelabro
           const inRightArm = ((y >= 15 && y <= 17 && x >= 13 && x <= 18) || (y >= 9 && y <= 17 && Math.abs(x - 17.5) <= 1.6));
           if (inMain || inLeftArm || inRightArm) {
             const rib = (x & 1);
@@ -3440,7 +3786,7 @@
         }
       }
 
-      // Tipo 4: Palmera Cocotero Tropical con Tronco Curvado y Pencas Arqueadas (ISLA VOLCAN y Oasis de DUNAS)
+      // Tipo 4: Palmera Cocotero Tropical con Tronco Curvado y Pencas Arqueadas
       const C_PALM_T0 = rgb565(92, 68, 42);
       const C_PALM_T1 = rgb565(134, 102, 64);
       const C_FROND_0 = rgb565(26, 78, 28);
@@ -3451,7 +3797,6 @@
       for (let y = 0; y < TREE_SP_H; y++) {
         for (let x = 0; x < TREE_SP_W; x++) {
           let col = 0;
-          // Tronco esbelto curvado con anillos
           if (y >= 8 && y < 27) {
             const curveX = 11.5 + Math.sin((y - 8) * 0.16) * 2.1;
             const trunkW = 0.95 + (y - 8) * 0.045;
@@ -3459,11 +3804,9 @@
               col = ((y & 1) === 0 && x < curveX) ? C_PALM_T1 : C_PALM_T0;
             }
           }
-          // Cocos bajo la corona
           if (y >= 8 && y <= 10 && Math.abs(x - 11.5) <= 2.2) {
             col = C_COCO;
           }
-          // Corona de 6 pencas arqueadas hacia afuera
           const dx = x - 11.5;
           const dy = y - 7.5;
           const r = Math.hypot(dx, dy);
@@ -3479,7 +3822,7 @@
         }
       }
 
-      // Tipo 5: Torre / Poste Industrial de Celosía y Baliza Naranja/Blanca (BANDO EDIFICIO y BANDO ARENA)
+      // Tipo 5: Torre / Poste Industrial de Celosía y Baliza Naranja/Blanca
       const C_ST_D  = rgb565(78, 86, 96);
       const C_ST_L  = rgb565(138, 148, 162);
       const C_WARN  = rgb565(242, 92, 28);
@@ -3490,15 +3833,12 @@
           let col = 0;
           const halfW = 1.2 + (y / TREE_SP_H) * 2.4;
           const dx = Math.abs(x - 11.5);
-          // Crucetas superiores de línea eléctrica / reflector industrial
           if ((y === 3 || y === 4 || y === 8 || y === 9) && dx <= 7.5) {
             col = y & 1 ? C_ST_L : C_ST_D;
           }
-          // Aisladores / balizas naranjas en los extremos de las crucetas
           if ((y === 5 || y === 10) && (Math.abs(dx - 6.8) <= 1.0)) {
             col = C_WARN;
           }
-          // Estructura piramidal de celosía metálica con franjas de peligro aeronáutico
           if (y >= 1 && y < 27 && dx <= halfW) {
             const isRail = Math.abs(dx - halfW) <= 0.95;
             const isDiag = ((x + y) % 4 === 0) || ((x - y + 32) % 4 === 0);
@@ -3513,37 +3853,317 @@
           TREE_SPRITE_ROM[off5 + y * TREE_SP_W + x] = col;
         }
       }
+
+      // Tipo 6: Chaguaramo / Palma Real Venezolana (tronco gris anillado recto, capitel verde liso y penacho alto)
+      const C_CHAG_T0 = rgb565(118, 122, 116);
+      const C_CHAG_T1 = rgb565(164, 168, 160);
+      const C_CHAG_SHAFT = rgb565(46, 118, 42);
+      const off6 = 6 * TREE_SP_W * TREE_SP_H;
+      for (let y = 0; y < TREE_SP_H; y++) {
+        for (let x = 0; x < TREE_SP_W; x++) {
+          let col = 0;
+          const dx = x - 11.5;
+          // Tronco recto esbelto gris claro con anillos horizontales
+          if (y >= 10 && y < 27 && Math.abs(dx) <= (y > 23 ? 1.65 : 1.15)) {
+            col = (y >= 10 && y <= 13)
+              ? C_CHAG_SHAFT
+              : (((y & 1) === 0 && dx < 0.3) ? C_CHAG_T1 : C_CHAG_T0);
+          }
+          // Penacho simétrico denso de hojas de chaguaramo en la cima
+          const dy = y - 6.2;
+          if (y <= 12 && Math.hypot(dx * 0.92, dy * 1.15) <= 9.6) {
+            const a1 = -2.4 + 0.14 * dx * dx;
+            const a2 = -0.2 + 0.10 * dx * dx;
+            const a3 = -4.2 + 0.22 * dx * dx;
+            const plume = Math.abs(dx) <= 2.4 && y >= 1 && y <= 9;
+            if (plume || Math.abs(dy - a1) <= 1.35 || Math.abs(dy - a2) <= 1.35 || Math.abs(dy - a3) <= 1.25) {
+              col = dy < -1.0 ? C_FROND_2 : (Math.abs(dx) < 4.5 ? C_FROND_1 : C_FROND_0);
+            }
+          }
+          TREE_SPRITE_ROM[off6 + y * TREE_SP_W + x] = col;
+        }
+      }
+
+      // Tipo 7: Bambuzal / Macolla de Bambú (cañas múltiples verdes/doradas + follaje plumoso de ribera del Río Turbio)
+      const C_BAM_C0 = rgb565(112, 138, 54);
+      const C_BAM_C1 = rgb565(158, 182, 78);
+      const C_BAM_L0 = rgb565(28, 72, 26);
+      const C_BAM_L1 = rgb565(48, 108, 38);
+      const C_BAM_L2 = rgb565(78, 148, 52);
+      const C_BAM_L3 = rgb565(116, 184, 68);
+      const off7 = 7 * TREE_SP_W * TREE_SP_H;
+      const canes = [-4.2, -1.8, 0.4, 2.5, 4.6];
+      const bamBlobs = [
+        { cx: 11.5, cy:  8.5, rx: 9.5, ry: 6.8 },
+        { cx:  6.2, cy: 12.2, rx: 6.0, ry: 5.8 },
+        { cx: 16.8, cy: 12.0, rx: 6.0, ry: 5.8 },
+        { cx:  8.5, cy: 15.5, rx: 6.4, ry: 4.5 },
+        { cx: 14.8, cy: 15.2, rx: 6.4, ry: 4.5 }
+      ];
+      for (let y = 0; y < TREE_SP_H; y++) {
+        for (let x = 0; x < TREE_SP_W; x++) {
+          let col = 0;
+          if (y >= 11 && y < 27) {
+            const spread = (27 - y) * 0.22;
+            for (let c = 0; c < canes.length; c++) {
+              const cxCane = 11.5 + canes[c] * (0.45 + spread * 0.18);
+              if (Math.abs(x - cxCane) <= 0.65) {
+                col = ((y % 3) === 0) ? C_BAM_C0 : C_BAM_C1;
+              }
+            }
+          }
+          for (let b = 0; b < bamBlobs.length; b++) {
+            const bl = bamBlobs[b];
+            const dx = (x - bl.cx) / bl.rx;
+            const dy = (y - bl.cy) / bl.ry;
+            const d2 = dx * dx + dy * dy;
+            const feather = (((x * 29 ^ y * 53) & 7) - 3) * 0.085;
+            if (d2 + feather <= 0.96 && ((x + y * 3) & 3) !== 0) {
+              const sh = -dx * 0.35 - dy * 0.55;
+              col = sh > 0.25 ? C_BAM_L3 : (sh > -0.05 ? C_BAM_L2 : (sh > -0.30 ? C_BAM_L1 : C_BAM_L0));
+              break;
+            }
+          }
+          TREE_SPRITE_ROM[off7 + y * TREE_SP_W + x] = col;
+        }
+      }
+
+      // Tipo 8: Arbusto / Matorral Bajo Florido (bordes de pista y linderos de cañaveral)
+      const C_BUSH_0 = rgb565(24, 62, 22);
+      const C_BUSH_1 = rgb565(42, 98, 34);
+      const C_BUSH_2 = rgb565(68, 134, 46);
+      const C_BUSH_3 = rgb565(104, 168, 62);
+      const C_FLOWER = rgb565(244, 196, 48);
+      const off8 = 8 * TREE_SP_W * TREE_SP_H;
+      const bushBlobs = [
+        { cx: 11.5, cy: 19.5, rx: 9.8, ry: 6.8 },
+        { cx:  6.5, cy: 21.0, rx: 6.2, ry: 5.2 },
+        { cx: 16.5, cy: 21.0, rx: 6.2, ry: 5.2 },
+        { cx: 11.5, cy: 15.8, rx: 7.4, ry: 5.4 }
+      ];
+      for (let y = 0; y < TREE_SP_H; y++) {
+        for (let x = 0; x < TREE_SP_W; x++) {
+          let col = 0;
+          for (let b = 0; b < bushBlobs.length; b++) {
+            const bl = bushBlobs[b];
+            const dx = (x - bl.cx) / bl.rx;
+            const dy = (y - bl.cy) / bl.ry;
+            const d2 = dx * dx + dy * dy;
+            const n  = (((x * 41 + y * 67 + b * 19) & 7) - 3) * 0.065;
+            if (d2 + n <= 1.0 && y < 27) {
+              const isFlw = (((x * 17 ^ y * 29) & 15) === 0) && y < 22;
+              if (isFlw) {
+                col = C_FLOWER;
+              } else {
+                const sh = -dx * 0.38 - dy * 0.58;
+                col = sh > 0.25 ? C_BUSH_3 : (sh > -0.05 ? C_BUSH_2 : (sh > -0.32 ? C_BUSH_1 : C_BUSH_0));
+              }
+              break;
+            }
+          }
+          TREE_SPRITE_ROM[off8 + y * TREE_SP_W + x] = col;
+        }
+      }
+
+      // Tipo 9: Árbol Seco / Tronco Ramificado (obstáculo técnico de ramas desnudas para FPV)
+      const C_DEAD_D = rgb565(76, 56, 40);
+      const C_DEAD_M = rgb565(112, 86, 62);
+      const C_DEAD_L = rgb565(148, 118, 88);
+      const off9 = 9 * TREE_SP_W * TREE_SP_H;
+      const segs9 = [
+        [11.5, 26.5, 11.5, 13.0, 2.1, 1.3],
+        [11.5, 16.0,  5.5,  7.0, 1.3, 0.7],
+        [11.5, 14.0, 17.5,  6.0, 1.3, 0.7],
+        [ 8.2, 11.0,  3.5,  9.5, 0.8, 0.5],
+        [ 7.0,  9.0,  7.5,  3.0, 0.8, 0.5],
+        [14.8,  9.5, 20.0,  8.5, 0.8, 0.5],
+        [15.8,  8.0, 15.0,  2.5, 0.8, 0.5],
+        [11.5, 13.0, 11.0,  4.0, 1.0, 0.5]
+      ];
+      for (let y = 0; y < TREE_SP_H; y++) {
+        for (let x = 0; x < TREE_SP_W; x++) {
+          let col = 0;
+          for (let s = 0; s < segs9.length; s++) {
+            const sg = segs9[s];
+            const vx = sg[2] - sg[0], vy = sg[3] - sg[1];
+            const l2 = vx * vx + vy * vy;
+            const t  = Math.max(0, Math.min(1, ((x - sg[0]) * vx + (y - sg[1]) * vy) / l2));
+            const px = sg[0] + t * vx, py = sg[1] + t * vy;
+            const rad = sg[4] * (1 - t) + sg[5] * t;
+            const d = Math.hypot(x - px, y - py);
+            if (d <= rad) {
+              col = (x < px - 0.3) ? C_DEAD_L : (x < px + 0.4 ? C_DEAD_M : C_DEAD_D);
+              break;
+            }
+          }
+          TREE_SPRITE_ROM[off9 + y * TREE_SP_W + x] = col;
+        }
+      }
+
+      // Tipo 10: Manga de Viento Aeronáutica (Windsock Pista A.I.A Chorobobo con cono naranja/blanco)
+      const C_POLE_W = rgb565(235, 240, 245);
+      const C_POLE_G = rgb565(145, 155, 168);
+      const C_SOCK_O = rgb565(250, 92, 20);
+      const C_SOCK_D = rgb565(196, 62, 12);
+      const off10 = 10 * TREE_SP_W * TREE_SP_H;
+      for (let y = 0; y < TREE_SP_H; y++) {
+        for (let x = 0; x < TREE_SP_W; x++) {
+          let col = 0;
+          // Base circular roja/blanca en tierra
+          if (y >= 24 && y < 27 && Math.abs(x - 6.0) <= 3.2) {
+            col = ((x + y) & 1) ? C_SOCK_O : C_POLE_W;
+          }
+          // Mástil vertical metálico en x = 6
+          if (y >= 3 && y < 26 && Math.abs(x - 6.0) <= 0.85) {
+            col = x < 6.0 ? C_POLE_W : C_POLE_G;
+          }
+          // Cono de viento flameando hacia la derecha (x = 7..22, y = 4..11)
+          if (x >= 7 && x <= 22) {
+            const t = (x - 7) / 15.0;
+            const cySock = 5.8 + t * 2.4 + Math.sin(t * 3.14) * 0.6;
+            const halfH  = 2.6 * (1.0 - t * 0.58);
+            if (Math.abs(y - cySock) <= halfH) {
+              const stripe = Math.floor((x - 7) / 3) & 1;
+              const isShade = y > cySock + 0.4;
+              col = stripe === 0
+                ? (isShade ? C_SOCK_D : C_SOCK_O)
+                : (isShade ? C_POLE_G : C_POLE_W);
+            }
+          }
+          TREE_SPRITE_ROM[off10 + y * TREE_SP_W + x] = col;
+        }
+      }
+
+      // Tipo 11: Araguaney Venezolano en Flor (copa amarillo oro brillante y tronco oscuro)
+      const C_ARAG_0 = rgb565(168, 112, 12);
+      const C_ARAG_1 = rgb565(214, 154, 18);
+      const C_ARAG_2 = rgb565(246, 196, 24);
+      const C_ARAG_3 = rgb565(255, 232, 68);
+      const off11 = 11 * TREE_SP_W * TREE_SP_H;
+      for (let y = 0; y < TREE_SP_H; y++) {
+        for (let x = 0; x < TREE_SP_W; x++) {
+          let col = 0;
+          if (y >= 15 && y < 27) {
+            const branchSpread = y < 20 ? (20 - y) * 0.48 : 0;
+            if (Math.abs(x - 11.5) <= (y > 23 ? 2.0 : 1.4) || (y < 20 && Math.abs(Math.abs(x - 11.5) - branchSpread) <= 1.0)) {
+              col = x < 12 ? C_TRUNK_L : C_TRUNK_D;
+            }
+          }
+          for (let b = 0; b < blobs0.length; b++) {
+            const bl = blobs0[b];
+            const dx = (x - bl.cx) / bl.rx;
+            const dy = (y - bl.cy) / bl.ry;
+            const d2 = dx * dx + dy * dy;
+            const n  = (((x * 47 + y * 31 + b * 23) & 7) - 3) * 0.055;
+            if (d2 + n <= 1.0) {
+              const shade = -dx * 0.42 - dy * 0.55 + (((x * 19 ^ y * 31) & 3) * 0.08);
+              col = shade > 0.28 ? C_ARAG_3 : (shade > -0.04 ? C_ARAG_2 : (shade > -0.32 ? C_ARAG_1 : C_ARAG_0));
+              break;
+            }
+          }
+          TREE_SPRITE_ROM[off11 + y * TREE_SP_W + x] = col;
+        }
+      }
     })();
 
-    // Definición de Edificios Low-Poly en coordenadas UV de Chorobobo / Freestyle Park y Árboles en linderos
-    const BUILDING_UV_DEFS = [
-      // Hangar y Caseta de la Pista A.I.A Chorobobo
-      { u: 0.562, v: 0.388, w: 14, d:  9, h: 4.8, roofH: 2.0, yaw:  0.26, wallL: rgb565(220, 218, 210), wallD: rgb565(155, 154, 148), roofCol: rgb565(185, 62, 44) },
-      { u: 0.542, v: 0.380, w:  8, d:  6, h: 3.6, roofH: 1.4, yaw:  0.26, wallL: rgb565(214, 206, 188), wallD: rgb565(148, 140, 126), roofCol: rgb565(70, 115, 155) },
-      // Galpones agrícolas centrales y Casa de Hacienda
-      { u: 0.468, v: 0.382, w: 16, d: 10, h: 5.0, roofH: 2.2, yaw: -0.15, wallL: rgb565(225, 212, 186), wallD: rgb565(162, 148, 126), roofCol: rgb565(172, 68, 42) },
-      { u: 0.478, v: 0.398, w: 10, d:  8, h: 3.8, roofH: 1.8, yaw: -0.15, wallL: rgb565(232, 226, 212), wallD: rgb565(168, 160, 148), roofCol: rgb565(188, 74, 46) },
-      // Naves centrales adicionales para Slalom Freestyle / Bando Arena
-      { u: 0.512, v: 0.362, w: 12, d:  7, h: 4.4, roofH: 1.7, yaw:  0.10, wallL: rgb565(208, 214, 220), wallD: rgb565(146, 152, 160), roofCol: rgb565(64, 124, 168) },
-      { u: 0.528, v: 0.418, w: 13, d:  8, h: 4.6, roofH: 1.9, yaw: -0.22, wallL: rgb565(226, 218, 202), wallD: rgb565(158, 150, 136), roofCol: rgb565(182, 72, 42) },
-      { u: 0.492, v: 0.432, w: 11, d:  7, h: 4.2, roofH: 1.6, yaw:  0.32, wallL: rgb565(212, 216, 218), wallD: rgb565(148, 152, 156), roofCol: rgb565(88, 132, 96) },
-      { u: 0.576, v: 0.422, w: 12, d:  8, h: 4.5, roofH: 1.8, yaw: -0.18, wallL: rgb565(222, 210, 192), wallD: rgb565(156, 144, 128), roofCol: rgb565(174, 64, 44) },
-      // Galpones sector oeste / Planta Etanol
-      { u: 0.305, v: 0.415, w: 18, d: 11, h: 5.5, roofH: 2.2, yaw:  0.05, wallL: rgb565(204, 210, 216), wallD: rgb565(142, 148, 156), roofCol: rgb565(125, 136, 148) },
-      { u: 0.285, v: 0.432, w: 12, d:  9, h: 4.5, roofH: 1.8, yaw:  0.05, wallL: rgb565(212, 208, 198), wallD: rgb565(148, 144, 136), roofCol: rgb565(168, 64, 42) },
-      // Fincas del norte y este
-      { u: 0.615, v: 0.455, w: 13, d:  8, h: 4.2, roofH: 1.8, yaw:  0.40, wallL: rgb565(224, 216, 196), wallD: rgb565(158, 150, 134), roofCol: rgb565(178, 66, 44) },
-      { u: 0.515, v: 0.542, w: 14, d:  9, h: 4.6, roofH: 2.0, yaw:  0.00, wallL: rgb565(216, 216, 212), wallD: rgb565(152, 152, 148), roofCol: rgb565(82, 126, 92) },
-      { u: 0.395, v: 0.495, w: 11, d:  8, h: 4.0, roofH: 1.7, yaw: -0.30, wallL: rgb565(228, 214, 188), wallD: rgb565(160, 148, 128), roofCol: rgb565(182, 70, 44) },
-      { u: 0.445, v: 0.275, w: 12, d:  8, h: 4.2, roofH: 1.8, yaw:  0.12, wallL: rgb565(218, 212, 200), wallD: rgb565(152, 146, 136), roofCol: rgb565(170, 62, 42) }
+    // Catálogo de Tipos de Edificios 3D Low-Poly (0 bytes de texturas, geometría pura en punto fijo)
+    const BUILDING_KIND_CATALOG = [
+      { kind: 'open_canopy', name: 'Toldo / Caney Pits A.I.A (Abierto)', defW: 14, defD: 8,  defH: 3.8, defRoofH: 1.6 },
+      { kind: 'open_hangar', name: 'Hangar Abierto Atravesable',         defW: 16, defD: 12, defH: 5.2, defRoofH: 2.2 },
+      { kind: 'standard',    name: 'Galpón / Nave Agrícola',             defW: 14, defD: 9,  defH: 4.6, defRoofH: 1.9 },
+      { kind: 'hacienda',    name: 'Casa de Hacienda Colonial',          defW: 15, defD: 10, defH: 3.8, defRoofH: 2.2 },
+      { kind: 'silo',        name: 'Silo Cilíndrico Agrícola',           defW: 8,  defD: 8,  defH: 8.5, defRoofH: 2.4 },
+      { kind: 'water_tower', name: 'Torre de Agua Elevada',              defW: 7,  defD: 7,  defH: 9.0, defRoofH: 3.2 },
+      { kind: 'open_bando',  name: 'Edificio Bando 2 Plantas Abierto',   defW: 22, defD: 16, defH: 5.8, defRoofH: 5.2 },
+      { kind: 'bando_arch',  name: 'Puente / Pórtico Elevado',           defW: 20, defD: 7,  defH: 6.2, defRoofH: 2.0 }
     ];
+
+    // Definición por defecto de Edificios Low-Poly en coordenadas UV de Chorobobo
+    const DEFAULT_BUILDING_UV_DEFS = [
+      // Toldo / Caney Abierto de Pits en la Pista A.I.A Chorobobo + Hangar Abierto + Torre de Agua
+      { u: 0.582, v: 0.376, w: 14, d:  8, h: 3.8, roofH: 1.5, yaw:  0.26, kind: 'open_canopy', wallL: rgb565(230, 232, 236), wallD: rgb565(160, 164, 172), roofCol: rgb565(36, 118, 196) },
+      { u: 0.562, v: 0.388, w: 15, d: 10, h: 5.0, roofH: 2.0, yaw:  0.26, kind: 'open_hangar', wallL: rgb565(220, 218, 210), wallD: rgb565(155, 154, 148), roofCol: rgb565(185, 62, 44) },
+      { u: 0.542, v: 0.380, w:  8, d:  6, h: 3.6, roofH: 1.4, yaw:  0.26, kind: 'standard',    wallL: rgb565(214, 206, 188), wallD: rgb565(148, 140, 126), roofCol: rgb565(70, 115, 155) },
+      { u: 0.552, v: 0.398, w:  6, d:  6, h: 8.2, roofH: 2.8, yaw:  0.26, kind: 'water_tower', wallL: rgb565(196, 204, 214), wallD: rgb565(132, 140, 150), roofCol: rgb565(218, 68, 42) },
+      // Galpones agrícolas centrales, Casa de Hacienda y Silos
+      { u: 0.468, v: 0.382, w: 16, d: 10, h: 5.0, roofH: 2.2, yaw: -0.15, kind: 'hacienda',    wallL: rgb565(238, 232, 216), wallD: rgb565(172, 162, 144), roofCol: rgb565(186, 68, 40) },
+      { u: 0.478, v: 0.398, w: 10, d:  8, h: 3.8, roofH: 1.8, yaw: -0.15, kind: 'standard',    wallL: rgb565(232, 226, 212), wallD: rgb565(168, 160, 148), roofCol: rgb565(188, 74, 46) },
+      { u: 0.454, v: 0.392, w:  7, d:  7, h: 8.0, roofH: 2.2, yaw:  0.00, kind: 'silo',        wallL: rgb565(214, 220, 228), wallD: rgb565(148, 156, 166), roofCol: rgb565(178, 186, 196) },
+      // Naves centrales adicionales para Slalom Freestyle
+      { u: 0.512, v: 0.362, w: 13, d:  8, h: 4.6, roofH: 1.8, yaw:  0.10, kind: 'open_hangar', wallL: rgb565(208, 214, 220), wallD: rgb565(146, 152, 160), roofCol: rgb565(64, 124, 168) },
+      { u: 0.528, v: 0.418, w: 13, d:  8, h: 4.6, roofH: 1.9, yaw: -0.22, kind: 'standard',    wallL: rgb565(226, 218, 202), wallD: rgb565(158, 150, 136), roofCol: rgb565(182, 72, 42) },
+      { u: 0.492, v: 0.432, w: 11, d:  7, h: 4.2, roofH: 1.6, yaw:  0.32, kind: 'open_canopy', wallL: rgb565(212, 216, 218), wallD: rgb565(148, 152, 156), roofCol: rgb565(88, 132, 96) },
+      { u: 0.576, v: 0.422, w: 12, d:  8, h: 4.5, roofH: 1.8, yaw: -0.18, kind: 'hacienda',    wallL: rgb565(222, 210, 192), wallD: rgb565(156, 144, 128), roofCol: rgb565(174, 64, 44) },
+      // Galpones sector oeste / Planta Etanol + Batería de Silos
+      { u: 0.305, v: 0.415, w: 18, d: 11, h: 5.5, roofH: 2.2, yaw:  0.05, kind: 'open_hangar', wallL: rgb565(204, 210, 216), wallD: rgb565(142, 148, 156), roofCol: rgb565(125, 136, 148) },
+      { u: 0.285, v: 0.432, w: 12, d:  9, h: 4.5, roofH: 1.8, yaw:  0.05, kind: 'standard',    wallL: rgb565(212, 208, 198), wallD: rgb565(148, 144, 136), roofCol: rgb565(168, 64, 42) },
+      { u: 0.320, v: 0.425, w:  8, d:  8, h: 9.0, roofH: 2.5, yaw:  0.00, kind: 'silo',        wallL: rgb565(216, 222, 230), wallD: rgb565(146, 154, 164), roofCol: rgb565(182, 190, 200) },
+      { u: 0.332, v: 0.427, w:  8, d:  8, h: 9.0, roofH: 2.5, yaw:  0.00, kind: 'silo',        wallL: rgb565(216, 222, 230), wallD: rgb565(146, 154, 164), roofCol: rgb565(182, 190, 200) },
+      // Fincas del norte y este
+      { u: 0.615, v: 0.455, w: 13, d:  8, h: 4.2, roofH: 1.8, yaw:  0.40, kind: 'hacienda',    wallL: rgb565(224, 216, 196), wallD: rgb565(158, 150, 134), roofCol: rgb565(178, 66, 44) },
+      { u: 0.515, v: 0.542, w: 14, d:  9, h: 4.6, roofH: 2.0, yaw:  0.00, kind: 'standard',    wallL: rgb565(216, 216, 212), wallD: rgb565(152, 152, 148), roofCol: rgb565(82, 126, 92) },
+      { u: 0.395, v: 0.495, w: 11, d:  8, h: 4.0, roofH: 1.7, yaw: -0.30, kind: 'standard',    wallL: rgb565(228, 214, 188), wallD: rgb565(160, 148, 128), roofCol: rgb565(182, 70, 44) },
+      { u: 0.445, v: 0.275, w: 12, d:  8, h: 4.2, roofH: 1.8, yaw:  0.12, kind: 'standard',    wallL: rgb565(218, 212, 200), wallD: rgb565(152, 146, 136), roofCol: rgb565(170, 62, 42) }
+    ];
+
+    // Árboles y Sprites emblemáticos por defecto en coordenadas UV de Chorobobo (editables en el Mapa Visual)
+    const DEFAULT_CHOROBOBO_TREES_UV = [
+      // Manga de viento oficial junto a la cabecera de pista A.I.A
+      { u: 0.592, v: 0.371, h: 5.8, type: 10 },
+      // Hilera de Chaguaramos Reales en la entrada de la pista y hacienda
+      { u: 0.574, v: 0.395, h: 9.2, type: 6 },
+      { u: 0.568, v: 0.402, h: 9.4, type: 6 },
+      { u: 0.562, v: 0.409, h: 9.0, type: 6 },
+      { u: 0.556, v: 0.416, h: 9.2, type: 6 },
+      // Samanes y Araguaneyes alrededor de los pits y linderos centrales
+      { u: 0.598, v: 0.382, h: 7.4, type: 0 },
+      { u: 0.548, v: 0.368, h: 7.0, type: 11 },
+      { u: 0.522, v: 0.382, h: 7.6, type: 0 },
+      { u: 0.484, v: 0.374, h: 6.8, type: 11 },
+      { u: 0.458, v: 0.405, h: 7.2, type: 0 },
+      // Macollas de Bambú en el borde norte (Río Turbio)
+      { u: 0.545, v: 0.240, h: 6.8, type: 7 },
+      { u: 0.515, v: 0.225, h: 6.5, type: 7 },
+      { u: 0.485, v: 0.215, h: 7.0, type: 7 },
+      { u: 0.445, v: 0.220, h: 6.6, type: 7 },
+      // Árboles secos de referencia para slalom FPV
+      { u: 0.535, v: 0.352, h: 6.4, type: 9 },
+      { u: 0.498, v: 0.412, h: 6.2, type: 9 }
+    ];
+
+    let BUILDING_UV_DEFS         = JSON.parse(JSON.stringify(DEFAULT_BUILDING_UV_DEFS));
+    let CHOROBOBO_CUSTOM_TREES_UV = JSON.parse(JSON.stringify(DEFAULT_CHOROBOBO_TREES_UV));
+    let choroboboRandomTreeCount = 180; // Permite ajustar cuántos árboles procedurales de relleno se suman a los puestos a mano
+
+    (function loadCustomChoroboboLayoutFromStorage() {
+      try {
+        const raw = localStorage.getItem('fpvsim_chorobobo_layout_v1');
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed.buildings)) BUILDING_UV_DEFS = parsed.buildings;
+        if (Array.isArray(parsed.trees))     CHOROBOBO_CUSTOM_TREES_UV = parsed.trees;
+        if (typeof parsed.randomTreeCount === 'number') choroboboRandomTreeCount = parsed.randomTreeCount;
+      } catch (e) {
+        console.warn('No se pudo cargar layout personalizado de Chorobobo:', e);
+      }
+    })();
+
+    function saveCustomChoroboboLayoutToStorage() {
+      try {
+        localStorage.setItem('fpvsim_chorobobo_layout_v1', JSON.stringify({
+          buildings: BUILDING_UV_DEFS,
+          trees: CHOROBOBO_CUSTOM_TREES_UV,
+          randomTreeCount: choroboboRandomTreeCount
+        }));
+      } catch (e) {}
+    }
 
     const NUM_WORLD_TREES = 180;
     const WORLD_TREES     = [];
     const WORLD_BUILDINGS = [];
     var worldObjectsInitialized = true;
-    // Buffers estáticos en SRAM para ordenar objetos de atrás hacia adelante sin 'new' por frame
-    const MAX_VIS_OBJS  = 72;
+    // Buffers estáticos en SRAM para ordenar los 128 objetos más cercanos de atrás hacia adelante sin 'new' por frame (1,024 bytes total)
+    const MAX_VIS_OBJS  = 128;
     const VIS_OBJ_TYPE  = new Uint8Array(MAX_VIS_OBJS); // 0 = árbol, 1 = edificio
     const VIS_OBJ_IDX   = new Uint16Array(MAX_VIS_OBJS);
     const VIS_OBJ_CZ    = new Float32Array(MAX_VIS_OBJS);
@@ -3655,20 +4275,52 @@
             rgb565(156, 112, 68), rgb565(106, 74, 42), bd.roofCol);
         }
       } else {
-        // Mapas de Chorobobo (1K / 2K / Valle): Galpones agrícolas reales y Hangar A.I.A
+        // Mapas de Chorobobo (750m HD / 1.5km Medio / 3x2km LR): Edificios agrícolas, Hangares, Toldos de Pits, Silos y Casas de Hacienda
         for (let i = 0; i < BUILDING_UV_DEFS.length; i++) {
           const b = BUILDING_UV_DEFS[i];
           const pos = uvToWorld(b.u, b.v);
-          pushWorldBldg(pos.x, pos.z, b.w * bScale, b.d * bScale, Math.min(7.2, b.h), Math.min(2.2, b.roofH),
-            b.yaw, 'standard', b.wallL, b.wallD, b.roofCol);
+          pushWorldBldg(
+            pos.x, pos.z,
+            b.w * bScale,
+            b.d * bScale,
+            Math.min(11.0, b.h),
+            Math.min(4.0, b.roofH),
+            b.yaw || 0.0,
+            b.kind || 'standard',
+            b.wallL || rgb565(220, 218, 210),
+            b.wallD || rgb565(155, 154, 148),
+            b.roofCol || rgb565(185, 62, 44)
+          );
         }
       }
 
-      // 2. SEMILLA Y DISTRIBUCIÓN DE SPRITES PROPIA DE CADA MAPA Y SENSIBLE AL RELIEVE
+      // 2A. Árboles y Sprites puestos manualmente sobre Chorobobo (si estamos en un mapa de Chorobobo)
+      if (curTheme.isChorobobo && Array.isArray(CHOROBOBO_CUSTOM_TREES_UV)) {
+        for (let i = 0; i < CHOROBOBO_CUSTOM_TREES_UV.length; i++) {
+          const ct = CHOROBOBO_CUSTOM_TREES_UV[i];
+          const pos = uvToWorld(ct.u, ct.v);
+          const spType = Math.max(0, Math.min(NUM_TREE_SPRITE_TYPES - 1, ct.type | 0));
+          const cat = TREE_TYPE_CATALOG[spType] || TREE_TYPE_CATALOG[0];
+          const hM = ct.h || cat.defH;
+          const wM = ct.w || (hM * cat.wMul);
+          WORLD_TREES.push({
+            x: pos.x,
+            z: pos.z,
+            h: hM,
+            w: wM,
+            type: spType,
+            isCustom: true,
+            customIdx: i
+          });
+        }
+      }
+
+      // 2B. SEMILLA Y DISTRIBUCIÓN DE SPRITES PROCEDURALES PROPIA DE CADA MAPA Y SENSIBLE AL RELIEVE
       let seed = ((0x13579BDF ^ Math.imul(currentThemeIdx + 1, 0x45D9F3B)) >>> 0) || 0x13579BDF;
       const c0 = CHOROBOBO_CIRCUITS[0].gates;
+      const numProcTrees = curTheme.isChorobobo ? Math.max(0, choroboboRandomTreeCount | 0) : NUM_WORLD_TREES;
 
-      for (let i = 0; i < NUM_WORLD_TREES; i++) {
+      for (let i = 0; i < numProcTrees; i++) {
         let pos = null;
         let hGround = 0.0;
         let r3 = 0.5;
@@ -3742,9 +4394,17 @@
           heightM = 5.8 + r3 * 3.6;
           widthM  = spriteType === 2 ? heightM * 0.74 : heightM * 0.98;
         } else {
-          spriteType = (i & 1);
-          heightM = 5.0 + r3 * 2.8;
-          widthM  = spriteType === 0 ? heightM * 1.05 : heightM * 0.90;
+          // Chorobobo variado: Samanes, Mangos, Chaguaramos, Bambúes, Arbustos y Araguaneyes
+          const mod = i % 14;
+          if (mod === 0)      spriteType = 11; // Araguaney Amarillo
+          else if (mod === 1) spriteType = 6;  // Chaguaramo
+          else if (mod === 2) spriteType = 7;  // Bambú
+          else if (mod === 3) spriteType = 8;  // Arbusto
+          else if (mod === 4) spriteType = 9;  // Árbol seco
+          else                spriteType = (i & 1); // Samán o Mango
+          const cat = TREE_TYPE_CATALOG[spriteType] || TREE_TYPE_CATALOG[0];
+          heightM = cat.defH * (0.84 + r3 * 0.34);
+          widthM  = heightM * cat.wMul;
         }
 
         WORLD_TREES.push({
@@ -3752,7 +4412,8 @@
           z: pos.z,
           h: heightM,
           w: widthM,
-          type: spriteType
+          type: spriteType,
+          isCustom: false
         });
       }
     }
@@ -3796,7 +4457,8 @@
       let rowU = centerU_Q16 + Math.round(dx0 * du_dx + dy0 * du_dy);
       let rowV = centerV_Q16 + Math.round(dx0 * dv_dx + dy0 * dv_dy);
 
-      const romOff = type * (TREE_SP_W * TREE_SP_H);
+      const safeType = ((type | 0) >= 0 && (type | 0) < NUM_TREE_SPRITE_TYPES) ? (type | 0) : 0;
+      const romOff = safeType * (TREE_SP_W * TREE_SP_H);
       for (let sy = y0; sy <= y1; sy++) {
         let uFP = rowU;
         let vFP = rowV;
@@ -3822,13 +4484,23 @@
       }
     }
 
-    // Buffers estáticos en SRAM para ordenar las 4 columnas de un edificio Bando sin 'new' ni allocs por frame
+    // Buffers estáticos en SRAM para ordenar las 4 columnas de un edificio o toldo y los 8 vértices de un Silo (0 allocs por frame)
     const BANDO_COL_WX  = new Float32Array(4);
     const BANDO_COL_WZ  = new Float32Array(4);
     const BANDO_COL_D2  = new Float32Array(4);
     const BANDO_COL_ORD = new Uint8Array(4);
+    const SILO_COS8     = new Float32Array(8);
+    const SILO_SIN8     = new Float32Array(8);
+    const SILO_PT_BOT   = new Array(8);
+    const SILO_PT_TOP   = new Array(8);
+    const SILO_FACE_ORD = new Uint8Array(8);
+    const SILO_FACE_D2  = new Float32Array(8);
+    for (let i = 0; i < 8; i++) {
+      SILO_COS8[i] = Math.cos((i * Math.PI) / 4.0);
+      SILO_SIN8[i] = Math.sin((i * Math.PI) / 4.0);
+    }
 
-    // Helper para dibujar un pilar vertical 3D entre yBot e yTop (usado en edificios Bando abiertos)
+    // Helper para dibujar un pilar vertical 3D entre yBot e yTop (usado en edificios Bando abiertos, Toldos y Torres de Agua)
     function drawPillarBox320(cx, cz, rad, yBot, yTop, rx, rz, fx, fz, colL, colD, camX, camZ, projPoint320) {
       const p00B = projPoint320(cx - rx*rad - fx*rad, yBot, cz - rz*rad - fz*rad);
       const p10B = projPoint320(cx + rx*rad - fx*rad, yBot, cz + rz*rad - fz*rad);
@@ -3850,6 +4522,29 @@
       activeObjCzQ4 = prevCzQ4;
     }
 
+    function sortFourBuildingPillars(bx, bz, ox, oz, rx, rz, fx, fz, camX, camZ) {
+      for (let i = 0; i < 4; i++) {
+        const sx = (i === 1 || i === 2) ? ox : -ox;
+        const sz = (i >= 2) ? oz : -oz;
+        const cx = bx + rx * sx + fx * sz;
+        const cz = bz + rz * sx + fz * sz;
+        BANDO_COL_WX[i]  = cx;
+        BANDO_COL_WZ[i]  = cz;
+        BANDO_COL_D2[i]  = (cx - camX) * (cx - camX) + (cz - camZ) * (cz - camZ);
+        BANDO_COL_ORD[i] = i;
+      }
+      for (let i = 1; i < 4; i++) {
+        const kOrd = BANDO_COL_ORD[i];
+        const kD2  = BANDO_COL_D2[kOrd];
+        let j = i - 1;
+        while (j >= 0 && BANDO_COL_D2[BANDO_COL_ORD[j]] < kD2) {
+          BANDO_COL_ORD[j + 1] = BANDO_COL_ORD[j];
+          j--;
+        }
+        BANDO_COL_ORD[j + 1] = kOrd;
+      }
+    }
+
     function renderBuildingLowPoly320(b, camX, camZ, projPoint320) {
       const y0 = getTerrainHeightMeters(b.x, b.z);
       const y1 = y0 + b.h;
@@ -3857,6 +4552,7 @@
       const hw = b.w * 0.5, hd = b.d * 0.5;
       const rx = b.cosY, rz = b.sinY;
       const fx = -b.sinY, fz = b.cosY;
+      const roofDark = b.roofCol - ((b.roofCol >> 3) & 0x18E3);
 
       // Caso 1: Estructura Bando Abierta de 2 Plantas (pilares de concreto + losa intermedia + techo con vanos para volar por dentro)
       if (b.kind === 'open_bando') {
@@ -3868,35 +4564,13 @@
           fillQuad320(b00, b10, b11, b01, rgb565(64, 68, 76));
         }
 
-        // 4 Columnas esquineras ordenadas de la más lejana a la más cercana en SRAM estática (0 allocs)
         const pRad = 1.05;
-        const ox = hw - pRad, oz = hd - pRad;
-        for (let i = 0; i < 4; i++) {
-          const sx = (i === 1 || i === 2) ? ox : -ox;
-          const sz = (i >= 2) ? oz : -oz;
-          const cx = b.x + rx * sx + fx * sz;
-          const cz = b.z + rz * sx + fz * sz;
-          BANDO_COL_WX[i]  = cx;
-          BANDO_COL_WZ[i]  = cz;
-          BANDO_COL_D2[i]  = (cx - camX) * (cx - camX) + (cz - camZ) * (cz - camZ);
-          BANDO_COL_ORD[i] = i;
-        }
-        for (let i = 1; i < 4; i++) {
-          const kOrd = BANDO_COL_ORD[i];
-          const kD2  = BANDO_COL_D2[kOrd];
-          let j = i - 1;
-          while (j >= 0 && BANDO_COL_D2[BANDO_COL_ORD[j]] < kD2) {
-            BANDO_COL_ORD[j + 1] = BANDO_COL_ORD[j];
-            j--;
-          }
-          BANDO_COL_ORD[j + 1] = kOrd;
-        }
+        sortFourBuildingPillars(b.x, b.z, hw - pRad, hd - pRad, rx, rz, fx, fz, camX, camZ);
         for (let i = 0; i < 4; i++) {
           const ord = BANDO_COL_ORD[i];
           drawPillarBox320(BANDO_COL_WX[ord], BANDO_COL_WZ[ord], pRad, y0, y2, rx, rz, fx, fz, b.wallL, b.wallD, camX, camZ, projPoint320);
         }
 
-        // Losa del 1er Piso (en y1) y Losa de Azotea (en y2) con vigas perimetrales de alta visibilidad
         const m00 = projPoint320(b.x - rx*hw - fx*hd, y1, b.z - rz*hw - fz*hd);
         const m10 = projPoint320(b.x + rx*hw - fx*hd, y1, b.z + rz*hw - fz*hd);
         const m11 = projPoint320(b.x + rx*hw + fx*hd, y1, b.z + rz*hw + fz*hd);
@@ -3942,23 +4616,158 @@
         return;
       }
 
-      // Caso 3: Edificio estándar (4 esquinas inferiores, 4 superiores de pared y 2 cumbreras del techo a dos aguas)
+      // Caso 3: Toldo / Caney Abierto de Pits A.I.A (4 columnas delgadas + techo a dos aguas sin paredes, atravesable en vuelo)
+      if (b.kind === 'open_canopy') {
+        const pRad = 0.42;
+        sortFourBuildingPillars(b.x, b.z, hw - 0.6, hd - 0.6, rx, rz, fx, fz, camX, camZ);
+        for (let i = 0; i < 4; i++) {
+          const ord = BANDO_COL_ORD[i];
+          drawPillarBox320(BANDO_COL_WX[ord], BANDO_COL_WZ[ord], pRad, y0, y1, rx, rz, fx, fz, b.wallL, b.wallD, camX, camZ, projPoint320);
+        }
+        const t00 = projPoint320(b.x - rx*hw - fx*hd, y1, b.z - rz*hw - fz*hd);
+        const t10 = projPoint320(b.x + rx*hw - fx*hd, y1, b.z + rz*hw - fz*hd);
+        const t11 = projPoint320(b.x + rx*hw + fx*hd, y1, b.z + rz*hw + fz*hd);
+        const t01 = projPoint320(b.x - rx*hw + fx*hd, y1, b.z - rz*hw + fz*hd);
+        const r0  = projPoint320(b.x - rx*hw, y2, b.z - rz*hw);
+        const r1  = projPoint320(b.x + rx*hw, y2, b.z + rz*hw);
+        if (t00 && t10 && t11 && t01 && r0 && r1) {
+          const vx = camX - b.x, vz = camZ - b.z;
+          const dotF = vx * fx + vz * fz;
+          fillTri320(t00.sx, t00.sy, t01.sx, t01.sy, r0.sx, r0.sy, b.wallD);
+          fillTri320(t10.sx, t10.sy, t11.sx, t11.sy, r1.sx, r1.sy, b.wallL);
+          if (dotF >= 0) {
+            fillQuad320(t00, t10, r1, r0, roofDark);
+            fillQuad320(t01, t11, r1, r0, b.roofCol);
+          } else {
+            fillQuad320(t01, t11, r1, r0, b.roofCol);
+            fillQuad320(t00, t10, r1, r0, roofDark);
+          }
+        }
+        return;
+      }
+
+      // Caso 4: Hangar Abierto Atravesable (paredes laterales cerradas + portones frontal y trasero abiertos para volar por dentro)
+      if (b.kind === 'open_hangar') {
+        const b00 = projPoint320(b.x - rx*hw - fx*hd, y0, b.z - rz*hw - fz*hd);
+        const b10 = projPoint320(b.x + rx*hw - fx*hd, y0, b.z + rz*hw - fz*hd);
+        const b11 = projPoint320(b.x + rx*hw + fx*hd, y0, b.z + rz*hw + fz*hd);
+        const b01 = projPoint320(b.x - rx*hw + fx*hd, y0, b.z - rz*hw + fz*hd);
+        const t00 = projPoint320(b.x - rx*hw - fx*hd, y1, b.z - rz*hw - fz*hd);
+        const t10 = projPoint320(b.x + rx*hw - fx*hd, y1, b.z + rz*hw - fz*hd);
+        const t11 = projPoint320(b.x + rx*hw + fx*hd, y1, b.z + rz*hw + fz*hd);
+        const t01 = projPoint320(b.x - rx*hw + fx*hd, y1, b.z - rz*hw + fz*hd);
+        const r0  = projPoint320(b.x - rx*hw, y2, b.z - rz*hw);
+        const r1  = projPoint320(b.x + rx*hw, y2, b.z + rz*hw);
+        if (!b00 || !b10 || !b11 || !b01 || !t00 || !t10 || !t11 || !t01 || !r0 || !r1) return;
+
+        // Piso interior asfaltado del hangar
+        fillQuad320(b00, b10, b11, b01, rgb565(58, 62, 68));
+
+        const vx = camX - b.x, vz = camZ - b.z;
+        const dotF = vx * fx + vz * fz;
+        // Paredes longitudinales cerradas (los extremos en +-rx quedan abiertos como portones de hangar)
+        if (dotF >= 0) {
+          fillQuad320(b00, b10, t10, t00, b.wallD);
+          fillQuad320(b01, b11, t11, t01, b.wallL);
+          fillQuad320(t00, t10, r1, r0, roofDark);
+          fillQuad320(t01, t11, r1, r0, b.roofCol);
+        } else {
+          fillQuad320(b01, b11, t11, t01, b.wallL);
+          fillQuad320(b00, b10, t10, t00, b.wallD);
+          fillQuad320(t01, t11, r1, r0, b.roofCol);
+          fillQuad320(t00, t10, r1, r0, roofDark);
+        }
+        // Cerchas triangulares superiores sobre ambos portones abiertos
+        fillTri320(t00.sx, t00.sy, t01.sx, t01.sy, r0.sx, r0.sy, b.wallD);
+        fillTri320(t10.sx, t10.sy, t11.sx, t11.sy, r1.sx, r1.sy, b.wallL);
+        return;
+      }
+
+      // Caso 5: Silo Agrícola Cilíndrico / Tanque Octogonal (LUT precalculada, 0 llamadas trigonométricas)
+      if (b.kind === 'silo') {
+        const rad = Math.min(hw, hd);
+        const apex = projPoint320(b.x, y2, b.z);
+        if (!apex) return;
+        for (let i = 0; i < 8; i++) {
+          const px = b.x + SILO_COS8[i] * rad;
+          const pz = b.z + SILO_SIN8[i] * rad;
+          const pB = projPoint320(px, y0, pz);
+          const pT = projPoint320(px, y1, pz);
+          if (!pB || !pT) return;
+          SILO_PT_BOT[i] = pB;
+          SILO_PT_TOP[i] = pT;
+        }
+        for (let i = 0; i < 8; i++) {
+          const j = (i + 1) & 7;
+          const mx = b.x + (SILO_COS8[i] + SILO_COS8[j]) * 0.5 * rad;
+          const mz = b.z + (SILO_SIN8[i] + SILO_SIN8[j]) * 0.5 * rad;
+          SILO_FACE_D2[i]  = (mx - camX) * (mx - camX) + (mz - camZ) * (mz - camZ);
+          SILO_FACE_ORD[i] = i;
+        }
+        // Pintar las 4 caras frontales más cercanas a la cámara ordenadas de atrás hacia adelante
+        for (let i = 1; i < 8; i++) {
+          const kOrd = SILO_FACE_ORD[i];
+          const kD2  = SILO_FACE_D2[kOrd];
+          let j = i - 1;
+          while (j >= 0 && SILO_FACE_D2[SILO_FACE_ORD[j]] < kD2) {
+            SILO_FACE_ORD[j + 1] = SILO_FACE_ORD[j];
+            j--;
+          }
+          SILO_FACE_ORD[j + 1] = kOrd;
+        }
+        for (let k = 3; k < 8; k++) {
+          const f = SILO_FACE_ORD[k];
+          const fn = (f + 1) & 7;
+          const shadeWall = (f & 1) ? b.wallL : b.wallD;
+          const shadeRoof = (f & 1) ? b.roofCol : roofDark;
+          fillQuad320(SILO_PT_BOT[f], SILO_PT_BOT[fn], SILO_PT_TOP[fn], SILO_PT_TOP[f], shadeWall);
+          fillTri320(SILO_PT_TOP[f].sx, SILO_PT_TOP[f].sy, SILO_PT_TOP[fn].sx, SILO_PT_TOP[fn].sy, apex.sx, apex.sy, shadeRoof);
+        }
+        return;
+      }
+
+      // Caso 6: Torre de Agua Elevada (4 patas altas atravesables + tanque superior)
+      if (b.kind === 'water_tower') {
+        const yTankBot = y0 + b.h * 0.65;
+        const pRad = 0.45;
+        sortFourBuildingPillars(b.x, b.z, hw * 0.72, hd * 0.72, rx, rz, fx, fz, camX, camZ);
+        for (let i = 0; i < 4; i++) {
+          const ord = BANDO_COL_ORD[i];
+          drawPillarBox320(BANDO_COL_WX[ord], BANDO_COL_WZ[ord], pRad, y0, yTankBot, rx, rz, fx, fz, b.wallD, b.wallD, camX, camZ, projPoint320);
+        }
+        drawPillarBox320(b.x, b.z, Math.min(hw, hd) * 0.88, yTankBot, y1, rx, rz, fx, fz, b.wallL, b.wallD, camX, camZ, projPoint320);
+        const t00 = projPoint320(b.x - rx*hw - fx*hd, y1, b.z - rz*hw - fz*hd);
+        const t10 = projPoint320(b.x + rx*hw - fx*hd, y1, b.z + rz*hw - fz*hd);
+        const t11 = projPoint320(b.x + rx*hw + fx*hd, y1, b.z + rz*hw + fz*hd);
+        const t01 = projPoint320(b.x - rx*hw + fx*hd, y1, b.z - rz*hw + fz*hd);
+        const apex = projPoint320(b.x, y2, b.z);
+        if (t00 && t10 && t11 && t01 && apex) {
+          fillTri320(t00.sx, t00.sy, t10.sx, t10.sy, apex.sx, apex.sy, roofDark);
+          fillTri320(t10.sx, t10.sy, t11.sx, t11.sy, apex.sx, apex.sy, b.roofCol);
+          fillTri320(t11.sx, t11.sy, t01.sx, t01.sy, apex.sx, apex.sy, b.roofCol);
+          fillTri320(t01.sx, t01.sy, t00.sx, t00.sy, apex.sx, apex.sy, roofDark);
+        }
+        return;
+      }
+
+      // Caso 7 y 8: Edificio estándar ('standard') y Casa de Hacienda Colonial con alero ancho ('hacienda')
+      const eaves = (b.kind === 'hacienda') ? 1.22 : 1.0;
+      const hwR = hw * eaves, hdR = hd * eaves;
       const b00 = projPoint320(b.x - rx*hw - fx*hd, y0, b.z - rz*hw - fz*hd);
       const b10 = projPoint320(b.x + rx*hw - fx*hd, y0, b.z + rz*hw - fz*hd);
       const b11 = projPoint320(b.x + rx*hw + fx*hd, y0, b.z + rz*hw + fz*hd);
       const b01 = projPoint320(b.x - rx*hw + fx*hd, y0, b.z - rz*hw + fz*hd);
 
-      const t00 = projPoint320(b.x - rx*hw - fx*hd, y1, b.z - rz*hw - fz*hd);
-      const t10 = projPoint320(b.x + rx*hw - fx*hd, y1, b.z + rz*hw - fz*hd);
-      const t11 = projPoint320(b.x + rx*hw + fx*hd, y1, b.z + rz*hw + fz*hd);
-      const t01 = projPoint320(b.x - rx*hw + fx*hd, y1, b.z - rz*hw + fz*hd);
+      const t00 = projPoint320(b.x - rx*hwR - fx*hdR, y1, b.z - rz*hwR - fz*hdR);
+      const t10 = projPoint320(b.x + rx*hwR - fx*hdR, y1, b.z + rz*hwR - fz*hdR);
+      const t11 = projPoint320(b.x + rx*hwR + fx*hdR, y1, b.z + rz*hwR + fz*hdR);
+      const t01 = projPoint320(b.x - rx*hwR + fx*hdR, y1, b.z - rz*hwR + fz*hdR);
 
       const r0  = projPoint320(b.x - rx*hw, y2, b.z - rz*hw);
       const r1  = projPoint320(b.x + rx*hw, y2, b.z + rz*hw);
 
       if (!b00 || !b10 || !b11 || !b01 || !t00 || !t10 || !t11 || !t01 || !r0 || !r1) return;
 
-      // Dibujar primero las paredes traseras y luego las visibles hacia la cámara (Painter's simple por signo del producto punto)
       const vx = camX - b.x, vz = camZ - b.z;
       const dotF = vx * fx + vz * fz;
       const dotR = vx * rx + vz * rz;
@@ -3983,8 +4792,6 @@
         fillTri320(t00.sx, t00.sy, t01.sx, t01.sy, r0.sx, r0.sy, b.wallD);
       }
 
-      // Dos aguas del techo (una iluminada y otra con ligero sombreado)
-      const roofDark = b.roofCol - ((b.roofCol >> 3) & 0x18E3);
       if (dotF >= 0) {
         fillQuad320(t00, t10, r1, r0, roofDark);
         fillQuad320(t01, t11, r1, r0, b.roofCol);
@@ -3994,42 +4801,60 @@
       }
     }
 
+    // Inserta un objeto en el buffer estático VIS_OBJ_* conservando siempre los MAX_VIS_OBJS (128) más cercanos a la cámara (0 allocs)
+    function insertVisibleWorldObj(type, idx, cz, count) {
+      if (count < MAX_VIS_OBJS) {
+        VIS_OBJ_TYPE[count] = type;
+        VIS_OBJ_IDX[count]  = idx;
+        VIS_OBJ_CZ[count]   = cz;
+        VIS_SORT_ORD[count] = count;
+        return count + 1;
+      }
+      // Si el buffer de 128 está lleno, buscar el más lejano actual y reemplazarlo si el nuevo está más cerca
+      let maxSlot = 0;
+      let maxCz   = VIS_OBJ_CZ[0];
+      for (let s = 1; s < MAX_VIS_OBJS; s++) {
+        if (VIS_OBJ_CZ[s] > maxCz) {
+          maxCz   = VIS_OBJ_CZ[s];
+          maxSlot = s;
+        }
+      }
+      if (cz < maxCz) {
+        VIS_OBJ_TYPE[maxSlot] = type;
+        VIS_OBJ_IDX[maxSlot]  = idx;
+        VIS_OBJ_CZ[maxSlot]   = cz;
+      }
+      return MAX_VIS_OBJS;
+    }
+
     // Renderiza todos los Árboles Sprite y Edificios Low-Poly visibles ordenados de atrás hacia adelante con oclusión Z-Buffer
     function renderComancheWorldObjects(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz, projPoint320) {
       let count = 0;
       const maxDistTree = 340.0;
       const maxDistBldg = 520.0;
 
-      // 1. Recolectar edificios dentro del frustum (corte cercano 0.8m para poder atravesar el interior de edificios Bando abiertos)
-      for (let i = 0; i < WORLD_BUILDINGS.length && count < MAX_VIS_OBJS; i++) {
+      // 1. Recolectar edificios dentro del frustum (corte cercano 0.8m para poder atravesar el interior de edificios/hangares/toldos abiertos)
+      for (let i = 0; i < WORLD_BUILDINGS.length; i++) {
         const b = WORLD_BUILDINGS[i];
         const dx = b.x - camX, dz = b.z - camZ;
         const cz = dx * cFx + dz * cFz;
         if (cz < 0.8 || cz > maxDistBldg) continue;
         const cx = dx * cRx + dz * cRz;
         if (Math.abs(cx) > cz * 1.25 + 24.0) continue;
-        VIS_OBJ_TYPE[count] = 1;
-        VIS_OBJ_IDX[count]  = i;
-        VIS_OBJ_CZ[count]   = cz;
-        VIS_SORT_ORD[count] = count;
-        count++;
+        count = insertVisibleWorldObj(1, i, cz, count);
       }
 
       // 2. Recolectar árboles cercanos dentro del frustum según la densidad configurada en el menú [WORLD]
       const treeDensity = (typeof fcProfile !== 'undefined' && fcProfile.treeDensity !== undefined) ? fcProfile.treeDensity : 1.0;
       const activeTreeLimit = Math.round(WORLD_TREES.length * treeDensity);
-      for (let i = 0; i < activeTreeLimit && count < MAX_VIS_OBJS; i++) {
+      for (let i = 0; i < activeTreeLimit; i++) {
         const tr = WORLD_TREES[i];
         const dx = tr.x - camX, dz = tr.z - camZ;
         const cz = dx * cFx + dz * cFz;
         if (cz < 2.2 || cz > maxDistTree) continue;
         const cx = dx * cRx + dz * cRz;
         if (Math.abs(cx) > cz * 0.95 + 8.0) continue;
-        VIS_OBJ_TYPE[count] = 0;
-        VIS_OBJ_IDX[count]  = i;
-        VIS_OBJ_CZ[count]   = cz;
-        VIS_SORT_ORD[count] = count;
-        count++;
+        count = insertVisibleWorldObj(0, i, cz, count);
       }
 
       // Ordenamiento por inserción en buffer estático (de mayor cz a menor cz = Painter's Algorithm)
@@ -10787,6 +11612,641 @@
         console.error('Frame error recovered:', err);
       }
     }
+
+    /***************************************************************************
+     * 9. EDITOR VISUAL SATELITAL DE CHOROBOBO (SOLO HERRAMIENTA WEB DE DISEÑO)
+     *    - No consume recursos de la simulación 320x240 ni del ESP32-S3
+     *    - Permite plantar los 12 tipos de Sprites y 8 tipos de Edificios 3D
+     *      directamente sobre chorobobo.jpg y exportar las tablas (u, v)
+     ***************************************************************************/
+    (function initChoroboboVisualMapEditor() {
+      const modalEl      = document.getElementById('mapEditorModal');
+      const btnOpenEl    = document.getElementById('btnMapEditor');
+      const btnCloseEl   = document.getElementById('meBtnClose');
+      const canvas       = document.getElementById('mapEditorCanvas');
+      if (!modalEl || !btnOpenEl || !canvas) return;
+      const ctx          = canvas.getContext('2d');
+
+      let meOpen         = false;
+      let meTool         = 'tree'; // 'tree' | 'bldg' | 'erase' | 'teleport'
+      let meTreeType     = 0;
+      let meTreeH        = 6.8;
+      let meBrushStepM   = 16.0;
+      let meSelectedBldg = 0;
+
+      // Estado de cámara 2D sobre la ortofoto (zoom y centro en coordenadas normalizadas u,v 0..1)
+      let camU           = SPAWN_MX / MAP_W; // 0.585
+      let camV           = 1.0 - (SPAWN_MZ / MAP_H); // 0.365
+      let zoom           = 2.6;
+      let isPanning      = false;
+      let isPainting     = false;
+      let isDraggingBldg = false;
+      let panStartX      = 0, panStartY = 0;
+      let panStartU      = 0, panStartV = 0;
+      let lastPaintWorld = null;
+
+      function rgb565ToHex(c565) {
+        const r = ((c565 >> 11) & 31) * 255 / 31;
+        const g = ((c565 >> 5)  & 63) * 255 / 63;
+        const b = (c565         & 31) * 255 / 31;
+        const toH = (n) => Math.round(n).toString(16).padStart(2, '0');
+        return `#${toH(r)}${toH(g)}${toH(b)}`;
+      }
+
+      function hexToRgb565(hex, scale = 1.0) {
+        const clean = (hex || '#ffffff').replace('#', '');
+        const num = parseInt(clean, 16) || 0xffffff;
+        const r = Math.min(255, Math.round(((num >> 16) & 255) * scale));
+        const g = Math.min(255, Math.round(((num >> 8)  & 255) * scale));
+        const b = Math.min(255, Math.round((num         & 255) * scale));
+        return rgb565(r, g, b);
+      }
+
+      // Construir la cuadrícula visual con los 12 Sprites renderizados desde TREE_SPRITE_ROM
+      const spriteGridEl = document.getElementById('meSpriteGrid');
+      function buildSpriteSelectorUI() {
+        spriteGridEl.innerHTML = '';
+        for (let t = 0; t < TREE_TYPE_CATALOG.length; t++) {
+          const cat = TREE_TYPE_CATALOG[t];
+          const item = document.createElement('div');
+          item.className = 'me-sprite-item' + (t === meTreeType ? ' active' : '');
+          const cnv = document.createElement('canvas');
+          cnv.width = TREE_SP_W;
+          cnv.height = TREE_SP_H;
+          const sCtx = cnv.getContext('2d');
+          const imgD = sCtx.createImageData(TREE_SP_W, TREE_SP_H);
+          const off = t * TREE_SP_W * TREE_SP_H;
+          for (let i = 0; i < TREE_SP_W * TREE_SP_H; i++) {
+            const c = TREE_SPRITE_ROM[off + i];
+            if (c !== 0) {
+              imgD.data[i * 4]     = ((c >> 11) & 31) * 255 / 31;
+              imgD.data[i * 4 + 1] = ((c >> 5)  & 63) * 255 / 63;
+              imgD.data[i * 4 + 2] = (c         & 31) * 255 / 31;
+              imgD.data[i * 4 + 3] = 255;
+            }
+          }
+          sCtx.putImageData(imgD, 0, 0);
+          const lbl = document.createElement('span');
+          lbl.textContent = cat.short;
+          item.appendChild(cnv);
+          item.appendChild(lbl);
+          item.addEventListener('click', () => {
+            meTreeType = t;
+            meTreeH = cat.defH;
+            document.getElementById('meRngTreeH').value = meTreeH;
+            document.getElementById('meLblTreeH').textContent = `${meTreeH.toFixed(1)}m`;
+            document.querySelectorAll('.me-sprite-item').forEach((el, idx) => {
+              el.classList.toggle('active', idx === t);
+            });
+          });
+          spriteGridEl.appendChild(item);
+        }
+      }
+      buildSpriteSelectorUI();
+
+      function syncBldgInspectorFromSelected() {
+        const b = BUILDING_UV_DEFS[meSelectedBldg];
+        if (!b) return;
+        document.getElementById('meSelBldgKind').value = b.kind || 'standard';
+        document.getElementById('meRngBldgW').value = b.w;
+        document.getElementById('meLblBldgW').textContent = `${Math.round(b.w)}m`;
+        document.getElementById('meRngBldgD').value = b.d;
+        document.getElementById('meLblBldgD').textContent = `${Math.round(b.d)}m`;
+        document.getElementById('meRngBldgH').value = b.h;
+        document.getElementById('meLblBldgH').textContent = `${Number(b.h).toFixed(1)}m`;
+        document.getElementById('meRngBldgRoofH').value = b.roofH;
+        document.getElementById('meLblBldgRoofH').textContent = `${Number(b.roofH).toFixed(1)}m`;
+        const deg = Math.round(((b.yaw || 0) * 180) / Math.PI);
+        document.getElementById('meRngBldgYaw').value = deg;
+        document.getElementById('meLblBldgYaw').textContent = `${deg}°`;
+        document.getElementById('meColBldgRoof').value = rgb565ToHex(b.roofCol || rgb565(185, 62, 44));
+        document.getElementById('meColBldgWall').value = rgb565ToHex(b.wallL   || rgb565(220, 218, 210));
+      }
+
+      function applyAndSaveChanges() {
+        saveCustomChoroboboLayoutToStorage();
+        rebuildWorldObjectsForScale();
+        updateEditorStatsBadge();
+        renderMapEditorCanvas();
+      }
+
+      function updateEditorStatsBadge() {
+        const el = document.getElementById('meStatsBadge');
+        if (!el) return;
+        const nCustom = CHOROBOBO_CUSTOM_TREES_UV.length;
+        const nRand   = choroboboRandomTreeCount | 0;
+        const nBldg   = BUILDING_UV_DEFS.length;
+        el.textContent = `[${nBldg} Edificios | ${nCustom} Sprites Fijos + ${nRand} Random = ${nCustom + nRand} Total | Escala: ${WORLD_W_M}×${WORLD_H_M}m]`;
+      }
+
+      // Conversión entre píxeles del canvas del editor y coordenadas normalizadas (u, v) de chorobobo.jpg
+      function getViewBox() {
+        const cw = canvas.width, ch = canvas.height;
+        const imgAspect = 2048 / 1024; // 2:1
+        const cnvAspect = cw / ch;
+        let baseW = cw, baseH = ch;
+        if (cnvAspect > imgAspect) baseW = ch * imgAspect;
+        else                       baseH = cw / imgAspect;
+        const drawW = baseW * zoom;
+        const drawH = baseH * zoom;
+        const ox = cw * 0.5 - camU * drawW;
+        const oy = ch * 0.5 - camV * drawH;
+        return { ox, oy, drawW, drawH };
+      }
+
+      function uvToCanvas(u, v) {
+        const vb = getViewBox();
+        return {
+          x: vb.ox + u * vb.drawW,
+          y: vb.oy + (1.0 - v) * vb.drawH
+        };
+      }
+
+      function canvasToUv(px, py) {
+        const vb = getViewBox();
+        const u = (px - vb.ox) / vb.drawW;
+        const imgY = (py - vb.oy) / vb.drawH;
+        const v = 1.0 - imgY;
+        return {
+          u: Math.max(0.02, Math.min(0.98, u)),
+          v: Math.max(0.02, Math.min(0.98, v))
+        };
+      }
+
+      function renderMapEditorCanvas() {
+        if (!meOpen) return;
+        const rect = canvas.parentElement.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          const targetW = Math.round(rect.width);
+          const targetH = Math.round(rect.height);
+          if (canvas.width !== targetW || canvas.height !== targetH) {
+            canvas.width = targetW;
+            canvas.height = targetH;
+          }
+        }
+
+        ctx.fillStyle = '#0b0e12';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        const vb = getViewBox();
+        if (choroDecodedImg) {
+          ctx.drawImage(choroDecodedImg, vb.ox, vb.oy, vb.drawW, vb.drawH);
+        } else {
+          ctx.fillStyle = '#253524';
+          ctx.fillRect(vb.ox, vb.oy, vb.drawW, vb.drawH);
+        }
+
+        const pxPerMeterX = vb.drawW / WORLD_W_M;
+        const pxPerMeterZ = vb.drawH / WORLD_H_M;
+
+        // 1. Dibujar circuitos de Gates si está activo
+        const showGates = document.getElementById('meChkShowGates').checked;
+        if (showGates) {
+          const circuitCols = ['#ff3b30', '#2dc3ff', '#30e860', '#be3aeb', '#f8841c'];
+          for (let c = 0; c < CHOROBOBO_CIRCUIT_DEFS.length; c++) {
+            const def = CHOROBOBO_CIRCUIT_DEFS[c];
+            ctx.strokeStyle = circuitCols[c % circuitCols.length];
+            ctx.lineWidth = (c === currentCircuitIdx) ? 2.2 : 1.1;
+            ctx.setLineDash((c === currentCircuitIdx) ? [] : [4, 4]);
+            ctx.beginPath();
+            for (let i = 0; i < def.uvList.length; i++) {
+              const gUv = def.uvList[i];
+              const pt = uvToCanvas(gUv[0], gUv[1]);
+              if (i === 0) ctx.moveTo(pt.x, pt.y);
+              else         ctx.lineTo(pt.x, pt.y);
+            }
+            ctx.closePath();
+            ctx.stroke();
+          }
+          ctx.setLineDash([]);
+        }
+
+        // 2. Dibujar árboles procedurales de relleno en tono suave
+        const showRand = document.getElementById('meChkShowRandom').checked;
+        if (showRand) {
+          for (let i = 0; i < WORLD_TREES.length; i++) {
+            const tr = WORLD_TREES[i];
+            if (tr.isCustom) continue;
+            const uv = worldToUv(tr.x, tr.z);
+            const pt = uvToCanvas(uv.u, uv.v);
+            ctx.fillStyle = 'rgba(72, 185, 68, 0.45)';
+            ctx.beginPath();
+            ctx.arc(pt.x, pt.y, Math.max(2.5, tr.w * pxPerMeterX * 0.45), 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+
+        // 3. Dibujar Árboles / Sprites personalizados puestos a mano
+        for (let i = 0; i < CHOROBOBO_CUSTOM_TREES_UV.length; i++) {
+          const ct = CHOROBOBO_CUSTOM_TREES_UV[i];
+          const pt = uvToCanvas(ct.u, ct.v);
+          const cat = TREE_TYPE_CATALOG[ct.type] || TREE_TYPE_CATALOG[0];
+          const radPx = Math.max(4.5, ((ct.h || cat.defH) * cat.wMul * 0.5) * pxPerMeterX);
+          ctx.fillStyle = cat.color;
+          ctx.strokeStyle = '#111';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.arc(pt.x, pt.y, radPx, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          if (zoom >= 2.2) {
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 9px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(cat.short.slice(0, 3), pt.x, pt.y + 3);
+          }
+        }
+
+        // 4. Dibujar Edificios 3D con su huella en metros, orientación yaw y tipo
+        const bScale = WORLD_W_M <= 2000.0 ? 0.78 : 1.15;
+        for (let i = 0; i < BUILDING_UV_DEFS.length; i++) {
+          const b = BUILDING_UV_DEFS[i];
+          const pt = uvToCanvas(b.u, b.v);
+          const wPx = Math.max(10, b.w * bScale * pxPerMeterX);
+          const dPx = Math.max(8,  b.d * bScale * pxPerMeterZ);
+          ctx.save();
+          ctx.translate(pt.x, pt.y);
+          ctx.rotate(-(b.yaw || 0));
+          ctx.fillStyle = rgb565ToHex(b.roofCol || rgb565(185, 62, 44));
+          ctx.strokeStyle = (i === meSelectedBldg && meTool === 'bldg') ? '#ffea00' : '#ffffff';
+          ctx.lineWidth = (i === meSelectedBldg && meTool === 'bldg') ? 2.8 : 1.4;
+          if (b.kind === 'silo') {
+            ctx.beginPath();
+            ctx.arc(0, 0, Math.min(wPx, dPx) * 0.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+          } else {
+            ctx.fillRect(-wPx * 0.5, -dPx * 0.5, wPx, dPx);
+            ctx.strokeRect(-wPx * 0.5, -dPx * 0.5, wPx, dPx);
+          }
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 9px sans-serif';
+          ctx.textAlign = 'center';
+          const tag = (b.kind === 'open_canopy') ? 'CANEY' : (b.kind === 'open_hangar' ? 'HANGAR' : (b.kind === 'silo' ? 'SILO' : (b.kind === 'water_tower' ? 'TORRE' : (b.kind === 'hacienda' ? 'HACIENDA' : 'GALPON'))));
+          ctx.fillText(tag, 0, 3);
+          ctx.restore();
+        }
+
+        // 5. Punto de Despegue (SPAWN Pista A.I.A Chorobobo) y Aeronave Activa
+        const spPt = uvToCanvas(SPAWN_MX / MAP_W, SPAWN_MZ / MAP_H);
+        ctx.fillStyle = '#ffcb3b';
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(spPt.x, spPt.y, 6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#ffcb3b';
+        ctx.font = 'bold 11px sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText('⭐ PISTA A.I.A (0,0)', spPt.x + 9, spPt.y + 4);
+
+        const craft = (activeRomId === 'fpv_wing' && typeof fpvWingSim !== 'undefined') ? fpvWingSim : (typeof fpvDroneSim !== 'undefined' ? fpvDroneSim : null);
+        if (craft) {
+          const cUv = worldToUv(craft.px, craft.pz);
+          const cPt = uvToCanvas(cUv.u, cUv.v);
+          ctx.save();
+          ctx.translate(cPt.x, cPt.y);
+          ctx.fillStyle = '#00f5ff';
+          ctx.strokeStyle = '#000';
+          ctx.lineWidth = 1.8;
+          ctx.beginPath();
+          ctx.arc(0, 0, 5.5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = '#00f5ff';
+          ctx.font = 'bold 10px sans-serif';
+          ctx.fillText('🚁 AERONAVE', 8, -4);
+          ctx.restore();
+        }
+      }
+
+      function findNearestBuildingIdx(u, v, maxDistPx = 22) {
+        const clickPt = uvToCanvas(u, v);
+        let bestIdx = -1;
+        let bestD = maxDistPx;
+        for (let i = 0; i < BUILDING_UV_DEFS.length; i++) {
+          const b = BUILDING_UV_DEFS[i];
+          const pt = uvToCanvas(b.u, b.v);
+          const d = Math.hypot(pt.x - clickPt.x, pt.y - clickPt.y);
+          if (d < bestD) {
+            bestD = d;
+            bestIdx = i;
+          }
+        }
+        return bestIdx;
+      }
+
+      function eraseAtUv(u, v, radiusPx = 18) {
+        const clickPt = uvToCanvas(u, v);
+        let changed = false;
+        for (let i = CHOROBOBO_CUSTOM_TREES_UV.length - 1; i >= 0; i--) {
+          const ct = CHOROBOBO_CUSTOM_TREES_UV[i];
+          const pt = uvToCanvas(ct.u, ct.v);
+          if (Math.hypot(pt.x - clickPt.x, pt.y - clickPt.y) <= radiusPx) {
+            CHOROBOBO_CUSTOM_TREES_UV.splice(i, 1);
+            changed = true;
+          }
+        }
+        for (let i = BUILDING_UV_DEFS.length - 1; i >= 0; i--) {
+          const b = BUILDING_UV_DEFS[i];
+          const pt = uvToCanvas(b.u, b.v);
+          if (Math.hypot(pt.x - clickPt.x, pt.y - clickPt.y) <= radiusPx) {
+            BUILDING_UV_DEFS.splice(i, 1);
+            if (meSelectedBldg >= BUILDING_UV_DEFS.length) {
+              meSelectedBldg = Math.max(0, BUILDING_UV_DEFS.length - 1);
+            }
+            changed = true;
+          }
+        }
+        if (changed) applyAndSaveChanges();
+      }
+
+      function plantTreeAtUv(u, v) {
+        CHOROBOBO_CUSTOM_TREES_UV.push({
+          u: Number(u.toFixed(4)),
+          v: Number(v.toFixed(4)),
+          h: Number(meTreeH.toFixed(1)),
+          type: meTreeType
+        });
+        lastPaintWorld = uvToWorld(u, v);
+        applyAndSaveChanges();
+      }
+
+      canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+      canvas.addEventListener('pointerdown', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const px = (e.clientX - rect.left) * (canvas.width / rect.width);
+        const py = (e.clientY - rect.top)  * (canvas.height / rect.height);
+
+        // Clic derecho, botón central o Alt+Clic: Paneo del mapa
+        if (e.button === 2 || e.button === 1 || e.altKey) {
+          isPanning = true;
+          panStartX = px;
+          panStartY = py;
+          panStartU = camU;
+          panStartV = camV;
+          canvas.setPointerCapture(e.pointerId);
+          return;
+        }
+
+        const uv = canvasToUv(px, py);
+        const wPos = uvToWorld(uv.u, uv.v);
+
+        if (meTool === 'tree') {
+          isPainting = true;
+          plantTreeAtUv(uv.u, uv.v);
+          canvas.setPointerCapture(e.pointerId);
+        } else if (meTool === 'erase') {
+          isPainting = true;
+          eraseAtUv(uv.u, uv.v, 20);
+          canvas.setPointerCapture(e.pointerId);
+        } else if (meTool === 'teleport') {
+          const hFloor = getTerrainHeightMeters(wPos.x, wPos.z);
+          if (typeof fpvDroneSim !== 'undefined') {
+            fpvDroneSim.px = wPos.x;
+            fpvDroneSim.pz = wPos.z;
+            fpvDroneSim.py = hFloor + 12.0;
+            fpvDroneSim.vx = 0; fpvDroneSim.vy = 0; fpvDroneSim.vz = 0;
+          }
+          if (typeof fpvWingSim !== 'undefined') {
+            fpvWingSim.px = wPos.x;
+            fpvWingSim.pz = wPos.z;
+            fpvWingSim.py = hFloor + 18.0;
+          }
+          showToast(`AERONAVE EN X:${wPos.x}M Z:${wPos.z}M`);
+          renderMapEditorCanvas();
+        } else if (meTool === 'bldg') {
+          const hitIdx = findNearestBuildingIdx(uv.u, uv.v, 24);
+          if (hitIdx >= 0) {
+            meSelectedBldg = hitIdx;
+            isDraggingBldg = true;
+            syncBldgInspectorFromSelected();
+            renderMapEditorCanvas();
+            canvas.setPointerCapture(e.pointerId);
+          } else {
+            const kind = document.getElementById('meSelBldgKind').value || 'standard';
+            const w = Number(document.getElementById('meRngBldgW').value) || 14;
+            const d = Number(document.getElementById('meRngBldgD').value) || 9;
+            const h = Number(document.getElementById('meRngBldgH').value) || 4.8;
+            const roofH = Number(document.getElementById('meRngBldgRoofH').value) || 1.8;
+            const yawDeg = Number(document.getElementById('meRngBldgYaw').value) || 0;
+            const roofHex = document.getElementById('meColBldgRoof').value;
+            const wallHex = document.getElementById('meColBldgWall').value;
+            BUILDING_UV_DEFS.push({
+              u: Number(uv.u.toFixed(4)),
+              v: Number(uv.v.toFixed(4)),
+              w, d, h, roofH,
+              yaw: Number(((yawDeg * Math.PI) / 180).toFixed(2)),
+              kind,
+              wallL: hexToRgb565(wallHex, 1.0),
+              wallD: hexToRgb565(wallHex, 0.72),
+              roofCol: hexToRgb565(roofHex, 1.0)
+            });
+            meSelectedBldg = BUILDING_UV_DEFS.length - 1;
+            isDraggingBldg = true;
+            applyAndSaveChanges();
+            canvas.setPointerCapture(e.pointerId);
+          }
+        }
+      });
+
+      canvas.addEventListener('pointermove', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const px = (e.clientX - rect.left) * (canvas.width / rect.width);
+        const py = (e.clientY - rect.top)  * (canvas.height / rect.height);
+        const uv = canvasToUv(px, py);
+        const wPos = uvToWorld(uv.u, uv.v);
+
+        const readout = document.getElementById('meCoordReadout');
+        if (readout) {
+          readout.textContent = `UV: (${uv.u.toFixed(3)}, ${uv.v.toFixed(3)}) | Mundo: X=${wPos.x}m, Z=${wPos.z}m`;
+        }
+
+        if (isPanning) {
+          const vb = getViewBox();
+          camU = Math.max(0.05, Math.min(0.95, panStartU - (px - panStartX) / vb.drawW));
+          camV = Math.max(0.05, Math.min(0.95, panStartV - (py - panStartY) / vb.drawH));
+          renderMapEditorCanvas();
+          return;
+        }
+
+        if (isPainting && meTool === 'tree') {
+          if (!lastPaintWorld || Math.hypot(wPos.x - lastPaintWorld.x, wPos.z - lastPaintWorld.z) >= meBrushStepM) {
+            plantTreeAtUv(uv.u, uv.v);
+          }
+        } else if (isPainting && meTool === 'erase') {
+          eraseAtUv(uv.u, uv.v, 20);
+        } else if (isDraggingBldg && meTool === 'bldg' && BUILDING_UV_DEFS[meSelectedBldg]) {
+          BUILDING_UV_DEFS[meSelectedBldg].u = Number(uv.u.toFixed(4));
+          BUILDING_UV_DEFS[meSelectedBldg].v = Number(uv.v.toFixed(4));
+          applyAndSaveChanges();
+        }
+      });
+
+      const stopPointer = () => {
+        isPanning = false;
+        isPainting = false;
+        isDraggingBldg = false;
+        lastPaintWorld = null;
+      };
+      canvas.addEventListener('pointerup', stopPointer);
+      canvas.addEventListener('pointercancel', stopPointer);
+
+      canvas.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const factor = e.deltaY < 0 ? 1.18 : 0.85;
+        zoom = Math.max(0.9, Math.min(10.0, zoom * factor));
+        renderMapEditorCanvas();
+      }, { passive: false });
+
+      // Controles de la barra lateral y botones superiores del editor
+      document.querySelectorAll('[data-me-tool]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          meTool = btn.getAttribute('data-me-tool');
+          document.querySelectorAll('[data-me-tool]').forEach((b) => b.classList.toggle('active', b === btn));
+          document.getElementById('mePanelTree').style.display = (meTool === 'tree') ? 'flex' : 'none';
+          document.getElementById('mePanelBldg').style.display = (meTool === 'bldg') ? 'flex' : 'none';
+          if (meTool === 'bldg') syncBldgInspectorFromSelected();
+          renderMapEditorCanvas();
+        });
+      });
+
+      document.querySelectorAll('[data-me-scale]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const idx = Number(btn.getAttribute('data-me-scale'));
+          generateGentleVoxelMap(idx);
+          updateEditorStatsBadge();
+          renderMapEditorCanvas();
+        });
+      });
+
+      document.getElementById('meRngTreeH').addEventListener('input', (e) => {
+        meTreeH = Number(e.target.value);
+        document.getElementById('meLblTreeH').textContent = `${meTreeH.toFixed(1)}m`;
+      });
+      document.getElementById('meRngBrushStep').addEventListener('input', (e) => {
+        meBrushStepM = Number(e.target.value);
+        document.getElementById('meLblBrushStep').textContent = `${Math.round(meBrushStepM)}m`;
+      });
+      document.getElementById('meRngRandCount').value = choroboboRandomTreeCount;
+      document.getElementById('meLblRandCount').textContent = `${choroboboRandomTreeCount}`;
+      document.getElementById('meRngRandCount').addEventListener('input', (e) => {
+        choroboboRandomTreeCount = Number(e.target.value) | 0;
+        document.getElementById('meLblRandCount').textContent = `${choroboboRandomTreeCount}`;
+        applyAndSaveChanges();
+      });
+
+      document.getElementById('meBtnClearCustomTrees').addEventListener('click', () => {
+        CHOROBOBO_CUSTOM_TREES_UV = [];
+        applyAndSaveChanges();
+      });
+      document.getElementById('meBtnZeroRandom').addEventListener('click', () => {
+        choroboboRandomTreeCount = 0;
+        document.getElementById('meRngRandCount').value = 0;
+        document.getElementById('meLblRandCount').textContent = '0';
+        applyAndSaveChanges();
+      });
+
+      function updateSelectedBldgFromControls() {
+        const b = BUILDING_UV_DEFS[meSelectedBldg];
+        if (!b) return;
+        b.kind  = document.getElementById('meSelBldgKind').value;
+        b.w     = Number(document.getElementById('meRngBldgW').value);
+        b.d     = Number(document.getElementById('meRngBldgD').value);
+        b.h     = Number(document.getElementById('meRngBldgH').value);
+        b.roofH = Number(document.getElementById('meRngBldgRoofH').value);
+        const yawDeg = Number(document.getElementById('meRngBldgYaw').value);
+        b.yaw   = Number(((yawDeg * Math.PI) / 180).toFixed(2));
+        const roofHex = document.getElementById('meColBldgRoof').value;
+        const wallHex = document.getElementById('meColBldgWall').value;
+        b.roofCol = hexToRgb565(roofHex, 1.0);
+        b.wallL   = hexToRgb565(wallHex, 1.0);
+        b.wallD   = hexToRgb565(wallHex, 0.72);
+        document.getElementById('meLblBldgW').textContent = `${Math.round(b.w)}m`;
+        document.getElementById('meLblBldgD').textContent = `${Math.round(b.d)}m`;
+        document.getElementById('meLblBldgH').textContent = `${b.h.toFixed(1)}m`;
+        document.getElementById('meLblBldgRoofH').textContent = `${b.roofH.toFixed(1)}m`;
+        document.getElementById('meLblBldgYaw').textContent = `${Math.round(yawDeg)}°`;
+        applyAndSaveChanges();
+      }
+
+      document.getElementById('meSelBldgKind').addEventListener('change', (e) => {
+        const cat = BUILDING_KIND_CATALOG.find(c => c.kind === e.target.value);
+        if (cat) {
+          document.getElementById('meRngBldgW').value = cat.defW;
+          document.getElementById('meRngBldgD').value = cat.defD;
+          document.getElementById('meRngBldgH').value = cat.defH;
+          document.getElementById('meRngBldgRoofH').value = cat.defRoofH;
+        }
+        updateSelectedBldgFromControls();
+      });
+      ['meRngBldgW', 'meRngBldgD', 'meRngBldgH', 'meRngBldgRoofH', 'meRngBldgYaw', 'meColBldgRoof', 'meColBldgWall'].forEach((id) => {
+        document.getElementById(id).addEventListener('input', updateSelectedBldgFromControls);
+      });
+
+      document.getElementById('meBtnDeleteSelBldg').addEventListener('click', () => {
+        if (BUILDING_UV_DEFS[meSelectedBldg]) {
+          BUILDING_UV_DEFS.splice(meSelectedBldg, 1);
+          meSelectedBldg = Math.max(0, BUILDING_UV_DEFS.length - 1);
+          syncBldgInspectorFromSelected();
+          applyAndSaveChanges();
+        }
+      });
+
+      document.getElementById('meChkShowGates').addEventListener('change', renderMapEditorCanvas);
+      document.getElementById('meChkShowRandom').addEventListener('change', renderMapEditorCanvas);
+      document.getElementById('meBtnZoomIn').addEventListener('click', () => { zoom = Math.min(10.0, zoom * 1.3); renderMapEditorCanvas(); });
+      document.getElementById('meBtnZoomOut').addEventListener('click', () => { zoom = Math.max(0.9, zoom / 1.3); renderMapEditorCanvas(); });
+      document.getElementById('meBtnResetView').addEventListener('click', () => {
+        camU = SPAWN_MX / MAP_W;
+        camV = 1.0 - (SPAWN_MZ / MAP_H);
+        zoom = 2.6;
+        renderMapEditorCanvas();
+      });
+
+      document.getElementById('meBtnResetDefault').addEventListener('click', () => {
+        BUILDING_UV_DEFS = JSON.parse(JSON.stringify(DEFAULT_BUILDING_UV_DEFS));
+        CHOROBOBO_CUSTOM_TREES_UV = JSON.parse(JSON.stringify(DEFAULT_CHOROBOBO_TREES_UV));
+        choroboboRandomTreeCount = 180;
+        document.getElementById('meRngRandCount').value = 180;
+        document.getElementById('meLblRandCount').textContent = '180';
+        applyAndSaveChanges();
+        showToast('MAPA CHOROBOBO RESTAURADO');
+      });
+
+      document.getElementById('meBtnExport').addEventListener('click', () => {
+        const payload = JSON.stringify({
+          buildings: BUILDING_UV_DEFS,
+          trees: CHOROBOBO_CUSTOM_TREES_UV,
+          randomTreeCount: choroboboRandomTreeCount
+        }, null, 2);
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(payload).then(() => {
+            const btn = document.getElementById('meBtnExport');
+            btn.textContent = '✅ ¡COPIADO AL PORTAPAPELES!';
+            setTimeout(() => { btn.textContent = '📋 COPIAR DISEÑO'; }, 2400);
+          });
+        }
+      });
+
+      btnOpenEl.addEventListener('click', () => {
+        if (!TERRAIN_THEMES[currentThemeIdx].isChorobobo) {
+          generateGentleVoxelMap(0);
+        }
+        meOpen = true;
+        modalEl.classList.add('open');
+        updateEditorStatsBadge();
+        syncBldgInspectorFromSelected();
+        setTimeout(renderMapEditorCanvas, 30);
+      });
+
+      btnCloseEl.addEventListener('click', () => {
+        meOpen = false;
+        modalEl.classList.remove('open');
+      });
+    })();
 
     requestAnimationFrame(retroGoMainLoop);
   </script>
