@@ -911,6 +911,33 @@
           </small>
         </div>
 
+        <!-- 3C. Panel de Ubicación Inicial y Ángulo de Salida de la Aeronave -->
+        <div id="mePanelTeleport" class="me-card" style="display:none;">
+          <h4>2. Ubicación y Ángulo Inicial de Aeronave</h4>
+          <div class="me-row">
+            <label title="Si está activo, al iniciar o reiniciar siempre despegarás desde esta posición y ángulo exactos"><input type="checkbox" id="meChkCustomSpawn" checked /> 📌 Fijar como Punto y Ángulo de Salida</label>
+          </div>
+          <div class="me-row">
+            <span>Ángulo / Rumbo: <b id="meLblSpawnHdg" style="color:#ffea00;">-162°</b></span>
+            <input type="range" id="meRngSpawnHdg" min="-180" max="180" step="1" value="-162" />
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;">
+            <button class="me-btn" data-me-hdg="-90" style="font-size:10px;padding:4px 2px;">⬆️ Norte (-90°)</button>
+            <button class="me-btn" data-me-hdg="0" style="font-size:10px;padding:4px 2px;">➡️ Este (0°)</button>
+            <button class="me-btn" data-me-hdg="90" style="font-size:10px;padding:4px 2px;">⬇️ Sur (90°)</button>
+            <button class="me-btn" data-me-hdg="180" style="font-size:10px;padding:4px 2px;">⬅️ Oeste (180°)</button>
+            <button class="me-btn" id="meBtnAimGate1" style="font-size:10px;padding:4px 2px;">🎯 Mirar a G1</button>
+            <button class="me-btn" data-me-hdg="-162" style="font-size:10px;padding:4px 2px;">🛬 Pista A.I.A</button>
+          </div>
+          <div class="me-row" style="margin-top:4px;">
+            <span>Altura Salida: <b id="meLblSpawnAlt">12.0m</b></span>
+            <input type="range" id="meRngSpawnAlt" min="1.8" max="60.0" step="0.5" value="12.0" />
+          </div>
+          <small style="color:#98a4b8;line-height:1.3;">
+            💡 Haz clic en el mapa para situar la aeronave y <b>arrastra el ratón</b> (o mueve el slider de <b>Ángulo / Rumbo</b>) para elegir hacia dónde mira al despegar.
+          </small>
+        </div>
+
         <!-- 4. Escala Activa de Chorobobo -->
         <div class="me-card">
           <h4>Escala Activa de Chorobobo</h4>
@@ -4250,9 +4277,18 @@
       { u: 0.498, v: 0.412, h: 6.2, type: 9 }
     ];
 
+    const DEFAULT_CHOROBOBO_SPAWN_DEF = {
+      enabled: false,
+      u: SPAWN_U, // 0.585
+      v: SPAWN_V, // 0.365
+      hdgDeg: -162, // Rumbo alineado con la Pista A.I.A Chorobobo (-X, +Z)
+      altM: 12.0
+    };
+
     let BUILDING_UV_DEFS         = JSON.parse(JSON.stringify(DEFAULT_BUILDING_UV_DEFS));
     let CHOROBOBO_CUSTOM_TREES_UV = JSON.parse(JSON.stringify(DEFAULT_CHOROBOBO_TREES_UV));
     let choroboboRandomTreeCount = 180; // Permite ajustar cuántos árboles procedurales de relleno se suman a los puestos a mano
+    let CHOROBOBO_SPAWN_DEF      = { ...DEFAULT_CHOROBOBO_SPAWN_DEF };
 
     (function loadCustomChoroboboLayoutFromStorage() {
       try {
@@ -4262,6 +4298,9 @@
           if (Array.isArray(parsed.buildings)) BUILDING_UV_DEFS = parsed.buildings;
           if (Array.isArray(parsed.trees))     CHOROBOBO_CUSTOM_TREES_UV = parsed.trees;
           if (typeof parsed.randomTreeCount === 'number') choroboboRandomTreeCount = parsed.randomTreeCount;
+          if (parsed.spawn && typeof parsed.spawn === 'object') {
+            CHOROBOBO_SPAWN_DEF = { ...DEFAULT_CHOROBOBO_SPAWN_DEF, ...parsed.spawn };
+          }
           if (Array.isArray(parsed.circuits) && parsed.circuits.length === CHOROBOBO_CIRCUIT_DEFS.length) {
             for (let c = 0; c < CHOROBOBO_CIRCUIT_DEFS.length; c++) {
               if (parsed.circuits[c] && Array.isArray(parsed.circuits[c].uvList)) {
@@ -4296,7 +4335,8 @@
           buildings: BUILDING_UV_DEFS,
           trees: CHOROBOBO_CUSTOM_TREES_UV,
           randomTreeCount: choroboboRandomTreeCount,
-          circuits: CHOROBOBO_CIRCUIT_DEFS
+          circuits: CHOROBOBO_CIRCUIT_DEFS,
+          spawn: CHOROBOBO_SPAWN_DEF
         }));
       } catch (e) {}
     }
@@ -6519,15 +6559,30 @@
 
       reset() {
         const g0 = (CIRCUIT_GATES && CIRCUIT_GATES[0]) || { x: 0, y: 9.0, z: 0, tx: -0.95, tz: 0.31, nx: 0.31, nz: 0.95 };
-        const spawnBack = WORLD_W_M <= 2000.0 ? 22.0 : 35.0;
-        this.px = g0.x - g0.tx * spawnBack;
-        this.pz = g0.z - g0.tz * spawnBack;
-        this.py = getTerrainHeightMeters(this.px, this.pz) + g0.y;
-        this.vx = g0.tx * 8.0; this.vy = 0; this.vz = g0.tz * 8.0;
+        const useCustomSpawn = TERRAIN_THEMES[currentThemeIdx] && TERRAIN_THEMES[currentThemeIdx].isChorobobo && CHOROBOBO_SPAWN_DEF && CHOROBOBO_SPAWN_DEF.enabled;
+        if (useCustomSpawn) {
+          const wPos = uvToWorld(CHOROBOBO_SPAWN_DEF.u, CHOROBOBO_SPAWN_DEF.v);
+          const rad  = ((Number(CHOROBOBO_SPAWN_DEF.hdgDeg) || 0) * Math.PI) / 180.0;
+          const fx0  = Math.cos(rad);
+          const fz0  = -Math.sin(rad);
+          this.px = wPos.x;
+          this.pz = wPos.z;
+          this.py = getTerrainHeightMeters(this.px, this.pz) + Math.max(1.8, Number(CHOROBOBO_SPAWN_DEF.altM) || 12.0);
+          this.vx = fx0 * 8.0; this.vy = 0; this.vz = fz0 * 8.0;
+          this.fx = fx0; this.fy = 0; this.fz = fz0;
+          this.ux = 0;   this.uy = 1; this.uz = 0;
+          this.rx = fz0; this.ry = 0; this.rz = -fx0;
+        } else {
+          const spawnBack = WORLD_W_M <= 2000.0 ? 22.0 : 35.0;
+          this.px = g0.x - g0.tx * spawnBack;
+          this.pz = g0.z - g0.tz * spawnBack;
+          this.py = getTerrainHeightMeters(this.px, this.pz) + g0.y;
+          this.vx = g0.tx * 8.0; this.vy = 0; this.vz = g0.tz * 8.0;
+          this.fx = g0.tx; this.fy = 0; this.fz = g0.tz;
+          this.ux = 0;     this.uy = 1; this.uz = 0;
+          this.rx = g0.nx; this.ry = 0; this.rz = g0.nz;
+        }
         this.pitchRate = 0; this.rollRate = 0; this.yawRate = 0;
-        this.fx = g0.tx; this.fy = 0; this.fz = g0.tz;
-        this.ux = 0;     this.uy = 1; this.uz = 0;
-        this.rx = g0.nx; this.ry = 0; this.rz = g0.nz;
         this.motorRpm = 0.36;
         this.mRpm[0] = 0.36; this.mRpm[1] = 0.36; this.mRpm[2] = 0.36; this.mRpm[3] = 0.36;
         this.mCmd[0] = 0.36; this.mCmd[1] = 0.36; this.mCmd[2] = 0.36; this.mCmd[3] = 0.36;
@@ -6860,25 +6915,40 @@
 
       reset() {
         const g0 = (CIRCUIT_GATES && CIRCUIT_GATES[0]) || { x: 0, y: 9.0, z: 0, tx: -0.95, tz: 0.31, nx: 0.31, nz: 0.95 };
-        const spawnBack = WORLD_W_M <= 2000.0 ? 28.0 : 42.0;
-        this.px = g0.x - g0.tx * spawnBack;
-        this.pz = g0.z - g0.tz * spawnBack;
-        // Lanzamiento a mano (Hand-Launch) desde altura de hombro (1.75 m sobre el suelo)
-        const groundH = getTerrainHeightMeters(this.px, this.pz);
-        this.py = groundH + 1.75;
+        const useCustomSpawn = TERRAIN_THEMES[currentThemeIdx] && TERRAIN_THEMES[currentThemeIdx].isChorobobo && CHOROBOBO_SPAWN_DEF && CHOROBOBO_SPAWN_DEF.enabled;
+        let dirTx = g0.tx, dirTz = g0.tz, dirNx = g0.nx, dirNz = g0.nz;
+        if (useCustomSpawn) {
+          const wPos = uvToWorld(CHOROBOBO_SPAWN_DEF.u, CHOROBOBO_SPAWN_DEF.v);
+          const rad  = ((Number(CHOROBOBO_SPAWN_DEF.hdgDeg) || 0) * Math.PI) / 180.0;
+          dirTx = Math.cos(rad);
+          dirTz = -Math.sin(rad);
+          dirNx = dirTz;
+          dirNz = -dirTx;
+          this.px = wPos.x;
+          this.pz = wPos.z;
+          const groundH = getTerrainHeightMeters(this.px, this.pz);
+          this.py = groundH + Math.max(1.75, Number(CHOROBOBO_SPAWN_DEF.altM) || 12.0);
+        } else {
+          const spawnBack = WORLD_W_M <= 2000.0 ? 28.0 : 42.0;
+          this.px = g0.x - g0.tx * spawnBack;
+          this.pz = g0.z - g0.tz * spawnBack;
+          // Lanzamiento a mano (Hand-Launch) desde altura de hombro (1.75 m sobre el suelo)
+          const groundH = getTerrainHeightMeters(this.px, this.pz);
+          this.py = groundH + 1.75;
+        }
 
-        // Actitud inicial de lanzamiento: morro +13° arriba hacia la Puerta 1 y leve alabeo de mano (3.5°)
-        const throwPitch = 13.0 * DEG2RAD;
+        // Actitud inicial de lanzamiento: morro +13° arriba en la dirección de salida
+        const throwPitch = (useCustomSpawn && (Number(CHOROBOBO_SPAWN_DEF.altM) || 12.0) >= 5.0) ? (4.0 * DEG2RAD) : (13.0 * DEG2RAD);
         const cosP = Math.cos(throwPitch), sinP = Math.sin(throwPitch);
-        this.fx =  g0.tx * cosP;
+        this.fx =  dirTx * cosP;
         this.fy =  sinP;
-        this.fz =  g0.tz * cosP;
-        this.ux = -g0.tx * sinP;
+        this.fz =  dirTz * cosP;
+        this.ux = -dirTx * sinP;
         this.uy =  cosP;
-        this.uz = -g0.tz * sinP;
-        this.rx =  g0.nx;
+        this.uz = -dirTz * sinP;
+        this.rx =  dirNx;
         this.ry =  0;
-        this.rz =  g0.nz;
+        this.rz =  dirNz;
 
         // Impulso físico del lanzamiento a mano (~14.2 m/s = 51 km/h) con leve rotación inicial de suelta
         const throwSpd = 14.2;
@@ -12434,6 +12504,50 @@
         renderMapEditorCanvas();
       });
 
+      function applySpawnDefToActiveCraft() {
+        const wPos = uvToWorld(CHOROBOBO_SPAWN_DEF.u, CHOROBOBO_SPAWN_DEF.v);
+        const hFloor = getTerrainHeightMeters(wPos.x, wPos.z);
+        const altRel = Math.max(1.8, Number(CHOROBOBO_SPAWN_DEF.altM) || 12.0);
+        const rad = ((Number(CHOROBOBO_SPAWN_DEF.hdgDeg) || 0) * Math.PI) / 180.0;
+        const fx = Math.cos(rad);
+        const fz = -Math.sin(rad);
+        const rx = fz;
+        const rz = -fx;
+        if (typeof fpvDroneSim !== 'undefined') {
+          fpvDroneSim.px = wPos.x;
+          fpvDroneSim.pz = wPos.z;
+          fpvDroneSim.py = hFloor + altRel;
+          fpvDroneSim.vx = 0; fpvDroneSim.vy = 0; fpvDroneSim.vz = 0;
+          fpvDroneSim.fx = fx; fpvDroneSim.fy = 0; fpvDroneSim.fz = fz;
+          fpvDroneSim.ux = 0;  fpvDroneSim.uy = 1; fpvDroneSim.uz = 0;
+          fpvDroneSim.rx = rx; fpvDroneSim.ry = 0; fpvDroneSim.rz = rz;
+        }
+        if (typeof fpvWingSim !== 'undefined') {
+          fpvWingSim.px = wPos.x;
+          fpvWingSim.pz = wPos.z;
+          fpvWingSim.py = hFloor + altRel;
+          fpvWingSim.fx = fx; fpvWingSim.fy = 0; fpvWingSim.fz = fz;
+          fpvWingSim.ux = 0;  fpvWingSim.uy = 1; fpvWingSim.uz = 0;
+          fpvWingSim.rx = rx; fpvWingSim.ry = 0; fpvWingSim.rz = rz;
+          fpvWingSim.vx = fx * 15.0; fpvWingSim.vy = 0; fpvWingSim.vz = fz * 15.0;
+        }
+      }
+
+      function syncTeleportInspectorUI() {
+        const chk = document.getElementById('meChkCustomSpawn');
+        if (chk) chk.checked = !!CHOROBOBO_SPAWN_DEF.enabled;
+        const deg = Math.round(Number(CHOROBOBO_SPAWN_DEF.hdgDeg) || 0);
+        const rngHdg = document.getElementById('meRngSpawnHdg');
+        const lblHdg = document.getElementById('meLblSpawnHdg');
+        if (rngHdg) rngHdg.value = deg;
+        if (lblHdg) lblHdg.textContent = `${deg}°`;
+        const altM = Math.max(1.8, Number(CHOROBOBO_SPAWN_DEF.altM) || 12.0);
+        const rngAlt = document.getElementById('meRngSpawnAlt');
+        const lblAlt = document.getElementById('meLblSpawnAlt');
+        if (rngAlt) rngAlt.value = altM.toFixed(1);
+        if (lblAlt) lblAlt.textContent = `${altM.toFixed(1)}m`;
+      }
+
       canvas.addEventListener('pointerdown', (e) => {
         const rect = canvas.getBoundingClientRect();
         const px = (e.clientX - rect.left) * (canvas.width / rect.width);
@@ -12464,19 +12578,13 @@
         } else if (meTool === 'teleport') {
           isAimingCraft = true;
           customCraftPlaced = true;
-          const hFloor = getTerrainHeightMeters(wPos.x, wPos.z);
-          if (typeof fpvDroneSim !== 'undefined') {
-            fpvDroneSim.px = wPos.x;
-            fpvDroneSim.pz = wPos.z;
-            fpvDroneSim.py = hFloor + 10.0;
-            fpvDroneSim.vx = 0; fpvDroneSim.vy = 0; fpvDroneSim.vz = 0;
-          }
-          if (typeof fpvWingSim !== 'undefined') {
-            fpvWingSim.px = wPos.x;
-            fpvWingSim.pz = wPos.z;
-            fpvWingSim.py = hFloor + 14.0;
-          }
-          showToast(`AERONAVE EN X:${wPos.x}M Z:${wPos.z}M (ARRASTRA PARA APUNTAR)`);
+          CHOROBOBO_SPAWN_DEF.enabled = true;
+          CHOROBOBO_SPAWN_DEF.u = Number(uv.u.toFixed(4));
+          CHOROBOBO_SPAWN_DEF.v = Number(uv.v.toFixed(4));
+          applySpawnDefToActiveCraft();
+          syncTeleportInspectorUI();
+          saveCustomChoroboboLayoutToStorage();
+          showToast(`SALIDA EN X:${wPos.x}M Z:${wPos.z}M (ARRASTRA O USA EL SLIDER DE ANGULO)`);
           renderMapEditorCanvas();
           canvas.setPointerCapture(e.pointerId);
         } else if (meTool === 'gate') {
@@ -12585,29 +12693,17 @@
             applyAndSaveChanges();
           }
         } else if (isAimingCraft && meTool === 'teleport') {
-          const craft = (activeRomId === 'fpv_wing' && typeof fpvWingSim !== 'undefined') ? fpvWingSim : (typeof fpvDroneSim !== 'undefined' ? fpvDroneSim : null);
-          if (craft) {
-            const dx = wPos.x - craft.px;
-            const dz = wPos.z - craft.pz;
-            const dLen = Math.hypot(dx, dz);
-            if (dLen > 2.0) {
-              const fx = dx / dLen;
-              const fz = dz / dLen;
-              const rx = fz;
-              const rz = -fx;
-              if (typeof fpvDroneSim !== 'undefined') {
-                fpvDroneSim.fx = fx; fpvDroneSim.fy = 0; fpvDroneSim.fz = fz;
-                fpvDroneSim.ux = 0;  fpvDroneSim.uy = 1; fpvDroneSim.uz = 0;
-                fpvDroneSim.rx = rx; fpvDroneSim.ry = 0; fpvDroneSim.rz = rz;
-              }
-              if (typeof fpvWingSim !== 'undefined') {
-                fpvWingSim.fx = fx; fpvWingSim.fy = 0; fpvWingSim.fz = fz;
-                fpvWingSim.ux = 0;  fpvWingSim.uy = 1; fpvWingSim.uz = 0;
-                fpvWingSim.rx = rx; fpvWingSim.ry = 0; fpvWingSim.rz = rz;
-                fpvWingSim.vx = fx * 15.0; fpvWingSim.vy = 0; fpvWingSim.vz = fz * 15.0;
-              }
-              renderMapEditorCanvas();
-            }
+          const spawnW = uvToWorld(CHOROBOBO_SPAWN_DEF.u, CHOROBOBO_SPAWN_DEF.v);
+          const dx = wPos.x - spawnW.x;
+          const dz = wPos.z - spawnW.z;
+          const dLen = Math.hypot(dx, dz);
+          if (dLen > 2.0) {
+            const angDeg = Math.round((Math.atan2(-dz, dx) * 180.0) / Math.PI);
+            CHOROBOBO_SPAWN_DEF.hdgDeg = angDeg;
+            applySpawnDefToActiveCraft();
+            syncTeleportInspectorUI();
+            saveCustomChoroboboLayoutToStorage();
+            renderMapEditorCanvas();
           }
         } else if (meTool === 'tree' || meTool === 'erase') {
           renderMapEditorCanvas();
@@ -12640,10 +12736,63 @@
           document.getElementById('mePanelTree').style.display = (meTool === 'tree') ? 'flex' : 'none';
           document.getElementById('mePanelBldg').style.display = (meTool === 'bldg') ? 'flex' : 'none';
           document.getElementById('mePanelGate').style.display = (meTool === 'gate') ? 'flex' : 'none';
+          document.getElementById('mePanelTeleport').style.display = (meTool === 'teleport') ? 'flex' : 'none';
           if (meTool === 'bldg') syncBldgInspectorFromSelected();
           if (meTool === 'gate') syncGateInspectorFromSelected();
+          if (meTool === 'teleport') syncTeleportInspectorUI();
           renderMapEditorCanvas();
         });
+      });
+
+      // Controles del Panel de Ubicación Inicial y Ángulo de Salida de la Aeronave
+      document.getElementById('meChkCustomSpawn').addEventListener('change', (e) => {
+        CHOROBOBO_SPAWN_DEF.enabled = !!e.target.checked;
+        saveCustomChoroboboLayoutToStorage();
+      });
+      document.getElementById('meRngSpawnHdg').addEventListener('input', (e) => {
+        CHOROBOBO_SPAWN_DEF.enabled = true;
+        CHOROBOBO_SPAWN_DEF.hdgDeg = Number(e.target.value);
+        customCraftPlaced = true;
+        applySpawnDefToActiveCraft();
+        syncTeleportInspectorUI();
+        saveCustomChoroboboLayoutToStorage();
+        renderMapEditorCanvas();
+      });
+      document.getElementById('meRngSpawnAlt').addEventListener('input', (e) => {
+        CHOROBOBO_SPAWN_DEF.enabled = true;
+        CHOROBOBO_SPAWN_DEF.altM = Number(e.target.value);
+        customCraftPlaced = true;
+        applySpawnDefToActiveCraft();
+        syncTeleportInspectorUI();
+        saveCustomChoroboboLayoutToStorage();
+      });
+      document.querySelectorAll('[data-me-hdg]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          CHOROBOBO_SPAWN_DEF.enabled = true;
+          CHOROBOBO_SPAWN_DEF.hdgDeg = Number(btn.getAttribute('data-me-hdg'));
+          customCraftPlaced = true;
+          applySpawnDefToActiveCraft();
+          syncTeleportInspectorUI();
+          saveCustomChoroboboLayoutToStorage();
+          renderMapEditorCanvas();
+        });
+      });
+      document.getElementById('meBtnAimGate1').addEventListener('click', () => {
+        const g0 = (CIRCUIT_GATES && CIRCUIT_GATES[0]);
+        if (!g0) return;
+        const spawnW = uvToWorld(CHOROBOBO_SPAWN_DEF.u, CHOROBOBO_SPAWN_DEF.v);
+        const dx = g0.x - spawnW.x;
+        const dz = g0.z - spawnW.z;
+        if (Math.hypot(dx, dz) > 1.0) {
+          CHOROBOBO_SPAWN_DEF.enabled = true;
+          CHOROBOBO_SPAWN_DEF.hdgDeg = Math.round((Math.atan2(-dz, dx) * 180.0) / Math.PI);
+          customCraftPlaced = true;
+          applySpawnDefToActiveCraft();
+          syncTeleportInspectorUI();
+          saveCustomChoroboboLayoutToStorage();
+          renderMapEditorCanvas();
+          showToast(`APUNTANDO A GATE 1 (${CHOROBOBO_SPAWN_DEF.hdgDeg}°)`);
+        }
       });
 
       // Controles del Editor de Circuitos y Gates 3D
@@ -12929,10 +13078,12 @@
         BUILDING_UV_DEFS = JSON.parse(JSON.stringify(DEFAULT_BUILDING_UV_DEFS));
         CHOROBOBO_CUSTOM_TREES_UV = JSON.parse(JSON.stringify(DEFAULT_CHOROBOBO_TREES_UV));
         CHOROBOBO_CIRCUIT_DEFS = JSON.parse(JSON.stringify(DEFAULT_CHOROBOBO_CIRCUIT_DEFS));
+        CHOROBOBO_SPAWN_DEF = { ...DEFAULT_CHOROBOBO_SPAWN_DEF };
         choroboboRandomTreeCount = 180;
         document.getElementById('meRngRandCount').value = 180;
         document.getElementById('meLblRandCount').textContent = '180';
         syncGateInspectorFromSelected();
+        syncTeleportInspectorUI();
         applyAndSaveChanges();
         showToast('MAPA Y CIRCUITOS RESTAURADOS');
       });
@@ -12942,7 +13093,8 @@
           buildings: BUILDING_UV_DEFS,
           trees: CHOROBOBO_CUSTOM_TREES_UV,
           randomTreeCount: choroboboRandomTreeCount,
-          circuits: CHOROBOBO_CIRCUIT_DEFS
+          circuits: CHOROBOBO_CIRCUIT_DEFS,
+          spawn: CHOROBOBO_SPAWN_DEF
         }, null, 2);
         if (navigator.clipboard && navigator.clipboard.writeText) {
           navigator.clipboard.writeText(payload).then(() => {
@@ -12959,9 +13111,13 @@
         }
         meOpen = true;
         modalEl.classList.add('open');
+        if (CHOROBOBO_SPAWN_DEF && CHOROBOBO_SPAWN_DEF.enabled) {
+          applySpawnDefToActiveCraft();
+        }
         updateEditorStatsBadge();
         syncBldgInspectorFromSelected();
         syncGateInspectorFromSelected();
+        syncTeleportInspectorUI();
         setTimeout(renderMapEditorCanvas, 30);
       });
 
