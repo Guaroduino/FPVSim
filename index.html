@@ -754,10 +754,42 @@
           </div>
         </div>
 
-        <!-- 2. Panel de Árboles / Sprites (12 Tipos) -->
+        <!-- 2. Panel de Árboles / Sprites y Brocha de Áreas (12 Tipos) -->
         <div id="mePanelTree" class="me-card">
-          <h4>2. Catálogo de Sprites (12 Tipos RGB565)</h4>
+          <h4>2. Brocha y Catálogo de Sprites (12 Tipos)</h4>
           <div id="meSpriteGrid" class="me-sprite-grid"></div>
+          <div class="me-row" style="margin-top:2px;">
+            <label title="Permite activar varios tipos de árboles a la vez para que la brocha los mezcle aleatoriamente"><input type="checkbox" id="meChkMultiSprite" /> 🎨 Mezclar varios sprites al pintar</label>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;">
+            <button class="me-btn" data-me-biome="0,1,11,8" style="font-size:10px;padding:4px 2px;" title="Samán + Mango + Araguaney + Arbusto">🌳 Bosque</button>
+            <button class="me-btn" data-me-biome="7,0,6,8" style="font-size:10px;padding:4px 2px;" title="Bambú + Samán + Chaguaramo + Arbusto">🎋 Ribera</button>
+            <button class="me-btn" data-me-biome="4,6,1" style="font-size:10px;padding:4px 2px;" title="Palmera Cocotero + Chaguaramo + Mango">🌴 Palmas</button>
+            <button class="me-btn" data-me-biome="3,8,9" style="font-size:10px;padding:4px 2px;" title="Cardón + Arbusto + Árbol Seco">🌵 Lara</button>
+          </div>
+          <h4 style="margin-top:4px;">Tamaño de Brocha (Rellenar Áreas)</h4>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;">
+            <button class="me-btn active" data-me-brush-preset="0,1,8,16" style="font-size:10px;padding:4px 2px;">🎯 1 Árbol</button>
+            <button class="me-btn" data-me-brush-preset="45,5,9,22" style="font-size:10px;padding:4px 2px;">🖌️ 45m</button>
+            <button class="me-btn" data-me-brush-preset="110,10,11,38" style="font-size:10px;padding:4px 2px;">🌳 110m</button>
+            <button class="me-btn" data-me-brush-preset="220,18,13,65" style="font-size:10px;padding:4px 2px;">🌲 220m</button>
+          </div>
+          <div class="me-row">
+            <span>Radio Brocha: <b id="meLblBrushRad">0m (1 Árbol)</b></span>
+            <input type="range" id="meRngBrushRad" min="0" max="300" step="5" value="0" />
+          </div>
+          <div class="me-row">
+            <span>Sprites / Toque: <b id="meLblBrushBurst">1</b></span>
+            <input type="range" id="meRngBrushBurst" min="1" max="25" step="1" value="1" />
+          </div>
+          <div class="me-row">
+            <span>Separación Mín: <b id="meLblBrushSep">8m</b></span>
+            <input type="range" id="meRngBrushSep" min="4" max="36" step="1" value="8" />
+          </div>
+          <div class="me-row">
+            <span>Paso Arrastre: <b id="meLblBrushStep">16m</b></span>
+            <input type="range" id="meRngBrushStep" min="6" max="80" step="2" value="16" />
+          </div>
           <div class="me-row">
             <span>Altura Mín: <b id="meLblTreeHMin">5.2m</b></span>
             <input type="range" id="meRngTreeHMin" min="1.5" max="18.0" step="0.2" value="5.2" />
@@ -765,10 +797,6 @@
           <div class="me-row">
             <span>Altura Máx: <b id="meLblTreeHMax">8.5m</b></span>
             <input type="range" id="meRngTreeHMax" min="1.5" max="18.0" step="0.2" value="8.5" />
-          </div>
-          <div class="me-row">
-            <span>Paso Brocha: <b id="meLblBrushStep">16m</b></span>
-            <input type="range" id="meRngBrushStep" min="6" max="50" step="2" value="16" />
           </div>
           <div class="me-row">
             <span>Relleno Random: <b id="meLblRandCount">180</b></span>
@@ -11745,11 +11773,16 @@
       let meOpen         = false;
       let meTool         = 'tree'; // 'tree' | 'bldg' | 'gate' | 'erase' | 'teleport'
       let meTreeType     = 0;
+      let meActiveTreeTypes = [0]; // Paleta activa de sprites (permite 1 o mezcla de varios)
       let meTreeHMin     = 5.2;
       let meTreeHMax     = 8.5;
+      let meBrushRadiusM = 0.0;
+      let meBrushBurst   = 1;
+      let meBrushMinSepM = 8.0;
       let meBrushStepM   = 16.0;
       let meSelectedBldg = 0;
       let meSelectedGate = 0;
+      let meHoverUv      = null;
 
       // Estado de cámara 2D sobre la ortofoto (zoom y centro en coordenadas normalizadas u,v 0..1)
       let camU           = SPAWN_U; // 0.585
@@ -11782,6 +11815,12 @@
         return rgb565(r, g, b);
       }
 
+      function refreshSpriteSelectionUI() {
+        document.querySelectorAll('.me-sprite-item').forEach((el, idx) => {
+          el.classList.toggle('active', meActiveTreeTypes.includes(idx));
+        });
+      }
+
       // Construir la cuadrícula visual con los 12 Sprites renderizados desde TREE_SPRITE_ROM
       const spriteGridEl = document.getElementById('meSpriteGrid');
       function buildSpriteSelectorUI() {
@@ -11789,7 +11828,7 @@
         for (let t = 0; t < TREE_TYPE_CATALOG.length; t++) {
           const cat = TREE_TYPE_CATALOG[t];
           const item = document.createElement('div');
-          item.className = 'me-sprite-item' + (t === meTreeType ? ' active' : '');
+          item.className = 'me-sprite-item' + (meActiveTreeTypes.includes(t) ? ' active' : '');
           const cnv = document.createElement('canvas');
           cnv.width = TREE_SP_W;
           cnv.height = TREE_SP_H;
@@ -11810,17 +11849,28 @@
           lbl.textContent = cat.short;
           item.appendChild(cnv);
           item.appendChild(lbl);
-          item.addEventListener('click', () => {
-            meTreeType = t;
-            meTreeHMin = Number(Math.max(1.5, cat.defH * 0.78).toFixed(1));
-            meTreeHMax = Number(Math.min(18.0, cat.defH * 1.25).toFixed(1));
-            document.getElementById('meRngTreeHMin').value = meTreeHMin;
-            document.getElementById('meLblTreeHMin').textContent = `${meTreeHMin.toFixed(1)}m`;
-            document.getElementById('meRngTreeHMax').value = meTreeHMax;
-            document.getElementById('meLblTreeHMax').textContent = `${meTreeHMax.toFixed(1)}m`;
-            document.querySelectorAll('.me-sprite-item').forEach((el, idx) => {
-              el.classList.toggle('active', idx === t);
-            });
+          item.addEventListener('click', (ev) => {
+            const multiChk = document.getElementById('meChkMultiSprite');
+            const isMulti = (multiChk && multiChk.checked) || ev.ctrlKey || ev.shiftKey;
+            if (isMulti) {
+              const pos = meActiveTreeTypes.indexOf(t);
+              if (pos >= 0 && meActiveTreeTypes.length > 1) {
+                meActiveTreeTypes.splice(pos, 1);
+              } else if (pos < 0) {
+                meActiveTreeTypes.push(t);
+              }
+              meTreeType = meActiveTreeTypes[0];
+            } else {
+              meTreeType = t;
+              meActiveTreeTypes = [t];
+              meTreeHMin = Number(Math.max(1.5, cat.defH * 0.78).toFixed(1));
+              meTreeHMax = Number(Math.min(18.0, cat.defH * 1.25).toFixed(1));
+              document.getElementById('meRngTreeHMin').value = meTreeHMin;
+              document.getElementById('meLblTreeHMin').textContent = `${meTreeHMin.toFixed(1)}m`;
+              document.getElementById('meRngTreeHMax').value = meTreeHMax;
+              document.getElementById('meLblTreeHMax').textContent = `${meTreeHMax.toFixed(1)}m`;
+            }
+            refreshSpriteSelectionUI();
           });
           spriteGridEl.appendChild(item);
         }
@@ -12173,6 +12223,41 @@
           ctx.fillText('🚁 AERONAVE', 8, -6);
           ctx.restore();
         }
+
+        // 6. Círculo visual en vivo del área de la Brocha (Plantar o Borrar) bajo el cursor
+        if (meHoverUv && (meTool === 'tree' || meTool === 'erase')) {
+          const hPt = uvToCanvas(meHoverUv.u, meHoverUv.v);
+          const isErase = (meTool === 'erase');
+          const radM = isErase ? Math.max(18.0, meBrushRadiusM) : meBrushRadiusM;
+          const radPx = isErase
+            ? (meBrushRadiusM > 0 ? Math.max(18, meBrushRadiusM * pxPerMeterX) : 20)
+            : Math.max(5, radM * pxPerMeterX);
+          ctx.save();
+          ctx.strokeStyle = isErase ? '#ff5252' : '#30e860';
+          ctx.fillStyle   = isErase ? 'rgba(255, 82, 82, 0.14)' : 'rgba(48, 232, 96, 0.14)';
+          ctx.lineWidth   = 1.8;
+          ctx.setLineDash([5, 4]);
+          ctx.beginPath();
+          ctx.arc(hPt.x, hPt.y, radPx, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          ctx.setLineDash([]);
+          // Cruz central del cursor
+          ctx.beginPath();
+          ctx.moveTo(hPt.x - 5, hPt.y); ctx.lineTo(hPt.x + 5, hPt.y);
+          ctx.moveTo(hPt.x, hPt.y - 5); ctx.lineTo(hPt.x, hPt.y + 5);
+          ctx.stroke();
+          if (radM > 0 || isErase) {
+            ctx.fillStyle = isErase ? '#ff8a80' : '#69f0ae';
+            ctx.font = 'bold 10px sans-serif';
+            ctx.textAlign = 'left';
+            const infoTxt = isErase
+              ? `🧹 Radio: ${Math.round(radM)}m`
+              : `🌳 R=${Math.round(radM)}m (+${meBrushBurst})`;
+            ctx.fillText(infoTxt, hPt.x + radPx + 6, hPt.y + 4);
+          }
+          ctx.restore();
+        }
       }
 
       function findNearestBuildingIdx(u, v, maxDistPx = 22) {
@@ -12209,7 +12294,7 @@
         return bestIdx;
       }
 
-      function eraseAtUv(u, v, radiusPx = 18) {
+      function eraseAtUv(u, v, baseRadiusPx = 20) {
         // Si aún había árboles random procedurales activos, los convertimos a editables individuales
         // para que el borrador pueda borrar absolutamente cualquier árbol existente del mapa.
         if (choroboboRandomTreeCount > 0) {
@@ -12229,6 +12314,10 @@
           document.getElementById('meRngRandCount').value = 0;
           document.getElementById('meLblRandCount').textContent = '0';
         }
+
+        const vb = getViewBox();
+        const pxPerMeterX = vb.drawW / WORLD_W_M;
+        const radiusPx = meBrushRadiusM > 0 ? Math.max(baseRadiusPx, meBrushRadiusM * pxPerMeterX) : baseRadiusPx;
 
         const clickPt = uvToCanvas(u, v);
         let changed = false;
@@ -12271,21 +12360,79 @@
         }
       }
 
+      function isTreeTooCloseWorld(wx, wz, minSepM) {
+        if (minSepM <= 0) return false;
+        const minSepSq = minSepM * minSepM;
+        for (let i = CHOROBOBO_CUSTOM_TREES_UV.length - 1; i >= 0; i--) {
+          const ct = CHOROBOBO_CUSTOM_TREES_UV[i];
+          const pos = uvToWorld(ct.u, ct.v);
+          const dx = pos.x - wx;
+          const dz = pos.z - wz;
+          if (dx * dx + dz * dz < minSepSq) return true;
+        }
+        return false;
+      }
+
       function plantTreeAtUv(u, v) {
         const lo = Math.min(meTreeHMin, meTreeHMax);
         const hi = Math.max(meTreeHMin, meTreeHMax);
-        const hRand = lo + Math.random() * (hi - lo);
-        CHOROBOBO_CUSTOM_TREES_UV.push({
-          u: Number(u.toFixed(4)),
-          v: Number(v.toFixed(4)),
-          h: Number(hRand.toFixed(1)),
-          type: meTreeType
-        });
-        lastPaintWorld = uvToWorld(u, v);
-        applyAndSaveChanges();
+        const palette = (meActiveTreeTypes && meActiveTreeTypes.length > 0) ? meActiveTreeTypes : [meTreeType];
+        const centerW = uvToWorld(u, v);
+
+        // Modo Puntual (Radio = 0m o 1 solo árbol con radio 0)
+        if (meBrushRadiusM <= 1.0) {
+          const chosenType = palette[(Math.random() * palette.length) | 0];
+          const hRand = lo + Math.random() * (hi - lo);
+          CHOROBOBO_CUSTOM_TREES_UV.push({
+            u: Number(u.toFixed(4)),
+            v: Number(v.toFixed(4)),
+            h: Number(hRand.toFixed(1)),
+            type: chosenType
+          });
+          lastPaintWorld = centerW;
+          applyAndSaveChanges();
+          return;
+        }
+
+        // Modo Brocha de Área Circular: esparcir meBrushBurst sprites dentro del círculo respetando separación mínima
+        const count = Math.max(1, meBrushBurst | 0);
+        let planted = 0;
+        for (let k = 0; k < count; k++) {
+          let placedPos = null;
+          for (let attempt = 0; attempt < 8; attempt++) {
+            // Distribución uniforme dentro del disco circular de radio meBrushRadiusM
+            const r = meBrushRadiusM * Math.sqrt(Math.random());
+            const ang = Math.random() * Math.PI * 2;
+            const wx = centerW.x + Math.cos(ang) * r;
+            const wz = centerW.z + Math.sin(ang) * r;
+            const candUv = worldToUv(wx, wz);
+            if (candUv.u < 0.02 || candUv.u > 0.98 || candUv.v < 0.02 || candUv.v > 0.98) continue;
+            if (!isTreeTooCloseWorld(wx, wz, meBrushMinSepM)) {
+              placedPos = candUv;
+              break;
+            }
+          }
+          if (placedPos) {
+            const chosenType = palette[(Math.random() * palette.length) | 0];
+            const hRand = lo + Math.random() * (hi - lo);
+            CHOROBOBO_CUSTOM_TREES_UV.push({
+              u: Number(placedPos.u.toFixed(4)),
+              v: Number(placedPos.v.toFixed(4)),
+              h: Number(hRand.toFixed(1)),
+              type: chosenType
+            });
+            planted++;
+          }
+        }
+        lastPaintWorld = centerW;
+        if (planted > 0) applyAndSaveChanges();
       }
 
       canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+      canvas.addEventListener('pointerleave', () => {
+        meHoverUv = null;
+        renderMapEditorCanvas();
+      });
 
       canvas.addEventListener('pointerdown', (e) => {
         const rect = canvas.getBoundingClientRect();
@@ -12403,6 +12550,7 @@
         const py = (e.clientY - rect.top)  * (canvas.height / rect.height);
         const uv = canvasToUv(px, py);
         const wPos = uvToWorld(uv.u, uv.v);
+        meHoverUv = uv;
 
         const readout = document.getElementById('meCoordReadout');
         if (readout) {
@@ -12420,6 +12568,8 @@
         if (isPainting && meTool === 'tree') {
           if (!lastPaintWorld || Math.hypot(wPos.x - lastPaintWorld.x, wPos.z - lastPaintWorld.z) >= meBrushStepM) {
             plantTreeAtUv(uv.u, uv.v);
+          } else {
+            renderMapEditorCanvas();
           }
         } else if (isPainting && meTool === 'erase') {
           eraseAtUv(uv.u, uv.v, 20);
@@ -12459,6 +12609,8 @@
               renderMapEditorCanvas();
             }
           }
+        } else if (meTool === 'tree' || meTool === 'erase') {
+          renderMapEditorCanvas();
         }
       });
 
@@ -12604,6 +12756,67 @@
           updateEditorStatsBadge();
           renderMapEditorCanvas();
         });
+      });
+
+      // Presets de Bioma (mezcla automática de varios tipos de sprites)
+      document.querySelectorAll('[data-me-biome]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const list = btn.getAttribute('data-me-biome').split(',').map(Number);
+          meActiveTreeTypes = list;
+          meTreeType = list[0] || 0;
+          const multiChk = document.getElementById('meChkMultiSprite');
+          if (multiChk) multiChk.checked = true;
+          refreshSpriteSelectionUI();
+          showToast(`PALETA DE BIOMA ACTIVA (${list.length} SPRITES)`);
+        });
+      });
+
+      function syncBrushSlidersUI() {
+        document.getElementById('meRngBrushRad').value = Math.round(meBrushRadiusM);
+        document.getElementById('meLblBrushRad').textContent = (meBrushRadiusM <= 0) ? '0m (1 Árbol)' : `${Math.round(meBrushRadiusM)}m`;
+        document.getElementById('meRngBrushBurst').value = Math.round(meBrushBurst);
+        document.getElementById('meLblBrushBurst').textContent = `${Math.round(meBrushBurst)}`;
+        document.getElementById('meRngBrushSep').value = Math.round(meBrushMinSepM);
+        document.getElementById('meLblBrushSep').textContent = `${Math.round(meBrushMinSepM)}m`;
+        document.getElementById('meRngBrushStep').value = Math.round(meBrushStepM);
+        document.getElementById('meLblBrushStep').textContent = `${Math.round(meBrushStepM)}m`;
+      }
+
+      // Presets rápidos de tamaño de brocha (1 Árbol, 45m, 110m, 220m)
+      document.querySelectorAll('[data-me-brush-preset]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const [rad, burst, sep, step] = btn.getAttribute('data-me-brush-preset').split(',').map(Number);
+          meBrushRadiusM = rad;
+          meBrushBurst   = burst;
+          meBrushMinSepM = sep;
+          meBrushStepM   = step;
+          document.querySelectorAll('[data-me-brush-preset]').forEach((b) => b.classList.toggle('active', b === btn));
+          syncBrushSlidersUI();
+          renderMapEditorCanvas();
+        });
+      });
+
+      document.getElementById('meRngBrushRad').addEventListener('input', (e) => {
+        meBrushRadiusM = Number(e.target.value);
+        if (meBrushRadiusM > 0 && meBrushBurst <= 1) {
+          meBrushBurst = Math.max(4, Math.min(18, Math.round(meBrushRadiusM / 10)));
+        } else if (meBrushRadiusM <= 0) {
+          meBrushBurst = 1;
+        }
+        syncBrushSlidersUI();
+        renderMapEditorCanvas();
+      });
+      document.getElementById('meRngBrushBurst').addEventListener('input', (e) => {
+        meBrushBurst = Number(e.target.value) | 0;
+        if (meBrushBurst > 1 && meBrushRadiusM <= 0) {
+          meBrushRadiusM = 45;
+        }
+        syncBrushSlidersUI();
+        renderMapEditorCanvas();
+      });
+      document.getElementById('meRngBrushSep').addEventListener('input', (e) => {
+        meBrushMinSepM = Number(e.target.value);
+        document.getElementById('meLblBrushSep').textContent = `${Math.round(meBrushMinSepM)}m`;
       });
 
       document.getElementById('meRngTreeHMin').addEventListener('input', (e) => {
