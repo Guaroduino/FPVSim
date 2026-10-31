@@ -1320,6 +1320,8 @@
       KeyC: 'X', KeyR: 'X',
       KeyV: 'Y', KeyM: 'Y',
       KeyQ: 'L3', KeyE: 'R3',
+      Equal: 'UP', NumpadAdd: 'UP',
+      Minus: 'DOWN', NumpadSubtract: 'DOWN',
       Tab: 'SELECT', Escape: 'MENU'
     };
     const rawKeys = {};
@@ -1565,10 +1567,11 @@
     }
 
     function updateInputPolling() {
-      // Si no se toca el stick izquierdo, la cruceta D-Pad o WASD también pueden mover el eje izquierdo
+      // En los 4 simuladores LOS, UP/DOWN del D-Pad son exclusivos para el Zoom de cámara y no deben mover el winche/acelerador
+      const isLosActive = (typeof osState !== 'undefined' && osState === 'ingame' && !rgOverlayOpen && typeof isLosSimId === 'function' && isLosSimId(activeRomId));
       if (!hwInput.leftActive) {
-        const dpadX = (hwInput.btn.RIGHT || rawKeys['KeyD'] ? 0.85 : 0) - (hwInput.btn.LEFT || rawKeys['KeyA'] ? 0.85 : 0);
-        const dpadY = (hwInput.btn.UP    || rawKeys['KeyW'] ? 0.85 : 0) - (hwInput.btn.DOWN || rawKeys['KeyS'] ? 0.85 : 0);
+        const dpadX = ((!isLosActive && hwInput.btn.RIGHT) || rawKeys['KeyD'] ? 0.85 : 0) - ((!isLosActive && hwInput.btn.LEFT) || rawKeys['KeyA'] ? 0.85 : 0);
+        const dpadY = ((!isLosActive && hwInput.btn.UP)    || rawKeys['KeyW'] ? 0.85 : 0) - ((!isLosActive && hwInput.btn.DOWN) || rawKeys['KeyS'] ? 0.85 : 0);
         hwInput.lx = dpadX;
         hwInput.ly = dpadY;
       }
@@ -2352,8 +2355,8 @@
       }
     })();
 
-    // Renderizador Voxel 100% Punto Fijo Int32 en bucle interno con Perspectiva 3D Exacta (0.00px error vs projPoint320)
-    function renderVoxelTerrainAndSky(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz, dt = 0.016) {
+    // Renderizador Voxel 100% Punto Fijo Int32 en bucle interno con Perspectiva 3D Exacta + Teleobjetivo Óptico (focalZoom)
+    function renderVoxelTerrainAndSky(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz, dt = 0.016, focalZoom = 1.0) {
       cloudDriftX = (cloudDriftX + dt * 1.8) % 512;
       if (SPI_MODES[paletteIdx].mono) {
         fbClear(0);
@@ -2362,6 +2365,7 @@
 
       const theme = TERRAIN_THEMES[currentThemeIdx];
       const fogCol = theme.fogCol;
+      const fVox = FOCAL_VOX * Math.max(0.40, Math.min(18.0, focalZoom));
 
       // 1. Extraer ángulo de Roll y base des-rotada exacta (R0, U0, F) (1 vez por frame)
       const upMag = Math.hypot(cRy, cUy);
@@ -2388,7 +2392,7 @@
       const fH = cFx * H0x + cFz * H0z;
 
       const horizonFloat = fH > 0.04
-        ? Math.max(-256.0, Math.min(512.0, 128.0 - (uH / fH) * FOCAL_VOX))
+        ? Math.max(-256.0, Math.min(512.0, 128.0 - (uH / fH) * fVox))
         : (uH > 0 ? -256.0 : 512.0);
       const horizonV = Math.round(horizonFloat);
       const subPxShift = horizonV - horizonFloat;
@@ -2397,8 +2401,8 @@
       // 2. Precalcular 1 vez por frame la intersección 3D exacta por fila vertical (cz = s*fH + dy0*cFy):
       //    - Garantiza sincronización 100% exacta (0.00px error) con Gates, Spline, Árboles y Edificios 3D
       //    - Soporta s con signo (incluso picado vertical -90°) sin generar jamás líneas verticales
-      //    - Avanza exactamente de 1 en 1 píxel vertical (resolución 1:1 a cualquier altitud)
-      const invFocalVox = 1.0 / FOCAL_VOX;
+      //    - Avanza exactamente de 1 en 1 píxel vertical (resolución 1:1 a cualquier altitud y cualquier zoom óptico)
+      const invFocalVox = 1.0 / fVox;
       const groundHere  = getTerrainHeightMeters(camX, camZ);
       const groundTex   = Math.round(groundHere / HEIGHT_SCALE);
       const aglHere     = Math.max(0.6, camY - groundHere);
@@ -2417,12 +2421,12 @@
         if (cz <= 0.20) continue;
         RAY_S_Q8[activeSteps]      = Math.round(s * 256.0);
         BASE_V_Q8[activeSteps]     = vRef << 8;
-        PROJ_SCALE_Q8[activeSteps] = Math.round(((HEIGHT_SCALE * U0y * FOCAL_VOX) / cz) * 256.0);
+        PROJ_SCALE_Q8[activeSteps] = Math.round(((HEIGHT_SCALE * U0y * fVox) / cz) * 256.0);
         activeSteps++;
       }
 
-      // A baja altura (< 16m AGL) añade micro-grano de velocidad; al volar alto usa el color 1:1 puro de la imagen satelital
-      const microMaxK = aglHere < 16.0 ? Math.round((16.0 - aglHere) * 5.0) : 0;
+      // En zoom teleobjetivo LOS o baja altura (< 16m AGL) mantiene micro-grano sub-texel de alta nitidez
+      const microMaxK = focalZoom > 1.02 ? NUM_RAY_STEPS : (aglHere < 16.0 ? Math.round((16.0 - aglHere) * 5.0) : 0);
 
       // Coordenadas base en Q19 (dir_Q11 * s_Q8 = Q19 -> 8x más precisión angular por columna para evitar rayas en esquinas)
       const baseMx = ((SPAWN_MX + camX * MAP_SCALE_X) % MAP_W + MAP_W) % MAP_W;
@@ -2539,8 +2543,9 @@
       }
     }
 
-    // Proyector 3D exacto en coordenadas nativas 320x240 (alcance extendido a 950m para circuitos a escala 6x4 km)
-    function createProjector320(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz) {
+    // Proyector 3D exacto en coordenadas nativas 320x240 con soporte de Teleobjetivo Óptico (focalZoom)
+    function createProjector320(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz, focalZoom = 1.0) {
+      const f240 = FOCAL_240 * Math.max(0.40, Math.min(18.0, focalZoom));
       function projPoint320(wx, wy, wz) {
         const dx = wx - camX, dy = wy - camY, dz = wz - camZ;
         const cx = dx*cRx + dy*cRy + dz*cRz;
@@ -2548,8 +2553,8 @@
         const cz = dx*cFx + dy*cFy + dz*cFz;
         if (cz < 0.25) return null;
         return {
-          sx: 160 + (cx * FOCAL_240) / cz,
-          sy: 120 - (cy * FOCAL_240) / cz,
+          sx: 160 + (cx * f240) / cz,
+          sy: 120 - (cy * f240) / cz,
           cz
         };
       }
@@ -2564,10 +2569,10 @@
         if (cz0 < 0.2) { const t = (0.2 - cz0)/(cz1 - cz0); cx0 += t*(cx1 - cx0); cy0 += t*(cy1 - cy0); cz0 = 0.2; }
         else if (cz1 < 0.2) { const t = (0.2 - cz1)/(cz0 - cz1); cx1 += t*(cx0 - cx1); cy1 += t*(cy0 - cy1); cz1 = 0.2; }
 
-        const sx0 = 160 + (cx0 * FOCAL_240) / cz0;
-        const sy0 = 120 - (cy0 * FOCAL_240) / cz0;
-        const sx1 = 160 + (cx1 * FOCAL_240) / cz1;
-        const sy1 = 120 - (cy1 * FOCAL_240) / cz1;
+        const sx0 = 160 + (cx0 * f240) / cz0;
+        const sy0 = 120 - (cy0 * f240) / cz0;
+        const sx1 = 160 + (cx1 * f240) / cz1;
+        const sy1 = 120 - (cy1 * f240) / cz1;
         fbDrawLine(sx0 / SCALE_X, sy0 / SCALE_Y, sx1 / SCALE_X, sy1 / SCALE_Y, dash, col);
       }
 
@@ -4025,6 +4030,15 @@
       return id === 'rc_sailboat' || id === 'rc_boat' || id === 'rc_car' || id === 'rc_crawler';
     }
 
+    function stepLosZoomInput(dt) {
+      let zDir = 0.0;
+      if (rawKeys['ArrowUp'] || rawKeys['Equal'] || rawKeys['NumpadAdd']) zDir += 1.0;
+      if (rawKeys['ArrowDown'] || rawKeys['Minus'] || rawKeys['NumpadSubtract']) zDir -= 1.0;
+      if (zDir !== 0.0) {
+        fcProfile.losZoom = Math.max(0.50, Math.min(4.00, (fcProfile.losZoom || 1.25) + zDir * 0.95 * dt));
+      }
+    }
+
     function getActiveSimObject() {
       if (activeRomId === 'fpv_drone')   return fpvDroneSim;
       if (activeRomId === 'rc_sailboat') return rcSailboatSim;
@@ -4059,7 +4073,7 @@
         if (activeRomId === 'fpv_wing' || activeRomId === 'fpv_drone') {
           selectChoroboboCircuit(currentCircuitIdx + 1, craft, true);
         } else {
-          fcProfile.losZoom = Math.min(3.50, Math.round(((fcProfile.losZoom || 1.25) + 0.25) * 100) / 100);
+          fcProfile.losZoom = Math.min(4.00, Math.round(((fcProfile.losZoom || 1.25) + 0.25) * 100) / 100);
           showToast(`ZOOM CAMARA LOS: ${fcProfile.losZoom.toFixed(2)}X`);
           playTone(740, 0.03);
         }
@@ -4075,10 +4089,10 @@
         }
         return true;
       }
-      // Toque directo en el indicador superior derecho [-ZOOM / +ZOOM] en los 4 simuladores LOS
-      if (capTouch.justTapped && isLosSimId(activeRomId) && capTouch.y240 >= 22 && capTouch.y240 <= 46 && capTouch.x320 >= 232) {
-        const zStep = capTouch.x320 >= 276 ? 0.25 : -0.25;
-        fcProfile.losZoom = Math.max(0.50, Math.min(3.50, Math.round(((fcProfile.losZoom || 1.25) + zStep) * 100) / 100));
+      // Toque directo en toda la esquina superior derecha [-ZOOM / +ZOOM] en los 4 simuladores LOS
+      if (capTouch.justTapped && isLosSimId(activeRomId) && capTouch.y240 <= 52 && capTouch.x320 >= 224) {
+        const zStep = capTouch.x320 >= 274 ? 0.25 : -0.25;
+        fcProfile.losZoom = Math.max(0.50, Math.min(4.00, Math.round(((fcProfile.losZoom || 1.25) + zStep) * 100) / 100));
         showToast(`ZOOM CAMARA LOS: ${fcProfile.losZoom.toFixed(2)}X`);
         playTone(zStep > 0 ? 740 : 580, 0.03);
         capTouch.justTapped = false;
@@ -5414,12 +5428,14 @@
       const rx = sim.rx, ry = sim.ry, rz = sim.rz;
       const ux = sim.ux, uy = sim.uy, uz = sim.uz;
       const fx = sim.fx, fy = sim.fy, fz = sim.fz;
+      const S  = 1.38;
 
       function wp(r, u, f) {
+        const sr = r * S, su = u * S, sf = f * S;
         return projPoint320(
-          px + rx * r + ux * u + fx * f,
-          py + ry * r + uy * u + fy * f,
-          pz + rz * r + uz * u + fz * f
+          px + rx * sr + ux * su + fx * sf,
+          py + ry * sr + uy * su + fy * sf,
+          pz + rz * sr + uz * su + fz * sf
         );
       }
 
@@ -5442,8 +5458,9 @@
       const bAngSh = sim.boomAngle;
       const sSinSh = Math.sin(bAngSh), sCosSh = Math.cos(bAngSh);
       function wpShadow(r, u, f) {
-        const wx = px + rx * r + fx * f - u * 0.48;
-        const wz = pz + rz * r + fz * f - u * 0.34;
+        const sr = r * S, su = u * S, sf = f * S;
+        const wx = px + rx * sr + fx * sf - su * 0.48;
+        const wz = pz + rz * sr + fz * sf - su * 0.34;
         return projPoint320(wx, py - 0.02, wz);
       }
       const shBow  = wpShadow(0.0, 0.1,  1.50);
@@ -5546,8 +5563,8 @@
 
       // Mástil negro/carbono en línea nítida
       projLine(
-        px + ux * 0.20 + fx * 0.32, py + uy * 0.20 + fy * 0.32, pz + uz * 0.20 + fz * 0.32,
-        px + ux * 3.52 + fx * 0.25, py + uy * 3.52 + fy * 0.25, pz + uz * 3.52 + fz * 0.25,
+        px + (ux * 0.20 + fx * 0.32) * S, py + (uy * 0.20 + fy * 0.32) * S, pz + (uz * 0.20 + fz * 0.32) * S,
+        px + (ux * 3.52 + fx * 0.25) * S, py + (uy * 3.52 + fy * 0.25) * S, pz + (uz * 3.52 + fz * 0.25) * S,
         0, 1
       );
 
@@ -5574,42 +5591,42 @@
 
       // 4. VECTORES FÍSICOS 3D EN LÍNEA FINA DE 1 PÍXEL (Viento Aparente, Fuerza Mayor, Fuerza Foque, Quilla y Timón)
       // a) Vector de Viento Aparente en el tope del mástil (Cian fino 1px = hacia dónde fluye el aire sobre las velas)
-      const topX = px + ux * 3.52 + fx * 0.25;
-      const topY = py + uy * 3.52 + fy * 0.25;
-      const topZ = pz + uz * 3.52 + fz * 0.25;
+      const topX = px + (ux * 3.52 + fx * 0.25) * S;
+      const topY = py + (uy * 3.52 + fy * 0.25) * S;
+      const topZ = pz + (uz * 3.52 + fz * 0.25) * S;
       const awLen = Math.max(0.5, sim.appWindSpd);
       const awDirX = sim.appWX / awLen, awDirZ = sim.appWZ / awLen;
-      projThinVec320(topX - awDirX * 0.38, topY, topZ - awDirZ * 0.38, topX + awDirX * 0.62, topY, topZ + awDirZ * 0.62, C565.CYAN);
+      projThinVec320(topX - awDirX * 0.45, topY, topZ - awDirZ * 0.45, topX + awDirX * 0.72, topY, topZ + awDirZ * 0.72, C565.CYAN);
 
       // b) Vector Aerodinámico de la Vela Mayor (Verde fino 1px = empuje de la Mayor desde su centro vélico)
-      const mCeX = px + rx * (sSin * 0.65) + ux * 1.40 + fx * (0.30 - sCos * 0.65);
-      const mCeY = py + ry * (sSin * 0.65) + uy * 1.40 + fy * (0.30 - sCos * 0.65);
-      const mCeZ = pz + rz * (sSin * 0.65) + uz * 1.40 + fz * (0.30 - sCos * 0.65);
+      const mCeX = px + (rx * (sSin * 0.65) + ux * 1.40 + fx * (0.30 - sCos * 0.65)) * S;
+      const mCeY = py + (ry * (sSin * 0.65) + uy * 1.40 + fy * (0.30 - sCos * 0.65)) * S;
+      const mCeZ = pz + (rz * (sSin * 0.65) + uz * 1.40 + fz * (0.30 - sCos * 0.65)) * S;
       projThinVec320(
         mCeX, mCeY, mCeZ,
-        mCeX + (rx * sim.mainForceR + fx * sim.mainForceF) * 0.34,
-        mCeY + (ry * sim.mainForceR + fy * sim.mainForceF) * 0.34,
-        mCeZ + (rz * sim.mainForceR + fz * sim.mainForceF) * 0.34,
+        mCeX + (rx * sim.mainForceR + fx * sim.mainForceF) * 0.38,
+        mCeY + (ry * sim.mainForceR + fy * sim.mainForceF) * 0.38,
+        mCeZ + (rz * sim.mainForceR + fz * sim.mainForceF) * 0.38,
         C565.GREEN
       );
 
       // c) Vector Aerodinámico del Foque (Verde fino 1px = empuje independiente del Foque en proa)
-      const jCeX = px + rx * (jSin * 0.48) + ux * 1.20 + fx * (1.15 - jCos * 0.48);
-      const jCeY = py + ry * (jSin * 0.48) + uy * 1.20 + fy * (1.15 - jCos * 0.48);
-      const jCeZ = pz + rz * (jSin * 0.48) + uz * 1.20 + fz * (1.15 - jCos * 0.48);
+      const jCeX = px + (rx * (jSin * 0.48) + ux * 1.20 + fx * (1.15 - jCos * 0.48)) * S;
+      const jCeY = py + (ry * (jSin * 0.48) + uy * 1.20 + fy * (1.15 - jCos * 0.48)) * S;
+      const jCeZ = pz + (rz * (jSin * 0.48) + uz * 1.20 + fz * (1.15 - jCos * 0.48)) * S;
       projThinVec320(
         jCeX, jCeY, jCeZ,
-        jCeX + (rx * sim.jibForceR + fx * sim.jibForceF) * 0.44,
-        jCeY + (ry * sim.jibForceR + fy * sim.jibForceF) * 0.44,
-        jCeZ + (rz * sim.jibForceR + fz * sim.jibForceF) * 0.44,
+        jCeX + (rx * sim.jibForceR + fx * sim.jibForceF) * 0.48,
+        jCeY + (ry * sim.jibForceR + fy * sim.jibForceF) * 0.48,
+        jCeZ + (rz * sim.jibForceR + fz * sim.jibForceF) * 0.48,
         C565.GREEN
       );
 
       // d) Vectores Hidrodinámicos de la Quilla y del Timón bajo el casco (Dorado fino 1px)
-      const kCeX = px - ux * 0.55, kCeY = py - uy * 0.55, kCeZ = pz - uz * 0.55;
-      projThinVec320(kCeX, kCeY, kCeZ, kCeX + rx * sim.keelForceR * 0.28, kCeY + ry * sim.keelForceR * 0.28, kCeZ + rz * sim.keelForceR * 0.28, C565.GOLD);
-      const rCeX = px - ux * 0.32 - fx * 1.25, rCeY = py - uy * 0.32 - fy * 1.25, rCeZ = pz - uz * 0.32 - fz * 1.25;
-      projThinVec320(rCeX, rCeY, rCeZ, rCeX + rx * sim.rudForceR * 0.52, rCeY + ry * sim.rudForceR * 0.52, rCeZ + rz * sim.rudForceR * 0.52, C565.GOLD);
+      const kCeX = px - ux * 0.55 * S, kCeY = py - uy * 0.55 * S, kCeZ = pz - uz * 0.55 * S;
+      projThinVec320(kCeX, kCeY, kCeZ, kCeX + rx * sim.keelForceR * 0.32, kCeY + ry * sim.keelForceR * 0.32, kCeZ + rz * sim.keelForceR * 0.32, C565.GOLD);
+      const rCeX = px - (ux * 0.32 + fx * 1.25) * S, rCeY = py - (uy * 0.32 + fy * 1.25) * S, rCeZ = pz - (uz * 0.32 + fz * 1.25) * S;
+      projThinVec320(rCeX, rCeY, rCeZ, rCeX + rx * sim.rudForceR * 0.56, rCeY + ry * sim.rudForceR * 0.56, rCeZ + rz * sim.rudForceR * 0.56, C565.GOLD);
     }
 
     function renderSailBuoysAndWake320(sim, projPoint320, projLine) {
@@ -6036,10 +6053,7 @@
         const targetRudder = applySuperExpo(hwInput.rx, 1.0, 0.30) * (38.0 * DEG2RAD);
         this.rudderAngle += (targetRudder - this.rudderAngle) * Math.min(1.0, dt * 16.0);
 
-        // Eje vertical del Stick Derecho (hwInput.ry) ajusta suavemente el Zoom de la cámara LOS en tiempo real
-        if (Math.abs(hwInput.ry) > 0.24 && Math.abs(hwInput.ry) > Math.abs(hwInput.rx) * 1.15) {
-          fcProfile.losZoom = Math.max(0.50, Math.min(3.50, (fcProfile.losZoom || 1.25) + hwInput.ry * 0.95 * dt));
-        }
+        stepLosZoomInput(dt);
 
         if (hwInput.leftActive || (isRadioThrottleActive() && !hwInput.leftActive)) {
           const targetSheet = Math.max(0.0, Math.min(1.0, (hwInput.ly + 1.0) * 0.5));
@@ -6300,16 +6314,19 @@
         let cUx = 0, cUy = 1, cUz = 0;
         let cFx = 0, cFy = 0, cFz = 1;
         let zoomFactor = 1.0;
+        let focalZoom  = 1.0;
 
-        const userZoom = Math.max(0.50, Math.min(3.50, fcProfile.losZoom || 1.25));
+        const userZoom = Math.max(0.50, Math.min(4.00, fcProfile.losZoom || 1.25));
 
         if (this.camMode === 2 || this.chaseCam) {
-          // Vista Follow 3D elevada detrás del velero (también responde al Zoom ajustable)
-          const fc = computeFollowCamPose(this, 6.8 / userZoom, Math.max(1.3, 2.8 / Math.sqrt(userZoom)), 15.0);
+          // Vista Follow 3D elevada detrás del velero con Zoom Óptico + Distancia ajustable
+          const zSqrt = Math.sqrt(userZoom);
+          const fc = computeFollowCamPose(this, 6.4 / zSqrt, Math.max(1.3, 2.6 / zSqrt), 15.0);
           camX = fc.camX; camY = Math.max(1.4, fc.camY); camZ = fc.camZ;
           cRx = fc.cRx; cRy = fc.cRy; cRz = fc.cRz;
           cUx = fc.cUx; cUy = fc.cUy; cUz = fc.cUz;
           cFx = fc.cFx; cFy = fc.cFy; cFz = fc.cFz;
+          focalZoom  = zSqrt;
           zoomFactor = userZoom;
         } else {
           // Vector horizontal LOS desde el Mirador del Muelle hacia el Velero
@@ -6319,32 +6336,32 @@
           const dirHx = rawDx / horizDist;
           const dirHz = rawDz / horizDist;
 
-          if (this.camMode === 0) {
-            // MIRADOR ALTO AUTO-ZOOM DE TAMAÑO CONSTANTE:
-            // Conserva el ángulo de visión LOS real desde el muelle (dirHx, dirHz), pero mantiene la distancia óptica
-            // prácticamente constante (~9.5m..11.2m / userZoom) para que el velero conserve siempre el mismo tamaño en pantalla.
-            const baseEff = 9.4 + Math.min(1.8, horizDist * 0.020);
-            const effHoriz = Math.max(3.8, Math.min(32.0, baseEff / userZoom));
-            zoomFactor = horizDist / Math.max(1.0, effHoriz);
-            camX = this.px - dirHx * effHoriz;
-            camZ = this.pz - dirHz * effHoriz;
-            camY = Math.max(3.4, Math.min(14.0, this.py + 2.1 + effHoriz * 0.42));
-          } else {
-            // MIRADOR ZOOM MANUAL (camMode === 1): zoom directo sobre la distancia real desde el muelle
-            const effHoriz = Math.max(4.5, Math.min(90.0, horizDist / userZoom));
-            zoomFactor = userZoom;
-            camX = this.px - dirHx * effHoriz;
-            camZ = this.pz - dirHz * effHoriz;
-            camY = Math.max(5.0, Math.min(25.0, 21.0 / Math.sqrt(userZoom)));
-          }
+          // Mantiene el ángulo LOS real desde el muelle con picado constante (~21°) sobre el agua
+          const camDistH = Math.min(horizDist, 16.5);
+          camX = this.px - dirHx * camDistH;
+          camZ = this.pz - dirHz * camDistH;
+          camY = this.py + 0.90 + camDistH * 0.38;
 
           const dx = this.px - camX;
-          const dy = (this.py + 0.85) - camY;
+          const dy = (this.py + 0.90) - camY;
           const dz = this.pz - camZ;
           const dLen = Math.hypot(dx, dy, dz) || 1.0;
           cFx = dx / dLen;
           cFy = dy / dLen;
           cFz = dz / dLen;
+
+          if (this.camMode === 0) {
+            // MIRADOR AUTO-ZOOM DE TAMAÑO 100% CONSTANTE:
+            // Teleobjetivo óptico real (focalZoom = dLen / targetOptDist) que cancela exactamente dLen en projPoint320,
+            // garantizando que el velero conserve exactamente el mismo tamaño en píxeles a cualquier distancia de la bahía.
+            const targetOptDist = 7.8 / userZoom;
+            focalZoom  = dLen / targetOptDist;
+            zoomFactor = (horizDist * 1.07) / targetOptDist;
+          } else {
+            // MIRADOR ZOOM MANUAL (camMode === 1): control directo del teleobjetivo óptico por el usuario
+            focalZoom  = userZoom * (dLen / 12.5);
+            zoomFactor = userZoom;
+          }
 
           // Base ortonormal mano derecha sin roll (U = F x R -> cUy = +hLen > 0, horizonte marino al derecho)
           const hLen = Math.hypot(cFx, cFz) || 1.0;
@@ -6357,11 +6374,11 @@
           cUz = cFx * cRy - cFy * cRx;
         }
 
-        // 1. Renderizar Agua, Bahía y Cielo Voxel
-        renderVoxelTerrainAndSky(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz);
+        // 1. Renderizar Agua, Bahía y Cielo Voxel sincronizados con el Teleobjetivo Óptico (focalZoom)
+        renderVoxelTerrainAndSky(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz, 0.016, focalZoom);
 
-        // 2. Proyector 3D + Olas 3D + Boyas de Regata + Estela + Velero 3D Sólido con Vectores
-        const { projPoint320, projLine } = createProjector320(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz);
+        // 2. Proyector 3D con focalZoom + Olas 3D + Boyas de Regata + Estela + Velero 3D Sólido con Vectores
+        const { projPoint320, projLine } = createProjector320(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz, focalZoom);
         renderSailBuoysAndWake320(this, projPoint320, projLine);
         renderSolidSailboat320(this, projPoint320, projLine);
 
@@ -6979,10 +6996,7 @@
         const targetSteer = applySuperExpo(rawSteer, 1.0, 0.35) * (preset.steerRate * DEG2RAD) * spdDamp;
         this.steerAngle += (targetSteer - this.steerAngle) * Math.min(1.0, dt * 18.0);
 
-        // Eje vertical del Stick Derecho (hwInput.ry) ajusta suavemente el Zoom de la cámara LOS en tiempo real
-        if (Math.abs(hwInput.ry) > 0.24 && Math.abs(hwInput.ry) > Math.abs(hwInput.rx) * 1.15) {
-          fcProfile.losZoom = Math.max(0.50, Math.min(3.50, (fcProfile.losZoom || 1.25) + hwInput.ry * 0.95 * dt));
-        }
+        stepLosZoomInput(dt);
 
         let escInput = hwInput.ly;
         if (hwInput.btn.A) escInput = 1.0;
@@ -7146,16 +7160,19 @@
         let cUx = 0, cUy = 1, cUz = 0;
         let cFx = 0, cFy = 0, cFz = 1;
         let zoomFactor = 1.0;
+        let focalZoom  = 1.0;
 
-        const userZoom = Math.max(0.50, Math.min(3.50, fcProfile.losZoom || 1.25));
+        const userZoom = Math.max(0.50, Math.min(4.00, fcProfile.losZoom || 1.25));
 
         if (this.camMode === 2 || this.chaseCam) {
           // Vista Chase Cam 3D elevada detrás del Carro RC (también responde al Zoom ajustable)
-          const fc = computeFollowCamPose(this, 5.5 / userZoom, Math.max(1.3, 2.55 / Math.sqrt(userZoom)), 17.5);
+          const zSqrt = Math.sqrt(userZoom);
+          const fc = computeFollowCamPose(this, 5.5 / zSqrt, Math.max(1.3, 2.55 / zSqrt), 17.5);
           camX = fc.camX; camY = Math.max(1.4, fc.camY); camZ = fc.camZ;
           cRx = fc.cRx; cRy = fc.cRy; cRz = fc.cRz;
           cUx = fc.cUx; cUy = fc.cUy; cUz = fc.cUz;
           cFx = fc.cFx; cFy = fc.cFy; cFz = fc.cFz;
+          focalZoom  = zSqrt;
           zoomFactor = userZoom;
         } else {
           // Vector horizontal LOS desde la Torre/Podio hacia el Carro RC
@@ -7165,22 +7182,10 @@
           const dirHx = rawDx / horizDist;
           const dirHz = rawDz / horizDist;
 
-          if (this.camMode === 0) {
-            // PODIO ALTO AUTO-ZOOM + ZOOM DE USUARIO: mantiene el acimut LOS del podio y acerca/aleja sobre el rayo LOS
-            const baseEff = horizDist > 13.5 ? (13.5 + (horizDist - 13.5) * 0.28) : horizDist;
-            const effHoriz = Math.max(3.8, Math.min(78.0, baseEff / userZoom));
-            zoomFactor = horizDist / Math.max(1.0, effHoriz);
-            camX = this.px - dirHx * effHoriz;
-            camZ = this.pz - dirHz * effHoriz;
-            camY = Math.max(4.5, Math.min(25.0, 4.4 + effHoriz * 0.78));
-          } else {
-            // PODIO ZOOM MANUAL (camMode === 1): zoom directo sobre la distancia real desde el podio
-            const effHoriz = Math.max(4.0, Math.min(82.0, horizDist / userZoom));
-            zoomFactor = userZoom;
-            camX = this.px - dirHx * effHoriz;
-            camZ = this.pz - dirHz * effHoriz;
-            camY = Math.max(5.0, Math.min(25.0, 22.5 / Math.sqrt(userZoom)));
-          }
+          const camDistH = Math.min(horizDist, 18.0);
+          camX = this.px - dirHx * camDistH;
+          camZ = this.pz - dirHz * camDistH;
+          camY = Math.max(4.5, Math.min(25.0, this.py + 1.8 + camDistH * 0.56));
 
           const dx = this.px - camX;
           const dy = (this.py + 0.30) - camY;
@@ -7189,6 +7194,15 @@
           cFx = dx / dLen;
           cFy = dy / dLen;
           cFz = dz / dLen;
+
+          if (this.camMode === 0) {
+            const targetOptDist = 11.2 / userZoom;
+            focalZoom  = dLen / targetOptDist;
+            zoomFactor = (horizDist * 1.14) / targetOptDist;
+          } else {
+            focalZoom  = userZoom * (dLen / 16.5);
+            zoomFactor = userZoom;
+          }
 
           // Base ortonormal mano derecha sin roll (U = F x R -> cUy = +hLen > 0, horizonte de pista al derecho)
           const hLen = Math.hypot(cFx, cFz) || 1.0;
@@ -7202,10 +7216,10 @@
         }
 
         // 1. Renderizar Circuito de Asfalto, Pianos, Rampas y Cielo Voxel
-        renderVoxelTerrainAndSky(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz);
+        renderVoxelTerrainAndSky(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz, 0.016, focalZoom);
 
         // 2. Proyector 3D + Bordes 3D de Pista + Pórtico de Meta + Conos + Humo + Carro RC 3D Sólido
-        const { projPoint320, projLine } = createProjector320(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz);
+        const { projPoint320, projLine } = createProjector320(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz, focalZoom);
         renderRcTrackPropsAndParticles320(this, projPoint320, projLine);
         renderSolidRcCar320(this, projPoint320, projLine);
 
@@ -7494,10 +7508,7 @@
         const targetRud = applySuperExpo(rawRud, 1.0, 0.35) * (32.0 * DEG2RAD);
         this.rudderAngle += (targetRud - this.rudderAngle) * Math.min(1.0, dt * 16.0);
 
-        // Eje vertical del Stick Derecho (hwInput.ry) ajusta suavemente el Zoom de la cámara LOS
-        if (Math.abs(hwInput.ry) > 0.24 && Math.abs(hwInput.ry) > Math.abs(hwInput.rx) * 1.15) {
-          fcProfile.losZoom = Math.max(0.50, Math.min(3.50, (fcProfile.losZoom || 1.25) + hwInput.ry * 0.95 * dt));
-        }
+        stepLosZoomInput(dt);
 
         const fwdX = Math.sin(this.yaw), fwdZ = Math.cos(this.yaw);
         const rgtX = Math.cos(this.yaw), rgtZ = -Math.sin(this.yaw);
@@ -7643,15 +7654,18 @@
         let cUx = 0, cUy = 1, cUz = 0;
         let cFx = 0, cFy = 0, cFz = 1;
         let zoomFactor = 1.0;
+        let focalZoom  = 1.0;
 
-        const userZoom = Math.max(0.50, Math.min(3.50, fcProfile.losZoom || 1.25));
+        const userZoom = Math.max(0.50, Math.min(4.00, fcProfile.losZoom || 1.25));
 
         if (this.camMode === 2 || this.chaseCam) {
-          const fc = computeFollowCamPose(this, 6.2 / userZoom, Math.max(1.3, 2.5 / Math.sqrt(userZoom)), 16.0);
+          const zSqrt = Math.sqrt(userZoom);
+          const fc = computeFollowCamPose(this, 6.2 / zSqrt, Math.max(1.3, 2.5 / zSqrt), 16.0);
           camX = fc.camX; camY = Math.max(1.4, fc.camY); camZ = fc.camZ;
           cRx = fc.cRx; cRy = fc.cRy; cRz = fc.cRz;
           cUx = fc.cUx; cUy = fc.cUy; cUz = fc.cUz;
           cFx = fc.cFx; cFy = fc.cFy; cFz = fc.cFz;
+          focalZoom  = zSqrt;
           zoomFactor = userZoom;
         } else {
           const rawDx = this.px - dockX;
@@ -7660,26 +7674,26 @@
           const dirHx = rawDx / horizDist;
           const dirHz = rawDz / horizDist;
 
-          if (this.camMode === 0) {
-            const baseEff = 9.8 + Math.min(2.0, horizDist * 0.022);
-            const effHoriz = Math.max(4.0, Math.min(34.0, baseEff / userZoom));
-            zoomFactor = horizDist / Math.max(1.0, effHoriz);
-            camX = this.px - dirHx * effHoriz;
-            camZ = this.pz - dirHz * effHoriz;
-            camY = Math.max(3.5, Math.min(14.5, this.py + 2.2 + effHoriz * 0.44));
-          } else {
-            const effHoriz = Math.max(4.5, Math.min(90.0, horizDist / userZoom));
-            zoomFactor = userZoom;
-            camX = this.px - dirHx * effHoriz;
-            camZ = this.pz - dirHz * effHoriz;
-            camY = Math.max(5.0, Math.min(25.0, 21.0 / Math.sqrt(userZoom)));
-          }
+          const camDistH = Math.min(horizDist, 17.5);
+          camX = this.px - dirHx * camDistH;
+          camZ = this.pz - dirHz * camDistH;
+          camY = this.py + 0.65 + camDistH * 0.40;
 
           const dx = this.px - camX;
           const dy = (this.py + 0.45) - camY;
           const dz = this.pz - camZ;
           const dLen = Math.hypot(dx, dy, dz) || 1.0;
           cFx = dx / dLen; cFy = dy / dLen; cFz = dz / dLen;
+
+          if (this.camMode === 0) {
+            const targetOptDist = 8.4 / userZoom;
+            focalZoom  = dLen / targetOptDist;
+            zoomFactor = (horizDist * 1.07) / targetOptDist;
+          } else {
+            focalZoom  = userZoom * (dLen / 13.0);
+            zoomFactor = userZoom;
+          }
+
           const hLen = Math.hypot(cFx, cFz) || 1.0;
           cRx =  cFz / hLen; cRy = 0.0; cRz = -cFx / hLen;
           cUx = cFy * cRz - cFz * cRy;
@@ -7687,8 +7701,8 @@
           cUz = cFx * cRy - cFy * cRx;
         }
 
-        renderVoxelTerrainAndSky(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz);
-        const { projPoint320, projLine } = createProjector320(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz);
+        renderVoxelTerrainAndSky(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz, 0.016, focalZoom);
+        const { projPoint320, projLine } = createProjector320(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz, focalZoom);
         renderSailBuoysAndWake320(this, projPoint320, projLine);
         renderSolidSpeedboat320(this, projPoint320, projLine);
         this.renderBoatOsd320(zoomFactor);
@@ -8005,10 +8019,7 @@
           playTone(this.lowGear ? 520 : 780, 0.05);
         }
 
-        // Eje vertical del Stick Derecho (hwInput.ry) ajusta el Zoom de la cámara LOS
-        if (Math.abs(hwInput.ry) > 0.24 && Math.abs(hwInput.ry) > Math.abs(hwInput.rx) * 1.15) {
-          fcProfile.losZoom = Math.max(0.50, Math.min(3.50, (fcProfile.losZoom || 1.25) + hwInput.ry * 0.95 * dt));
-        }
+        stepLosZoomInput(dt);
 
         if (this.tippedOver) {
           // Si volcó por exceso de inclinación (> tipDeg), mantener volcado hasta pulsar X (Winch/Reset)
@@ -8109,15 +8120,18 @@
         let cUx = 0, cUy = 1, cUz = 0;
         let cFx = 0, cFy = 0, cFz = 1;
         let zoomFactor = 1.0;
+        let focalZoom  = 1.0;
 
-        const userZoom = Math.max(0.50, Math.min(3.50, fcProfile.losZoom || 1.25));
+        const userZoom = Math.max(0.50, Math.min(4.00, fcProfile.losZoom || 1.25));
 
         if (this.camMode === 2 || this.chaseCam) {
-          const fc = computeFollowCamPose(this, 4.8 / userZoom, Math.max(1.1, 2.1 / Math.sqrt(userZoom)), 16.0);
+          const zSqrt = Math.sqrt(userZoom);
+          const fc = computeFollowCamPose(this, 4.8 / zSqrt, Math.max(1.1, 2.1 / zSqrt), 16.0);
           camX = fc.camX; camY = Math.max(getTerrainHeightMeters(camX, camZ) + 0.9, fc.camY); camZ = fc.camZ;
           cRx = fc.cRx; cRy = fc.cRy; cRz = fc.cRz;
           cUx = fc.cUx; cUy = fc.cUy; cUz = fc.cUz;
           cFx = fc.cFx; cFy = fc.cFy; cFz = fc.cFz;
+          focalZoom  = zSqrt;
           zoomFactor = userZoom;
         } else {
           const rawDx = this.px - rockStandX;
@@ -8126,26 +8140,26 @@
           const dirHx = rawDx / horizDist;
           const dirHz = rawDz / horizDist;
 
-          if (this.camMode === 0) {
-            const baseEff = horizDist > 10.5 ? (10.5 + (horizDist - 10.5) * 0.28) : horizDist;
-            const effHoriz = Math.max(3.4, Math.min(60.0, baseEff / userZoom));
-            zoomFactor = horizDist / Math.max(1.0, effHoriz);
-            camX = this.px - dirHx * effHoriz;
-            camZ = this.pz - dirHz * effHoriz;
-            camY = Math.max(getTerrainHeightMeters(camX, camZ) + 2.2, Math.min(20.0, this.py + 2.6 + effHoriz * 0.58));
-          } else {
-            const effHoriz = Math.max(3.6, Math.min(68.0, horizDist / userZoom));
-            zoomFactor = userZoom;
-            camX = this.px - dirHx * effHoriz;
-            camZ = this.pz - dirHz * effHoriz;
-            camY = Math.max(getTerrainHeightMeters(camX, camZ) + 2.4, Math.min(22.0, 16.0 / Math.sqrt(userZoom)));
-          }
+          const camDistH = Math.min(horizDist, 14.5);
+          camX = this.px - dirHx * camDistH;
+          camZ = this.pz - dirHz * camDistH;
+          camY = Math.max(getTerrainHeightMeters(camX, camZ) + 2.2, Math.min(20.0, this.py + 2.2 + camDistH * 0.52));
 
           const dx = this.px - camX;
           const dy = (this.py + 0.35) - camY;
           const dz = this.pz - camZ;
           const dLen = Math.hypot(dx, dy, dz) || 1.0;
           cFx = dx / dLen; cFy = dy / dLen; cFz = dz / dLen;
+
+          if (this.camMode === 0) {
+            const targetOptDist = 9.5 / userZoom;
+            focalZoom  = dLen / targetOptDist;
+            zoomFactor = (horizDist * 1.12) / targetOptDist;
+          } else {
+            focalZoom  = userZoom * (dLen / 14.0);
+            zoomFactor = userZoom;
+          }
+
           const hLen = Math.hypot(cFx, cFz) || 1.0;
           cRx =  cFz / hLen; cRy = 0.0; cRz = -cFx / hLen;
           cUx = cFy * cRz - cFz * cRy;
@@ -8153,8 +8167,8 @@
           cUz = cFx * cRy - cFy * cRx;
         }
 
-        renderVoxelTerrainAndSky(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz);
-        const { projPoint320, projLine } = createProjector320(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz);
+        renderVoxelTerrainAndSky(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz, 0.016, focalZoom);
+        const { projPoint320, projLine } = createProjector320(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz, focalZoom);
         renderCrawlerGatesAndProps320(this, projPoint320, projLine);
         renderSolidRockCrawler320(this, projPoint320, projLine);
         this.renderCrawlerOsd320(zoomFactor);
@@ -8274,6 +8288,15 @@
       if (capTouch.active && e.buttons === 1) handleOledTouchPoint(e.clientX, e.clientY, false);
     });
     window.addEventListener('mouseup', () => { capTouch.active = false; });
+    oledCanvas.addEventListener('wheel', (e) => {
+      if (osState === 'ingame' && !rgOverlayOpen && isLosSimId(activeRomId)) {
+        e.preventDefault();
+        const zStep = e.deltaY < 0 ? 0.20 : -0.20;
+        fcProfile.losZoom = Math.max(0.50, Math.min(4.00, Math.round(((fcProfile.losZoom || 1.25) + zStep) * 100) / 100));
+        showToast(`ZOOM CAMARA LOS: ${fcProfile.losZoom.toFixed(2)}X`);
+        playTone(zStep > 0 ? 740 : 580, 0.02);
+      }
+    }, { passive: false });
 
     let rgOverlayOpen = false;
     let rgTuningOpen  = false;
