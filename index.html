@@ -11779,6 +11779,7 @@
     let lastTime = performance.now();
     let fpsFrames = 0;
     let fpsClock = performance.now();
+    let mapEditorOpen = false;
 
     function retroGoMainLoop(now) {
       requestAnimationFrame(retroGoMainLoop);
@@ -11794,7 +11795,7 @@
         } else if (osState === 'launcher') {
           updateAndRenderRetroGoLauncher(dt);
         } else if (osState === 'ingame') {
-          if (hwInput.justPressed('MENU')) {
+          if (!mapEditorOpen && hwInput.justPressed('MENU')) {
             if (rgOverlayOpen) {
               rgOverlayOpen = false;
               rgTuningOpen = false;
@@ -11805,7 +11806,7 @@
             playTone(600, 0.04);
           }
 
-          if (!rgOverlayOpen) {
+          if (!rgOverlayOpen && !mapEditorOpen) {
             if (activeRomId === 'fpv_drone') {
               if (!handleInFlightShortcuts(fpvDroneSim)) {
                 for (let s = 0; s < 4; s++) fpvDroneSim.step(dt * 0.25);
@@ -11848,7 +11849,9 @@
             else if (activeRomId === 'rc_crawler') rcCrawlerSim.render();
             else if (activeRomId === 'hwtest') renderHwDiagnostic();
 
-            updateAndRenderRetroGoOverlay(dt);
+            if (rgOverlayOpen) {
+              updateAndRenderRetroGoOverlay(dt);
+            }
           }
         }
 
@@ -13426,6 +13429,7 @@
           generateGentleVoxelMap(0);
         }
         meOpen = true;
+        mapEditorOpen = true;
         modalEl.classList.add('open');
         if (CHOROBOBO_SPAWN_DEF && CHOROBOBO_SPAWN_DEF.enabled) {
           applySpawnDefToActiveCraft();
@@ -13441,6 +13445,7 @@
 
       btnCloseEl.addEventListener('click', () => {
         meOpen = false;
+        mapEditorOpen = false;
         modalEl.classList.remove('open');
         // Si el usuario estaba en el menú inicial o de ajustes, entrar directo a volar sobre el mapa de Chorobobo
         if (osState !== 'ingame' || (activeRomId !== 'fpv_wing' && activeRomId !== 'fpv_drone')) {
