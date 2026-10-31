@@ -4947,7 +4947,7 @@
       if (rawKeys['ArrowUp'] || rawKeys['Equal'] || rawKeys['NumpadAdd']) zDir += 1.0;
       if (rawKeys['ArrowDown'] || rawKeys['Minus'] || rawKeys['NumpadSubtract']) zDir -= 1.0;
       if (zDir !== 0.0) {
-        fcProfile.losZoom = Math.max(0.50, Math.min(4.00, (fcProfile.losZoom || 1.25) + zDir * 0.95 * dt));
+        fcProfile.losZoom = Math.max(0.50, Math.min(4.00, (fcProfile.losZoom || 1.00) + zDir * 0.95 * dt));
       }
     }
 
@@ -4985,7 +4985,7 @@
         if (activeRomId === 'fpv_wing' || activeRomId === 'fpv_drone') {
           selectChoroboboCircuit(currentCircuitIdx + 1, craft, true);
         } else {
-          fcProfile.losZoom = Math.min(4.00, Math.round(((fcProfile.losZoom || 1.25) + 0.25) * 100) / 100);
+          fcProfile.losZoom = Math.min(4.00, Math.round(((fcProfile.losZoom || 1.00) + 0.25) * 100) / 100);
           showToast(`ZOOM CAMARA LOS: ${fcProfile.losZoom.toFixed(2)}X`);
           playTone(740, 0.03);
         }
@@ -4995,7 +4995,7 @@
         if (activeRomId === 'fpv_wing' || activeRomId === 'fpv_drone') {
           selectChoroboboCircuit(currentCircuitIdx - 1, craft, true);
         } else {
-          fcProfile.losZoom = Math.max(0.50, Math.round(((fcProfile.losZoom || 1.25) - 0.25) * 100) / 100);
+          fcProfile.losZoom = Math.max(0.50, Math.round(((fcProfile.losZoom || 1.00) - 0.25) * 100) / 100);
           showToast(`ZOOM CAMARA LOS: ${fcProfile.losZoom.toFixed(2)}X`);
           playTone(580, 0.03);
         }
@@ -5004,7 +5004,7 @@
       // Toque directo en toda la esquina superior derecha [-ZOOM / +ZOOM] en los 4 simuladores LOS
       if (capTouch.justTapped && isLosSimId(activeRomId) && capTouch.y240 <= 52 && capTouch.x320 >= 224) {
         const zStep = capTouch.x320 >= 274 ? 0.25 : -0.25;
-        fcProfile.losZoom = Math.max(0.50, Math.min(4.00, Math.round(((fcProfile.losZoom || 1.25) + zStep) * 100) / 100));
+        fcProfile.losZoom = Math.max(0.50, Math.min(4.00, Math.round(((fcProfile.losZoom || 1.00) + zStep) * 100) / 100));
         showToast(`ZOOM CAMARA LOS: ${fcProfile.losZoom.toFixed(2)}X`);
         playTone(zStep > 0 ? 740 : 580, 0.03);
         capTouch.justTapped = false;
@@ -5156,7 +5156,7 @@
       windPresetIdx: 3,   // Por defecto: 3 = BRISA REGATA (12 KT)
       windCustom: false,
       wind: { ...WIND_PRESETS[3] },
-      losZoom: 1.25,      // Zoom ajustable por el usuario en cámaras LOS (0.50x panorámico .. 3.50x teleobjetivo)
+      losZoom: 1.00,      // Zoom ajustable por el usuario en cámaras LOS (0.50x panorámico .. 4.00x teleobjetivo; default 1.00x más amplio)
       aiBots: 1,          // 1 = 2 Rivales IA activos en Regata / Pista, 0 = Solo
       sailCourseIdx: 0,   // 0..4 = 5 Circuitos de Regata Náutica
       carTrackIdx: 0,     // 0..5 = 6 Pistas RC Car (empezando por MEGA GP ANCHO XXL y BAJA OFFROAD XXL)
@@ -7345,7 +7345,7 @@
         let zoomFactor = 1.0;
         let focalZoom  = 1.0;
 
-        const userZoom = Math.max(0.50, Math.min(4.00, fcProfile.losZoom || 1.25));
+        const userZoom = Math.max(0.50, Math.min(4.00, fcProfile.losZoom || 1.00));
 
         if (this.camMode === 2 || this.chaseCam) {
           // Vista Follow 3D elevada detrás del velero con Zoom Óptico + Distancia ajustable
@@ -7383,7 +7383,7 @@
             // MIRADOR AUTO-ZOOM DE TAMAÑO 100% CONSTANTE:
             // Teleobjetivo óptico real (focalZoom = dLen / targetOptDist) que cancela exactamente dLen en projPoint320,
             // garantizando que el velero conserve exactamente el mismo tamaño en píxeles a cualquier distancia de la bahía.
-            const targetOptDist = 7.8 / userZoom;
+            const targetOptDist = 9.5 / userZoom;
             focalZoom  = dLen / targetOptDist;
             zoomFactor = (horizDist * 1.07) / targetOptDist;
           } else {
@@ -7454,7 +7454,7 @@
         const distB = Math.round(Math.hypot(b.x - this.px, b.z - this.pz));
         drawOsdSmall320(`BUOY ${this.activeBuoy + 1}/6`, 264, 8, C565.GREEN);
         drawOsdSmall320(`DST ${distB}M`,                264, 18, WHITE);
-        const zUsr = (fcProfile.losZoom || 1.25).toFixed(2);
+        const zUsr = (fcProfile.losZoom || 1.00).toFixed(2);
         const camLbl = (this.camMode === 2 || this.chaseCam) ? `FLW Z:${zUsr}X` : (this.camMode === 0 ? `LOS ${zoomFactor.toFixed(1)}X` : `MAN ${zUsr}X`);
         drawOsdSmall320(camLbl,        254, 28, C565.CYAN);
         drawOsdSmall320(`[-ZOOM ${zUsr}+]`, 244, 38, C565.GOLD);
@@ -8277,7 +8277,7 @@
         let zoomFactor = 1.0;
         let focalZoom  = 1.0;
 
-        const userZoom = Math.max(0.50, Math.min(4.00, fcProfile.losZoom || 1.25));
+        const userZoom = Math.max(0.50, Math.min(4.00, fcProfile.losZoom || 1.00));
 
         if (this.camMode === 2 || this.chaseCam) {
           // Vista Chase Cam 3D elevada detrás del Carro RC (también responde al Zoom ajustable)
@@ -8311,7 +8311,7 @@
           cFz = dz / dLen;
 
           if (this.camMode === 0) {
-            const targetOptDist = 11.2 / userZoom;
+            const targetOptDist = 13.5 / userZoom;
             focalZoom  = dLen / targetOptDist;
             zoomFactor = (horizDist * 1.14) / targetOptDist;
           } else {
@@ -8370,7 +8370,7 @@
         drawOsdSmall320(`BEST ${this.bestLapTime > 0 ? this.bestLapTime.toFixed(2) + 'S' : '--.--'}`, 8, 28, C565.GREEN);
 
         // Esquina superior derecha: Cámara LOS Podio Alto + Control de Zoom
-        const zUsr = (fcProfile.losZoom || 1.25).toFixed(2);
+        const zUsr = (fcProfile.losZoom || 1.00).toFixed(2);
         const camLbl = (this.camMode === 2 || this.chaseCam) ? `CHS Z:${zUsr}X` : (this.camMode === 0 ? `LOS ${zoomFactor.toFixed(1)}X` : `MAN ${zUsr}X`);
         drawOsdSmall320(camLbl,            256, 8,  C565.CYAN);
         drawOsdSmall320(`B:CAM Y:MOD`,     255, 18, WHITE);
@@ -8772,7 +8772,7 @@
         let zoomFactor = 1.0;
         let focalZoom  = 1.0;
 
-        const userZoom = Math.max(0.50, Math.min(4.00, fcProfile.losZoom || 1.25));
+        const userZoom = Math.max(0.50, Math.min(4.00, fcProfile.losZoom || 1.00));
 
         if (this.camMode === 2 || this.chaseCam) {
           const zSqrt = Math.sqrt(userZoom);
@@ -8802,7 +8802,7 @@
           cFx = dx / dLen; cFy = dy / dLen; cFz = dz / dLen;
 
           if (this.camMode === 0) {
-            const targetOptDist = 8.4 / userZoom;
+            const targetOptDist = 10.2 / userZoom;
             focalZoom  = dLen / targetOptDist;
             zoomFactor = (horizDist * 1.07) / targetOptDist;
           } else {
@@ -8840,7 +8840,7 @@
         drawOsdSmall320(`DST  ${distB}M`,                8, 18, WHITE);
         drawOsdSmall320(`LAP  ${this.lapCount}`,        8, 28, C565.GOLD);
 
-        const zUsr = (fcProfile.losZoom || 1.25).toFixed(2);
+        const zUsr = (fcProfile.losZoom || 1.00).toFixed(2);
         const camLbl = (this.camMode === 2 || this.chaseCam) ? `CHS Z:${zUsr}X` : (this.camMode === 0 ? `LOS ${zoomFactor.toFixed(1)}X` : `MAN ${zUsr}X`);
         drawOsdSmall320(camLbl,            254, 8,  C565.CYAN);
         drawOsdSmall320(`B:CAM Y:CLASE`,   248, 18, WHITE);
@@ -9262,7 +9262,7 @@
         let zoomFactor = 1.0;
         let focalZoom  = 1.0;
 
-        const userZoom = Math.max(0.50, Math.min(4.00, fcProfile.losZoom || 1.25));
+        const userZoom = Math.max(0.50, Math.min(4.00, fcProfile.losZoom || 1.00));
 
         if (this.camMode === 2 || this.chaseCam) {
           const zSqrt = Math.sqrt(userZoom);
@@ -9292,7 +9292,7 @@
           cFx = dx / dLen; cFy = dy / dLen; cFz = dz / dLen;
 
           if (this.camMode === 0) {
-            const targetOptDist = 9.5 / userZoom;
+            const targetOptDist = 11.4 / userZoom;
             focalZoom  = dLen / targetOptDist;
             zoomFactor = (horizDist * 1.12) / targetOptDist;
           } else {
@@ -9341,7 +9341,7 @@
         drawOsdSmall320(`DST  ${distG}M`,                8, 18, WHITE);
         drawOsdSmall320(`PEN  ${this.penalties}`,       8, 28, this.penalties > 0 ? C565.ORANGE : C565.GREEN);
 
-        const zUsr = (fcProfile.losZoom || 1.25).toFixed(2);
+        const zUsr = (fcProfile.losZoom || 1.00).toFixed(2);
         const camLbl = (this.camMode === 2 || this.chaseCam) ? `CHS Z:${zUsr}X` : (this.camMode === 0 ? `LOS ${zoomFactor.toFixed(1)}X` : `MAN ${zUsr}X`);
         drawOsdSmall320(camLbl,            254, 8,  C565.CYAN);
         drawOsdSmall320(`A:GEAR X:WINCH`,  246, 18, WHITE);
@@ -9432,7 +9432,7 @@
       if (osState === 'ingame' && !rgOverlayOpen && isLosSimId(activeRomId)) {
         e.preventDefault();
         const zStep = e.deltaY < 0 ? 0.20 : -0.20;
-        fcProfile.losZoom = Math.max(0.50, Math.min(4.00, Math.round(((fcProfile.losZoom || 1.25) + zStep) * 100) / 100));
+        fcProfile.losZoom = Math.max(0.50, Math.min(4.00, Math.round(((fcProfile.losZoom || 1.00) + zStep) * 100) / 100));
         showToast(`ZOOM CAMARA LOS: ${fcProfile.losZoom.toFixed(2)}X`);
         playTone(zStep > 0 ? 740 : 580, 0.02);
       }
@@ -9791,7 +9791,7 @@
     function resetWorldDefaults() {
       applyWindPreset(3); // BRISA REGATA (12 KT)
       fcProfile.windDirMode = 0;
-      fcProfile.losZoom = 1.25;
+      fcProfile.losZoom = 1.00;
       fcProfile.treeDensity = 1.0;
       fcProfile.showSplinePath = 1;
       fcProfile.gateVisMode = 0;
@@ -9866,7 +9866,12 @@
         } else if (row === 5) {
           cycleSplinePathMode(dir);
         } else if (row === 6) {
-          cycleGateVisMode(dir);
+          if (isLosSimId(activeRomId)) {
+            fcProfile.losZoom = Math.max(0.50, Math.min(4.00, Math.round(((fcProfile.losZoom || 1.00) + dir * 0.25) * 100) / 100));
+            showToast(`ZOOM CAMARA LOS: ${fcProfile.losZoom.toFixed(2)}X`);
+          } else {
+            cycleGateVisMode(dir);
+          }
         } else if (row === 7) {
           if (isLosSimId(activeRomId)) {
             fcProfile.aiBots = fcProfile.aiBots ? 0 : 1;
@@ -10334,7 +10339,7 @@
         row3View,
         `WIND:${wnd.name.slice(0, 9)} ${wnd.baseKts.toFixed(0)}KT`,
         `GUIA:${SPLINE_PATH_LABELS[fcProfile.showSplinePath || 0]}`,
-        `GATE:${GATE_VIS_LABELS[fcProfile.gateVisMode || 0]}`,
+        isLosSimId(activeRomId) ? `ZOOM:${(fcProfile.losZoom || 1.00).toFixed(2)}X` : `GATE:${GATE_VIS_LABELS[fcProfile.gateVisMode || 0]}`,
         isLosSimId(activeRomId) ? `RIVL:${fcProfile.aiBots ? 'AI + BLE ON' : 'SOLO OFF'}` : `TREE:${treeLbl}`,
         `HOME:SIM SELECTOR`
       ] : (rgTuningTab === 1 ? [
