@@ -744,6 +744,7 @@
           <div class="me-tool-grid">
             <button class="me-btn active" data-me-tool="tree">🌳 Plantar Sprite</button>
             <button class="me-btn" data-me-tool="bldg">🏠 Poner/Editar Edificio</button>
+            <button class="me-btn" data-me-tool="gate" style="grid-column: span 2;">🏁 Editar Circuito y Gates 3D</button>
             <button class="me-btn" data-me-tool="erase">🧹 Borrador</button>
             <button class="me-btn" data-me-tool="teleport">🚁 Mover Aeronave</button>
           </div>
@@ -825,6 +826,61 @@
             <button id="meBtnDeleteSelBldg" class="me-btn" style="flex:1;border-color:#e60012;color:#ff8088;">🗑️ Borrar Seleccionado</button>
             <button id="meBtnClearAllBldgs" class="me-btn" style="flex:1;">Vaciar Edificios</button>
           </div>
+        </div>
+
+        <!-- 3B. Panel de Circuitos y Gates 3D -->
+        <div id="mePanelGate" class="me-card" style="display:none;">
+          <h4>2. Editor de Circuito y Gates 3D</h4>
+          <div class="me-row">
+            <span>Circuito:</span>
+            <select id="meSelCircuit" style="flex:1;">
+              <option value="0">C1: ROJO PISTA 3D</option>
+              <option value="1">C2: AZUL OCHO 3D</option>
+              <option value="2">C3: SLALOM LATERAL</option>
+              <option value="3">C4: MORADO AÉREO 3D</option>
+              <option value="4">C5: NARANJA RÍO 3D</option>
+              <option value="5">LIBRE: SIN GATES (Vuelo Libre)</option>
+            </select>
+          </div>
+          <div class="me-row">
+            <span>Gate Activa: <b id="meLblSelGate" style="color:#ffcb3b;">G1 / 15</b></span>
+            <div style="display:flex;gap:4px;">
+              <button id="meBtnGatePrev" class="me-btn" title="Seleccionar Gate Anterior">◀</button>
+              <button id="meBtnGateNext" class="me-btn" title="Seleccionar Gate Siguiente">▶</button>
+              <button id="meBtnGateMakeStart" class="me-btn" title="Convertir esta Gate en la Salida G1">⭐ Hacer G1</button>
+            </div>
+          </div>
+          <div class="me-row">
+            <span>Tipo Gate:</span>
+            <select id="meSelGateType" style="flex:1;">
+              <option value="arch">Arco / Pórtico 3D Clásico</option>
+              <option value="flag_L">Bandera Slalom Izquierda</option>
+              <option value="flag_R">Bandera Slalom Derecha</option>
+              <option value="split_lr">Gate Doble Izq / Der</option>
+              <option value="over_under">Gate Doble Arriba / Abajo</option>
+              <option value="dive_cube">Cubo / Túnel Dive 3D</option>
+              <option value="diamond">Anillo Diamante 3D (45°)</option>
+            </select>
+          </div>
+          <div class="me-row">
+            <span>Altura Centro: <b id="meLblGateAlt">9.0m</b></span>
+            <input type="range" id="meRngGateAlt" min="4.5" max="32.0" step="0.5" value="9.0" />
+          </div>
+          <div class="me-row">
+            <span>Giro Extra: <b id="meLblGateYaw">0° (Auto)</b></span>
+            <input type="range" id="meRngGateYaw" min="-180" max="180" step="5" value="0" />
+          </div>
+          <div style="display:flex;gap:5px;">
+            <button id="meBtnGateOrderUp" class="me-btn" style="flex:1;" title="Mover antes en el orden del circuito">⬆️ Orden -1</button>
+            <button id="meBtnGateOrderDn" class="me-btn" style="flex:1;" title="Mover después en el orden del circuito">⬇️ Orden +1</button>
+          </div>
+          <div style="display:flex;gap:5px;">
+            <button id="meBtnDeleteSelGate" class="me-btn" style="flex:1;border-color:#e60012;color:#ff8088;">🗑️ Borrar Gate</button>
+            <button id="meBtnClearCircuit" class="me-btn" style="flex:1;">Vaciar Circuito (0)</button>
+          </div>
+          <small style="color:#98a4b8;line-height:1.3;">
+            💡 Haz clic sobre una Gate en el mapa para arrastrarla, o haz clic en un espacio libre para añadir una nueva Gate al circuito.
+          </small>
         </div>
 
         <!-- 4. Escala Activa de Chorobobo -->
@@ -2186,19 +2242,24 @@
       diamond:    'DIAMANTE 3D'
     };
 
-    // Construye un circuito de 15 Gates 3D orientados perpendicularmente a la tangente de vuelo (con altura 3D y tipo de gate por puerta)
+    // Construye un circuito de N Gates 3D orientados perpendicularmente a la tangente de vuelo (con altura 3D, tipo de gate y giro extra opcional por puerta)
     function buildOrientedCircuit(id, name, shortCode, lineCol565, palIdx, uvList) {
-      const n = uvList.length;
+      const n = Array.isArray(uvList) ? uvList.length : 0;
       const isUltraCompact = WORLD_W_M <= 950.0;
       const isCompact      = WORLD_W_M <= 2400.0;
       const baseGateY = isUltraCompact ? 6.8 : (isCompact ? 9.0 : 12.0);
       const gateW     = isUltraCompact ? 9.6 : (isCompact ? 12.0 : 18.0);
       const gateH     = isUltraCompact ? 7.2 : (isCompact ? 9.0 : 12.0);
 
+      if (n === 0) {
+        return { id, name, shortCode, lineCol565, palIdx, uvList: [], gates: [], splinePts: [] };
+      }
+
       const pts = uvList.map((item, idx) => {
         const p = uvToWorld(item[0], item[1]);
-        p.altMul = item.length > 2 ? item[2] : 1.0;
+        p.altMul = item.length > 2 ? Number(item[2]) : 1.0;
         p.gType  = item.length > 3 ? item[3] : null;
+        p.yawDeg = item.length > 4 ? (Number(item[4]) || 0) : 0;
         p.yRel   = Math.max(4.5, Math.round(baseGateY * p.altMul * 10) / 10);
         p.idx    = idx;
         return p;
@@ -2209,15 +2270,25 @@
         const cur = pts[i];
         const nxt = pts[(i + 1) % n];
         const prv = pts[(i - 1 + n) % n];
-        // Vector tangente promedio en la puerta i
-        let tx = nxt.x - prv.x;
-        let tz = nxt.z - prv.z;
+        // Vector tangente promedio en la puerta i (si solo hay 1 gate, alineada con la pista A.I.A)
+        let tx = n > 1 ? (nxt.x - prv.x) : -0.95;
+        let tz = n > 1 ? (nxt.z - prv.z) :  0.31;
         const tLen = Math.hypot(tx, tz) || 1.0;
         tx /= tLen;
         tz /= tLen;
 
+        // Giro manual extra (en grados) respecto a la tangente automática si el usuario lo ajustó en el editor
+        if (cur.yawDeg) {
+          const rad = cur.yawDeg * DEG2RAD;
+          const cA = Math.cos(rad), sA = Math.sin(rad);
+          const rTx = tx * cA - tz * sA;
+          const rTz = tx * sA + tz * cA;
+          tx = rTx;
+          tz = rTz;
+        }
+
         // Pendiente longitudinal 3D entre la puerta anterior y la siguiente (para inclinar cubos 3D de subida/dive)
-        const pitchSlope = Math.max(-0.55, Math.min(0.55, (nxt.yRel - prv.yRel) / Math.max(24.0, tLen * 0.45)));
+        const pitchSlope = n > 1 ? Math.max(-0.55, Math.min(0.55, (nxt.yRel - prv.yRel) / Math.max(24.0, tLen * 0.45))) : 0.0;
 
         // Asignar tipo de gate 3D si no fue explícito en uvList
         let gType = cur.gType;
@@ -2242,6 +2313,7 @@
           w: gateW * wScale,
           h: gateH * hScale,
           type: gType,
+          yawDeg: cur.yawDeg,
           pitchSlope,
           tx, tz,
           nx: tz,
@@ -2249,28 +2321,30 @@
         });
       }
 
-      // Precalcular 120 puntos (8 por tramo x 15 puertas) sobre una Spline Catmull-Rom 3D cerrada (x, yRel, z)
+      // Precalcular puntos (8 por tramo x N puertas) sobre una Spline Catmull-Rom 3D cerrada (x, yRel, z)
       const splinePts = [];
-      const stepsPerSeg = 8;
-      for (let i = 0; i < n; i++) {
-        const p0 = pts[(i - 1 + n) % n];
-        const p1 = pts[i];
-        const p2 = pts[(i + 1) % n];
-        const p3 = pts[(i + 2) % n];
-        for (let s = 1; s <= stepsPerSeg; s++) {
-          const t = s / (stepsPerSeg + 1);
-          const t2 = t * t, t3 = t2 * t;
-          const x = 0.5 * ((2 * p1.x) + (-p0.x + p2.x) * t + (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 + (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3);
-          const z = 0.5 * ((2 * p1.z) + (-p0.z + p2.z) * t + (2 * p0.z - 5 * p1.z + 4 * p2.z - p3.z) * t2 + (-p0.z + 3 * p1.z - 3 * p2.z + p3.z) * t3);
-          const yRel = 0.5 * ((2 * p1.yRel) + (-p0.yRel + p2.yRel) * t + (2 * p0.yRel - 5 * p1.yRel + 4 * p2.yRel - p3.yRel) * t2 + (-p0.yRel + 3 * p1.yRel - 3 * p2.yRel + p3.yRel) * t3);
-          splinePts.push({ x, yRel: Math.max(2.5, yRel), z, segIdx: i, stepIdx: s });
+      if (n >= 2) {
+        const stepsPerSeg = 8;
+        for (let i = 0; i < n; i++) {
+          const p0 = pts[(i - 1 + n) % n];
+          const p1 = pts[i];
+          const p2 = pts[(i + 1) % n];
+          const p3 = pts[(i + 2) % n];
+          for (let s = 1; s <= stepsPerSeg; s++) {
+            const t = s / (stepsPerSeg + 1);
+            const t2 = t * t, t3 = t2 * t;
+            const x = 0.5 * ((2 * p1.x) + (-p0.x + p2.x) * t + (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 + (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3);
+            const z = 0.5 * ((2 * p1.z) + (-p0.z + p2.z) * t + (2 * p0.z - 5 * p1.z + 4 * p2.z - p3.z) * t2 + (-p0.z + 3 * p1.z - 3 * p2.z + p3.z) * t3);
+            const yRel = 0.5 * ((2 * p1.yRel) + (-p0.yRel + p2.yRel) * t + (2 * p0.yRel - 5 * p1.yRel + 4 * p2.yRel - p3.yRel) * t2 + (-p0.yRel + 3 * p1.yRel - 3 * p2.yRel + p3.yRel) * t3);
+            splinePts.push({ x, yRel: Math.max(2.5, yRel), z, segIdx: i, stepIdx: s });
+          }
         }
       }
       return { id, name, shortCode, lineCol565, palIdx, uvList, gates, splinePts };
     }
 
-    // 6 Circuitos de 15 Gates 3D (con arcos 3D, banderas laterales de slalom, gates dobles izq/der, arriba/abajo, diamantes y cubos de dive 3D)
-    const CHOROBOBO_CIRCUIT_DEFS = [
+    // 5 Circuitos por defecto de 15 Gates 3D (editables en el Mapa Satelital Visual)
+    const DEFAULT_CHOROBOBO_CIRCUIT_DEFS = [
       // 1. C1 ROJO PISTA (15 Gates): Óvalo rápido combinando Arcos 3D, Gates Dobles Laterales y Slalom de Banderas
       {
         id: 'rojo', name: 'C1 ROJO PISTA 3D', shortCode: 'C1', lineCol565: rgb565(235, 52, 48), palIdx: 4,
@@ -2328,6 +2402,8 @@
       }
     ];
 
+    let CHOROBOBO_CIRCUIT_DEFS = JSON.parse(JSON.stringify(DEFAULT_CHOROBOBO_CIRCUIT_DEFS));
+
     const CHOROBOBO_CIRCUITS = CHOROBOBO_CIRCUIT_DEFS.map(d =>
       buildOrientedCircuit(d.id, d.name, d.shortCode, d.lineCol565, d.palIdx, d.uvList)
     );
@@ -2342,7 +2418,7 @@
         const d = CHOROBOBO_CIRCUIT_DEFS[i];
         CHOROBOBO_CIRCUITS[i] = buildOrientedCircuit(d.id, d.name, d.shortCode, d.lineCol565, d.palIdx, d.uvList);
       }
-      const safeIdx = isFreeFlightNoGates() ? 0 : currentCircuitIdx;
+      const safeIdx = (currentCircuitIdx >= CHOROBOBO_CIRCUITS.length) ? 0 : currentCircuitIdx;
       CIRCUIT_GATES = CHOROBOBO_CIRCUITS[safeIdx].gates;
       if (typeof worldObjectsInitialized !== 'undefined' && worldObjectsInitialized) {
         rebuildWorldObjectsForScale();
@@ -2350,27 +2426,28 @@
     }
 
     function isFreeFlightNoGates() {
-      return currentCircuitIdx >= CHOROBOBO_CIRCUITS.length;
+      return currentCircuitIdx >= CHOROBOBO_CIRCUITS.length || !CIRCUIT_GATES || CIRCUIT_GATES.length === 0;
     }
 
     function getActiveCircuitLabel() {
-      if (isFreeFlightNoGates()) return 'SIN GATES (LIBRE)';
+      if (currentCircuitIdx >= CHOROBOBO_CIRCUITS.length) return 'SIN GATES (LIBRE)';
       return CHOROBOBO_CIRCUITS[currentCircuitIdx].name;
     }
 
     function selectChoroboboCircuit(idx, craft = null, resetCraft = false) {
       currentCircuitIdx = ((idx % TOTAL_CIRCUIT_MODES) + TOTAL_CIRCUIT_MODES) % TOTAL_CIRCUIT_MODES;
-      if (!isFreeFlightNoGates()) {
+      if (currentCircuitIdx < CHOROBOBO_CIRCUITS.length) {
         CIRCUIT_GATES = CHOROBOBO_CIRCUITS[currentCircuitIdx].gates;
       }
       if (craft) {
         craft.activeGate = 0;
         if (resetCraft && !isFreeFlightNoGates()) craft.reset();
       }
-      if (isFreeFlightNoGates()) {
+      if (currentCircuitIdx >= CHOROBOBO_CIRCUITS.length) {
         showToast('MAPA LIMPIO: SIN GATES (VUELO LIBRE)');
       } else {
-        showToast(`${CHOROBOBO_CIRCUITS[currentCircuitIdx].name} (15 GATES)`);
+        const nG = CHOROBOBO_CIRCUITS[currentCircuitIdx].gates.length;
+        showToast(`${CHOROBOBO_CIRCUITS[currentCircuitIdx].name} (${nG} GATES)`);
       }
       playTone(840, 0.05);
     }
@@ -3269,9 +3346,9 @@
       return { projPoint320, projLine };
     }
 
-    // Buffers estáticos en SRAM para ordenar las 15 puertas 3D de la más lejana a la más cercana (0 allocs por frame)
-    const GATE_SORT_ORD = new Uint8Array(16);
-    const GATE_SORT_CZ  = new Float32Array(16);
+    // Buffers estáticos en SRAM para ordenar hasta 64 puertas 3D de la más lejana a la más cercana (0 allocs por frame)
+    const GATE_SORT_ORD = new Uint8Array(64);
+    const GATE_SORT_CZ  = new Float32Array(64);
 
     // Renderiza el camino de puntos Spline (Suelo + Guía Aérea 3D) y los 6 Tipos de Gates 3D en líneas limpias (wireframe 3D)
     function renderCircuitGates(projLine, activeGate, projPoint320 = null) {
@@ -3280,9 +3357,11 @@
       const circuit = CHOROBOBO_CIRCUITS[currentCircuitIdx];
       const gates = circuit.gates;
       const nGates = gates.length;
+      if (nGates === 0) return;
+      const safeActive = ((activeGate % nGates) + nGates) % nGates;
       const baseCol = circuit.palIdx; // 4 = Rojo, 10 = Morado, 9 = Naranja
-      const prevGate = (activeGate - 1 + nGates) % nGates;
-      const nextGate = (activeGate + 1) % nGates;
+      const prevGate = (safeActive - 1 + nGates) % nGates;
+      const nextGate = (safeActive + 1) % nGates;
 
       // Modos configurables desde [WORLD] y barra superior:
       // showSplinePath: 0 = NINGUNA (OFF), 1 = AMBAS (PISO + 3D), 2 = SOLO PISO, 3 = SOLO 3D
@@ -3355,8 +3434,8 @@
 
       // 2. Filtrar y ordenar Gates visibles de mayor a menor distancia en SRAM estática (Painter's + Z-Buffer)
       let visCount = 0;
-      for (let i = 0; i < nGates && visCount < 16; i++) {
-        const fwdSteps = (i - activeGate + nGates) % nGates;
+      for (let i = 0; i < nGates && visCount < 64; i++) {
+        const fwdSteps = (i - safeActive + nGates) % nGates;
         if (gateVisMode === 0 && fwdSteps > 1) continue; // Solo Actual + Siguiente (2 Gates)
         if (gateVisMode === 1 && fwdSteps > 2) continue; // Actual + 2 Siguientes (3 Gates)
         if (gateVisMode === 3 && fwdSteps > 0) continue; // Solo Gate Actual (1 Gate)
@@ -4155,6 +4234,14 @@
           if (Array.isArray(parsed.buildings)) BUILDING_UV_DEFS = parsed.buildings;
           if (Array.isArray(parsed.trees))     CHOROBOBO_CUSTOM_TREES_UV = parsed.trees;
           if (typeof parsed.randomTreeCount === 'number') choroboboRandomTreeCount = parsed.randomTreeCount;
+          if (Array.isArray(parsed.circuits) && parsed.circuits.length === CHOROBOBO_CIRCUIT_DEFS.length) {
+            for (let c = 0; c < CHOROBOBO_CIRCUIT_DEFS.length; c++) {
+              if (parsed.circuits[c] && Array.isArray(parsed.circuits[c].uvList)) {
+                CHOROBOBO_CIRCUIT_DEFS[c].uvList = parsed.circuits[c].uvList;
+              }
+            }
+            rebuildChoroboboCircuitsForScale();
+          }
           return;
         }
         // Migrar automáticamente el diseño guardado en v1 (corrigiendo la inversión vertical v = 1 - v de lo que el usuario plantó en el canvas)
@@ -4180,7 +4267,8 @@
         localStorage.setItem('fpvsim_chorobobo_layout_v2', JSON.stringify({
           buildings: BUILDING_UV_DEFS,
           trees: CHOROBOBO_CUSTOM_TREES_UV,
-          randomTreeCount: choroboboRandomTreeCount
+          randomTreeCount: choroboboRandomTreeCount,
+          circuits: CHOROBOBO_CIRCUIT_DEFS
         }));
       } catch (e) {}
     }
@@ -6402,7 +6490,7 @@
       totalDistKm: 0,
 
       reset() {
-        const g0 = CIRCUIT_GATES[0];
+        const g0 = (CIRCUIT_GATES && CIRCUIT_GATES[0]) || { x: 0, y: 9.0, z: 0, tx: -0.95, tz: 0.31, nx: 0.31, nz: 0.95 };
         const spawnBack = WORLD_W_M <= 2000.0 ? 22.0 : 35.0;
         this.px = g0.x - g0.tx * spawnBack;
         this.pz = g0.z - g0.tz * spawnBack;
@@ -6675,7 +6763,7 @@
         }
 
         // 3. OSD estilo INAV con Horizonte Artificial proyectado directamente sobre el horizonte 3D
-        const g = isFreeFlightNoGates() ? { x: 0, y: 12, z: 0 } : CIRCUIT_GATES[this.activeGate];
+        const g = (isFreeFlightNoGates() || !CIRCUIT_GATES[this.activeGate]) ? { x: 0, y: 12, z: 0 } : CIRCUIT_GATES[this.activeGate];
         const gWorldY = getTerrainHeightMeters(g.x, g.z) + g.y;
         const dxG = g.x - this.px, dzG = g.z - this.pz;
         const gateDist = Math.hypot(dxG, gWorldY - this.py, dzG);
@@ -6743,7 +6831,7 @@
       totalDistKm: 0,
 
       reset() {
-        const g0 = CIRCUIT_GATES[0];
+        const g0 = (CIRCUIT_GATES && CIRCUIT_GATES[0]) || { x: 0, y: 9.0, z: 0, tx: -0.95, tz: 0.31, nx: 0.31, nz: 0.95 };
         const spawnBack = WORLD_W_M <= 2000.0 ? 28.0 : 42.0;
         this.px = g0.x - g0.tx * spawnBack;
         this.pz = g0.z - g0.tz * spawnBack;
@@ -7116,7 +7204,7 @@
         }
 
         // 3. OSD estilo INAV a pantalla completa (indica si es Ala sin Rudder o Avión con Cola)
-        const g = isFreeFlightNoGates() ? { x: 0, y: 12, z: 0 } : CIRCUIT_GATES[this.activeGate];
+        const g = (isFreeFlightNoGates() || !CIRCUIT_GATES[this.activeGate]) ? { x: 0, y: 12, z: 0 } : CIRCUIT_GATES[this.activeGate];
         const gWorldY = getTerrainHeightMeters(g.x, g.z) + g.y;
         const dxG = g.x - this.px, dzG = g.z - this.pz;
         const gateDist = Math.hypot(dxG, gWorldY - this.py, dzG);
@@ -11655,12 +11743,13 @@
       const ctx          = canvas.getContext('2d');
 
       let meOpen         = false;
-      let meTool         = 'tree'; // 'tree' | 'bldg' | 'erase' | 'teleport'
+      let meTool         = 'tree'; // 'tree' | 'bldg' | 'gate' | 'erase' | 'teleport'
       let meTreeType     = 0;
       let meTreeHMin     = 5.2;
       let meTreeHMax     = 8.5;
       let meBrushStepM   = 16.0;
       let meSelectedBldg = 0;
+      let meSelectedGate = 0;
 
       // Estado de cámara 2D sobre la ortofoto (zoom y centro en coordenadas normalizadas u,v 0..1)
       let camU           = SPAWN_U; // 0.585
@@ -11669,6 +11758,7 @@
       let isPanning      = false;
       let isPainting     = false;
       let isDraggingBldg = false;
+      let isDraggingGate = false;
       let isAimingCraft  = false;
       let customCraftPlaced = false;
       let panStartX      = 0, panStartY = 0;
@@ -11756,9 +11846,43 @@
         document.getElementById('meColBldgWall').value = rgb565ToHex(b.wallL   || rgb565(220, 218, 210));
       }
 
+      function getBaseGateY() {
+        return WORLD_W_M <= 950.0 ? 6.8 : (WORLD_W_M <= 2400.0 ? 9.0 : 12.0);
+      }
+
+      function syncGateInspectorFromSelected() {
+        const selCircEl = document.getElementById('meSelCircuit');
+        if (selCircEl) selCircEl.value = String(currentCircuitIdx);
+        const def = CHOROBOBO_CIRCUIT_DEFS[currentCircuitIdx];
+        const lblEl = document.getElementById('meLblSelGate');
+        if (!def) {
+          if (lblEl) lblEl.textContent = 'MODO VUELO LIBRE (SIN GATES)';
+          return;
+        }
+        const total = def.uvList.length;
+        if (total === 0) {
+          meSelectedGate = 0;
+          if (lblEl) lblEl.textContent = '0 GATES (HAZ CLIC EN EL MAPA)';
+          return;
+        }
+        if (meSelectedGate >= total) meSelectedGate = total - 1;
+        if (meSelectedGate < 0) meSelectedGate = 0;
+        const gUv = def.uvList[meSelectedGate];
+        if (lblEl) lblEl.textContent = `GATE #${meSelectedGate + 1} DE ${total}${meSelectedGate === 0 ? ' (START)' : ''}`;
+        const gType = gUv[3] || 'arch';
+        const baseY = getBaseGateY();
+        const altM  = Math.max(4.5, Math.min(32.0, (gUv[2] || 1.0) * baseY));
+        const yawDeg = Number(gUv[4]) || 0;
+        document.getElementById('meSelGateType').value = gType;
+        document.getElementById('meRngGateAlt').value = altM.toFixed(1);
+        document.getElementById('meLblGateAlt').textContent = `${altM.toFixed(1)}m`;
+        document.getElementById('meRngGateYaw').value = Math.round(yawDeg);
+        document.getElementById('meLblGateYaw').textContent = (Math.round(yawDeg) === 0) ? '0° (Auto)' : `${Math.round(yawDeg)}°`;
+      }
+
       function applyAndSaveChanges() {
         saveCustomChoroboboLayoutToStorage();
-        rebuildWorldObjectsForScale();
+        rebuildChoroboboCircuitsForScale();
         updateEditorStatsBadge();
         renderMapEditorCanvas();
       }
@@ -11769,7 +11893,9 @@
         const nCustom = CHOROBOBO_CUSTOM_TREES_UV.length;
         const nRand   = choroboboRandomTreeCount | 0;
         const nBldg   = BUILDING_UV_DEFS.length;
-        el.textContent = `[${nBldg} Edificios | ${nCustom} Sprites Fijos + ${nRand} Random = ${nCustom + nRand} Total | Escala: ${WORLD_W_M}×${WORLD_H_M}m]`;
+        const cDef    = CHOROBOBO_CIRCUIT_DEFS[currentCircuitIdx];
+        const nGates  = cDef ? cDef.uvList.length : 0;
+        el.textContent = `[C${currentCircuitIdx + 1}: ${nGates} Gates | ${nBldg} Edificios | ${nCustom} Sprites + ${nRand} Rnd | ${WORLD_W_M}×${WORLD_H_M}m]`;
       }
 
       // Conversión entre píxeles del canvas del editor y coordenadas normalizadas (u, v) de chorobobo.jpg
@@ -11831,26 +11957,97 @@
         const pxPerMeterX = vb.drawW / WORLD_W_M;
         const pxPerMeterZ = vb.drawH / WORLD_H_M;
 
-        // 1. Dibujar circuitos de Gates si está activo
-        const showGates = document.getElementById('meChkShowGates').checked;
+        // 1. Dibujar circuitos de Gates si está activo o si estamos en modo edición de Gates
+        const showGates = document.getElementById('meChkShowGates').checked || (meTool === 'gate');
         if (showGates) {
           const circuitCols = ['#ff3b30', '#2dc3ff', '#30e860', '#be3aeb', '#f8841c'];
           for (let c = 0; c < CHOROBOBO_CIRCUIT_DEFS.length; c++) {
             const def = CHOROBOBO_CIRCUIT_DEFS[c];
+            if (!def || def.uvList.length === 0) continue;
+            const isCurr = (c === currentCircuitIdx);
             ctx.strokeStyle = circuitCols[c % circuitCols.length];
-            ctx.lineWidth = (c === currentCircuitIdx) ? 2.2 : 1.1;
-            ctx.setLineDash((c === currentCircuitIdx) ? [] : [4, 4]);
-            ctx.beginPath();
-            for (let i = 0; i < def.uvList.length; i++) {
-              const gUv = def.uvList[i];
-              const pt = uvToCanvas(gUv[0], gUv[1]);
-              if (i === 0) ctx.moveTo(pt.x, pt.y);
-              else         ctx.lineTo(pt.x, pt.y);
+            ctx.lineWidth = isCurr ? 2.5 : 1.1;
+            ctx.setLineDash(isCurr ? [] : [4, 4]);
+
+            // Si es el circuito activo y ya tiene su spline 3D calculada, dibujamos la curva suave real
+            const builtCirc = CHOROBOBO_CIRCUITS[c];
+            if (isCurr && builtCirc && builtCirc.splinePts && builtCirc.splinePts.length > 1) {
+              ctx.beginPath();
+              for (let i = 0; i < builtCirc.splinePts.length; i++) {
+                const sp = builtCirc.splinePts[i];
+                const uv = worldToUv(sp.x, sp.z);
+                const pt = uvToCanvas(uv.u, uv.v);
+                if (i === 0) ctx.moveTo(pt.x, pt.y);
+                else         ctx.lineTo(pt.x, pt.y);
+              }
+              ctx.closePath();
+              ctx.stroke();
+            } else {
+              ctx.beginPath();
+              for (let i = 0; i < def.uvList.length; i++) {
+                const gUv = def.uvList[i];
+                const pt = uvToCanvas(gUv[0], gUv[1]);
+                if (i === 0) ctx.moveTo(pt.x, pt.y);
+                else         ctx.lineTo(pt.x, pt.y);
+              }
+              if (def.uvList.length > 2) ctx.closePath();
+              ctx.stroke();
             }
-            ctx.closePath();
-            ctx.stroke();
           }
           ctx.setLineDash([]);
+
+          // Dibujar los Gates del circuito activo con su barra de ancho, vector de rumbo y número G1..GN
+          const activeDef = CHOROBOBO_CIRCUIT_DEFS[currentCircuitIdx];
+          const activeBuilt = CHOROBOBO_CIRCUITS[currentCircuitIdx];
+          if (activeDef && activeBuilt && activeBuilt.gates) {
+            const cCol = circuitCols[currentCircuitIdx % circuitCols.length];
+            for (let i = 0; i < activeBuilt.gates.length; i++) {
+              const g = activeBuilt.gates[i];
+              const gUv = activeDef.uvList[i] || [worldToUv(g.x, g.z).u, worldToUv(g.x, g.z).v];
+              const pt = uvToCanvas(gUv[0], gUv[1]);
+              const isSel = (meTool === 'gate' && i === meSelectedGate);
+              const barHalfPx = Math.max(9, g.halfW * pxPerMeterX * 1.4);
+
+              // En el canvas 2D: +X mundo es +X canvas, +Z mundo es -Y canvas
+              const nx2d = g.nx;
+              const ny2d = -g.nz;
+              const tx2d = g.tx;
+              const ty2d = -g.tz;
+
+              // Barra transversal del marco del Gate
+              ctx.strokeStyle = isSel ? '#ffea00' : '#ffffff';
+              ctx.lineWidth = isSel ? 3.6 : 2.2;
+              ctx.beginPath();
+              ctx.moveTo(pt.x - nx2d * barHalfPx, pt.y - ny2d * barHalfPx);
+              ctx.lineTo(pt.x + nx2d * barHalfPx, pt.y + ny2d * barHalfPx);
+              ctx.stroke();
+
+              // Flecha de dirección de cruce del Gate
+              const arrowLen = isSel ? 17 : 12;
+              const ax = pt.x + tx2d * arrowLen;
+              const ay = pt.y + ty2d * arrowLen;
+              ctx.strokeStyle = isSel ? '#00f5ff' : cCol;
+              ctx.lineWidth = isSel ? 2.4 : 1.7;
+              ctx.beginPath();
+              ctx.moveTo(pt.x, pt.y);
+              ctx.lineTo(ax, ay);
+              ctx.stroke();
+
+              // Nodo circular con número de Gate (G1 = START)
+              ctx.fillStyle = (i === 0) ? '#30e860' : (isSel ? '#ffea00' : cCol);
+              ctx.strokeStyle = '#000';
+              ctx.lineWidth = 1.6;
+              ctx.beginPath();
+              ctx.arc(pt.x, pt.y, isSel ? 8.5 : 6.5, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.stroke();
+
+              ctx.fillStyle = (i === 0 || isSel) ? '#000' : '#fff';
+              ctx.font = 'bold 9px sans-serif';
+              ctx.textAlign = 'center';
+              ctx.fillText(`${i + 1}`, pt.x, pt.y + 3);
+            }
+          }
         }
 
         // 2. Dibujar árboles procedurales de relleno en tono suave
@@ -11994,6 +12191,24 @@
         return bestIdx;
       }
 
+      function findNearestGateIdx(u, v, maxDistPx = 22) {
+        const def = CHOROBOBO_CIRCUIT_DEFS[currentCircuitIdx];
+        if (!def || !def.uvList) return -1;
+        const clickPt = uvToCanvas(u, v);
+        let bestIdx = -1;
+        let bestD = maxDistPx;
+        for (let i = 0; i < def.uvList.length; i++) {
+          const gUv = def.uvList[i];
+          const pt = uvToCanvas(gUv[0], gUv[1]);
+          const d = Math.hypot(pt.x - clickPt.x, pt.y - clickPt.y);
+          if (d < bestD) {
+            bestD = d;
+            bestIdx = i;
+          }
+        }
+        return bestIdx;
+      }
+
       function eraseAtUv(u, v, radiusPx = 18) {
         // Si aún había árboles random procedurales activos, los convertimos a editables individuales
         // para que el borrador pueda borrar absolutamente cualquier árbol existente del mapa.
@@ -12036,7 +12251,24 @@
             changed = true;
           }
         }
-        if (changed) applyAndSaveChanges();
+        const def = CHOROBOBO_CIRCUIT_DEFS[currentCircuitIdx];
+        if (def && def.uvList) {
+          for (let i = def.uvList.length - 1; i >= 0; i--) {
+            const gUv = def.uvList[i];
+            const pt = uvToCanvas(gUv[0], gUv[1]);
+            if (Math.hypot(pt.x - clickPt.x, pt.y - clickPt.y) <= radiusPx) {
+              def.uvList.splice(i, 1);
+              if (meSelectedGate >= def.uvList.length) {
+                meSelectedGate = Math.max(0, def.uvList.length - 1);
+              }
+              changed = true;
+            }
+          }
+        }
+        if (changed) {
+          syncGateInspectorFromSelected();
+          applyAndSaveChanges();
+        }
       }
 
       function plantTreeAtUv(u, v) {
@@ -12100,6 +12332,36 @@
           showToast(`AERONAVE EN X:${wPos.x}M Z:${wPos.z}M (ARRASTRA PARA APUNTAR)`);
           renderMapEditorCanvas();
           canvas.setPointerCapture(e.pointerId);
+        } else if (meTool === 'gate') {
+          if (currentCircuitIdx >= CHOROBOBO_CIRCUIT_DEFS.length) {
+            currentCircuitIdx = 0;
+          }
+          const def = CHOROBOBO_CIRCUIT_DEFS[currentCircuitIdx];
+          const hitGate = findNearestGateIdx(uv.u, uv.v, 24);
+          if (hitGate >= 0) {
+            meSelectedGate = hitGate;
+            isDraggingGate = true;
+            syncGateInspectorFromSelected();
+            renderMapEditorCanvas();
+            canvas.setPointerCapture(e.pointerId);
+          } else if (def) {
+            const gType = document.getElementById('meSelGateType').value || 'arch';
+            const altM  = Number(document.getElementById('meRngGateAlt').value) || 8.5;
+            const yawDeg = Number(document.getElementById('meRngGateYaw').value) || 0;
+            const altMul = Number((altM / getBaseGateY()).toFixed(2));
+            def.uvList.push([
+              Number(uv.u.toFixed(4)),
+              Number(uv.v.toFixed(4)),
+              altMul,
+              gType,
+              yawDeg
+            ]);
+            meSelectedGate = def.uvList.length - 1;
+            isDraggingGate = true;
+            syncGateInspectorFromSelected();
+            applyAndSaveChanges();
+            canvas.setPointerCapture(e.pointerId);
+          }
         } else if (meTool === 'bldg') {
           const hitIdx = findNearestBuildingIdx(uv.u, uv.v, 24);
           if (hitIdx >= 0) {
@@ -12165,6 +12427,13 @@
           BUILDING_UV_DEFS[meSelectedBldg].u = Number(uv.u.toFixed(4));
           BUILDING_UV_DEFS[meSelectedBldg].v = Number(uv.v.toFixed(4));
           applyAndSaveChanges();
+        } else if (isDraggingGate && meTool === 'gate') {
+          const def = CHOROBOBO_CIRCUIT_DEFS[currentCircuitIdx];
+          if (def && def.uvList[meSelectedGate]) {
+            def.uvList[meSelectedGate][0] = Number(uv.u.toFixed(4));
+            def.uvList[meSelectedGate][1] = Number(uv.v.toFixed(4));
+            applyAndSaveChanges();
+          }
         } else if (isAimingCraft && meTool === 'teleport') {
           const craft = (activeRomId === 'fpv_wing' && typeof fpvWingSim !== 'undefined') ? fpvWingSim : (typeof fpvDroneSim !== 'undefined' ? fpvDroneSim : null);
           if (craft) {
@@ -12197,6 +12466,7 @@
         isPanning = false;
         isPainting = false;
         isDraggingBldg = false;
+        isDraggingGate = false;
         isAimingCraft = false;
         lastPaintWorld = null;
       };
@@ -12217,15 +12487,120 @@
           document.querySelectorAll('[data-me-tool]').forEach((b) => b.classList.toggle('active', b === btn));
           document.getElementById('mePanelTree').style.display = (meTool === 'tree') ? 'flex' : 'none';
           document.getElementById('mePanelBldg').style.display = (meTool === 'bldg') ? 'flex' : 'none';
+          document.getElementById('mePanelGate').style.display = (meTool === 'gate') ? 'flex' : 'none';
           if (meTool === 'bldg') syncBldgInspectorFromSelected();
+          if (meTool === 'gate') syncGateInspectorFromSelected();
           renderMapEditorCanvas();
         });
+      });
+
+      // Controles del Editor de Circuitos y Gates 3D
+      document.getElementById('meSelCircuit').addEventListener('change', (e) => {
+        currentCircuitIdx = Number(e.target.value) | 0;
+        meSelectedGate = 0;
+        if (typeof fpvDroneSim !== 'undefined') fpvDroneSim.nextGate = 0;
+        if (typeof fpvWingSim !== 'undefined')  fpvWingSim.nextGate = 0;
+        syncGateInspectorFromSelected();
+        updateEditorStatsBadge();
+        renderMapEditorCanvas();
+      });
+
+      document.getElementById('meBtnGatePrev').addEventListener('click', () => {
+        const def = CHOROBOBO_CIRCUIT_DEFS[currentCircuitIdx];
+        if (!def || def.uvList.length === 0) return;
+        meSelectedGate = (meSelectedGate - 1 + def.uvList.length) % def.uvList.length;
+        syncGateInspectorFromSelected();
+        renderMapEditorCanvas();
+      });
+
+      document.getElementById('meBtnGateNext').addEventListener('click', () => {
+        const def = CHOROBOBO_CIRCUIT_DEFS[currentCircuitIdx];
+        if (!def || def.uvList.length === 0) return;
+        meSelectedGate = (meSelectedGate + 1) % def.uvList.length;
+        syncGateInspectorFromSelected();
+        renderMapEditorCanvas();
+      });
+
+      document.getElementById('meBtnGateMakeStart').addEventListener('click', () => {
+        const def = CHOROBOBO_CIRCUIT_DEFS[currentCircuitIdx];
+        if (!def || def.uvList.length < 2 || meSelectedGate <= 0) return;
+        // Rotar el circuito para que el Gate seleccionado pase a ser G1 (Start) manteniendo el recorrido
+        const head = def.uvList.slice(meSelectedGate);
+        const tail = def.uvList.slice(0, meSelectedGate);
+        def.uvList = head.concat(tail);
+        meSelectedGate = 0;
+        syncGateInspectorFromSelected();
+        applyAndSaveChanges();
+        showToast('GATE ESTABLECIDO COMO G1 (START)');
+      });
+
+      function updateSelectedGateFromControls() {
+        const def = CHOROBOBO_CIRCUIT_DEFS[currentCircuitIdx];
+        if (!def || !def.uvList[meSelectedGate]) return;
+        const gUv   = def.uvList[meSelectedGate];
+        const gType = document.getElementById('meSelGateType').value || 'arch';
+        const altM  = Number(document.getElementById('meRngGateAlt').value) || 8.5;
+        const yawDeg = Number(document.getElementById('meRngGateYaw').value) || 0;
+        gUv[2] = Number((altM / getBaseGateY()).toFixed(2));
+        gUv[3] = gType;
+        gUv[4] = yawDeg;
+        document.getElementById('meLblGateAlt').textContent = `${altM.toFixed(1)}m`;
+        document.getElementById('meLblGateYaw').textContent = (Math.round(yawDeg) === 0) ? '0° (Auto)' : `${Math.round(yawDeg)}°`;
+        applyAndSaveChanges();
+      }
+
+      document.getElementById('meSelGateType').addEventListener('change', updateSelectedGateFromControls);
+      document.getElementById('meRngGateAlt').addEventListener('input', updateSelectedGateFromControls);
+      document.getElementById('meRngGateYaw').addEventListener('input', updateSelectedGateFromControls);
+
+      document.getElementById('meBtnGateOrderUp').addEventListener('click', () => {
+        const def = CHOROBOBO_CIRCUIT_DEFS[currentCircuitIdx];
+        if (!def || def.uvList.length < 2) return;
+        const prevIdx = (meSelectedGate - 1 + def.uvList.length) % def.uvList.length;
+        const tmp = def.uvList[prevIdx];
+        def.uvList[prevIdx] = def.uvList[meSelectedGate];
+        def.uvList[meSelectedGate] = tmp;
+        meSelectedGate = prevIdx;
+        syncGateInspectorFromSelected();
+        applyAndSaveChanges();
+      });
+
+      document.getElementById('meBtnGateOrderDn').addEventListener('click', () => {
+        const def = CHOROBOBO_CIRCUIT_DEFS[currentCircuitIdx];
+        if (!def || def.uvList.length < 2) return;
+        const nextIdx = (meSelectedGate + 1) % def.uvList.length;
+        const tmp = def.uvList[nextIdx];
+        def.uvList[nextIdx] = def.uvList[meSelectedGate];
+        def.uvList[meSelectedGate] = tmp;
+        meSelectedGate = nextIdx;
+        syncGateInspectorFromSelected();
+        applyAndSaveChanges();
+      });
+
+      document.getElementById('meBtnDeleteSelGate').addEventListener('click', () => {
+        const def = CHOROBOBO_CIRCUIT_DEFS[currentCircuitIdx];
+        if (!def || !def.uvList[meSelectedGate]) return;
+        def.uvList.splice(meSelectedGate, 1);
+        meSelectedGate = Math.max(0, Math.min(meSelectedGate, def.uvList.length - 1));
+        syncGateInspectorFromSelected();
+        applyAndSaveChanges();
+      });
+
+      document.getElementById('meBtnClearCircuit').addEventListener('click', () => {
+        const def = CHOROBOBO_CIRCUIT_DEFS[currentCircuitIdx];
+        if (!def) return;
+        def.uvList = [];
+        meSelectedGate = 0;
+        syncGateInspectorFromSelected();
+        applyAndSaveChanges();
+        showToast('CIRCUITO VACIADO: CLIC EN MAPA PARA CREAR GATES');
       });
 
       document.querySelectorAll('[data-me-scale]').forEach((btn) => {
         btn.addEventListener('click', () => {
           const idx = Number(btn.getAttribute('data-me-scale'));
           generateGentleVoxelMap(idx);
+          syncGateInspectorFromSelected();
           updateEditorStatsBadge();
           renderMapEditorCanvas();
         });
@@ -12340,18 +12715,21 @@
       document.getElementById('meBtnResetDefault').addEventListener('click', () => {
         BUILDING_UV_DEFS = JSON.parse(JSON.stringify(DEFAULT_BUILDING_UV_DEFS));
         CHOROBOBO_CUSTOM_TREES_UV = JSON.parse(JSON.stringify(DEFAULT_CHOROBOBO_TREES_UV));
+        CHOROBOBO_CIRCUIT_DEFS = JSON.parse(JSON.stringify(DEFAULT_CHOROBOBO_CIRCUIT_DEFS));
         choroboboRandomTreeCount = 180;
         document.getElementById('meRngRandCount').value = 180;
         document.getElementById('meLblRandCount').textContent = '180';
+        syncGateInspectorFromSelected();
         applyAndSaveChanges();
-        showToast('MAPA CHOROBOBO RESTAURADO');
+        showToast('MAPA Y CIRCUITOS RESTAURADOS');
       });
 
       document.getElementById('meBtnExport').addEventListener('click', () => {
         const payload = JSON.stringify({
           buildings: BUILDING_UV_DEFS,
           trees: CHOROBOBO_CUSTOM_TREES_UV,
-          randomTreeCount: choroboboRandomTreeCount
+          randomTreeCount: choroboboRandomTreeCount,
+          circuits: CHOROBOBO_CIRCUIT_DEFS
         }, null, 2);
         if (navigator.clipboard && navigator.clipboard.writeText) {
           navigator.clipboard.writeText(payload).then(() => {
@@ -12370,6 +12748,7 @@
         modalEl.classList.add('open');
         updateEditorStatsBadge();
         syncBldgInspectorFromSelected();
+        syncGateInspectorFromSelected();
         setTimeout(renderMapEditorCanvas, 30);
       });
 
