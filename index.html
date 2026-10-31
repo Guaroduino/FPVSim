@@ -2252,6 +2252,7 @@
     const SPAWN_V        = 1.0 - (SPAWN_MZ / MAP_H);
     const CHORO_FULL_W_M = 8400.0;       // Ancho físico real 1:1 (Este-Oeste) de la ortofoto completa chorobobo.jpg (8.4 km)
     const CHORO_FULL_H_M = 5600.0;       // Alto físico real 1:1 (Norte-Sur) de la ortofoto completa chorobobo.jpg (5.6 km)
+    var   isChoroboboThemeActive = true; // Activo cuando el mapa actual es Chorobobo (PARK, HD o LR)
 
     // Calcula el recorte UV [uMin..uMax, vMin..vMax] de chorobobo.jpg que cubre el mapa activo alrededor de la Pista A.I.A
     function getChoroboboActiveUvBounds(wM = WORLD_W_M, hM = WORLD_H_M) {
@@ -2269,9 +2270,8 @@
 
     // Conversión inversa exacta de metros del mundo (wx, wz) a coordenada normalizada (u, v) sobre chorobobo.jpg (escala 1:1 real)
     function worldToUv(wx, wz) {
-      const isChoro = (typeof TERRAIN_THEMES !== 'undefined' && TERRAIN_THEMES[currentThemeIdx] && TERRAIN_THEMES[currentThemeIdx].isChorobobo);
-      const refW = isChoro ? CHORO_FULL_W_M : WORLD_W_M;
-      const refH = isChoro ? CHORO_FULL_H_M : WORLD_H_M;
+      const refW = isChoroboboThemeActive ? CHORO_FULL_W_M : WORLD_W_M;
+      const refH = isChoroboboThemeActive ? CHORO_FULL_H_M : WORLD_H_M;
       return {
         u: SPAWN_U + (wx / refW),
         v: SPAWN_V - (wz / refH)
@@ -2302,9 +2302,8 @@
 
     // Conversión exacta 1:1 de coordenada normalizada (u, v) sobre chorobobo.jpg a metros reales (wx, wz)
     function uvToWorld(u, v) {
-      const isChoro = (typeof TERRAIN_THEMES !== 'undefined' && TERRAIN_THEMES[currentThemeIdx] && TERRAIN_THEMES[currentThemeIdx].isChorobobo);
-      const refW = isChoro ? CHORO_FULL_W_M : WORLD_W_M;
-      const refH = isChoro ? CHORO_FULL_H_M : WORLD_H_M;
+      const refW = isChoroboboThemeActive ? CHORO_FULL_W_M : WORLD_W_M;
+      const refH = isChoroboboThemeActive ? CHORO_FULL_H_M : WORLD_H_M;
       return {
         x: Math.round((u - SPAWN_U) * refW * 10) / 10,
         z: Math.round((SPAWN_V - v) * refH * 10) / 10
@@ -2619,7 +2618,7 @@
     }
 
     // 10 Mapas / Escenarios para Drones FPV y Alas (incluyendo Bando Edificio Abierto, Cañón Comanche 3, Cumbres Alpinas, Isla Volcánica y Chorobobo):
-    const TERRAIN_THEMES = [
+    var TERRAIN_THEMES = [
       {
         id: 'chorobobo_hd',
         name: 'CHOROBOBO HD 2.1KM',
@@ -2778,7 +2777,7 @@
         hillCol:    [42, 78, 38]
       }
     ];
-    let currentThemeIdx = 0;
+    var currentThemeIdx = 0;
 
     function clampByte(v) {
       return v < 0 ? 0 : (v > 255 ? 255 : (v | 0));
@@ -2807,6 +2806,7 @@
       activeWorldMapMode = 'fpv';
       currentThemeIdx = ((themeIdx % TERRAIN_THEMES.length) + TERRAIN_THEMES.length) % TERRAIN_THEMES.length;
       const theme = TERRAIN_THEMES[currentThemeIdx];
+      isChoroboboThemeActive = !!theme.isChorobobo;
 
       // Actualizar dimensiones físicas del mundo, escala vertical y resolución por voxel
       WORLD_W_M    = theme.worldW || 1500.0;
