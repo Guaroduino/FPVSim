@@ -3318,25 +3318,15 @@
       return (((c1 & 0xF7DE) >> 1) + ((c2 & 0xF7DE) >> 1));
     }
 
-    // Mezcla RGB565 de 8 capas progresivas en 1/8 (12.5%..100%) usando SOLO desplazamientos >> 1 y máscaras (0 divisiones en ESP32-S3)
-    function blend565Fog8(col, fog, lvl) {
+    // Mezcla RGB565 de 32 capas exactas (pasos de 3.125% = resolución nativa 5-bit del panel ILI9341V, 0 divisiones en ESP32-S3)
+    function blend565Fog32(col, fog, lvl) {
       if (lvl <= 0) return col;
-      if (lvl >= 8) return fog;
-      const h = ((col & 0xF7DE) >> 1) + ((fog & 0xF7DE) >> 1); // 4/8 (50%)
-      if (lvl === 4) return h;
-      if (lvl < 4) {
-        const q = ((col & 0xF7DE) >> 1) + ((h & 0xF7DE) >> 1); // 2/8 (25%)
-        if (lvl === 2) return q;
-        return lvl === 1
-          ? (((col & 0xF7DE) >> 1) + ((q & 0xF7DE) >> 1))      // 1/8 (12.5%)
-          : (((q   & 0xF7DE) >> 1) + ((h & 0xF7DE) >> 1));     // 3/8 (37.5%)
-      } else {
-        const qf = ((h & 0xF7DE) >> 1) + ((fog & 0xF7DE) >> 1); // 6/8 (75%)
-        if (lvl === 6) return qf;
-        return lvl === 5
-          ? (((h  & 0xF7DE) >> 1) + ((qf  & 0xF7DE) >> 1))     // 5/8 (62.5%)
-          : (((qf & 0xF7DE) >> 1) + ((fog & 0xF7DE) >> 1));    // 7/8 (87.5%)
-      }
+      if (lvl >= 32) return fog;
+      const inv = 32 - lvl;
+      const r = (((col >> 11) & 31) * inv + ((fog >> 11) & 31) * lvl + 16) >> 5;
+      const g = (((col >> 5)  & 63) * inv + ((fog >> 5)  & 63) * lvl + 16) >> 5;
+      const b = (( col        & 31) * inv + ( fog        & 31) * lvl + 16) >> 5;
+      return (r << 11) | (g << 5) | b;
     }
 
     // Focal unificada para que Voxel Terrain, Voxel Sky, Gates y Horizonte Artificial coincidan al 100%
@@ -3367,7 +3357,7 @@
 
     (function initS3FixedPointLuts() {
       for (let dy = 0; dy < 512; dy++) {
-        CLOUD_DIST_Q8[dy] = Math.round((4200.0 / (dy + 12)) * 256);
+        CLOUD_DIST_Q8[dy] = Math.round((3200.0 / (dy + 26)) * 256);
       }
       for (let i = 0; i < 256; i++) {
         const h = (i * 73 + (i >> 4) * 37) ^ (i * 29);
@@ -3431,8 +3421,8 @@
       const vBotStart   = aglHere < 24.0 ? 304 : 262;
       const vTopLim     = Math.max(0, Math.min(256, horizonV + 1));
 
-      const fogStartM   = Math.max(950.0, WORLD_W_M * 0.82);
-      const fogSpanInv  = 7.0 / Math.max(900.0, WORLD_W_M * 1.25);
+      const fogStartM   = Math.max(1350.0, WORLD_W_M * 0.96);
+      const fogSpanInv  = 22.0 / Math.max(1400.0, WORLD_W_M * 1.60);
 
       let activeSteps = 0;
       for (let vRef = vBotStart; vRef >= vTopLim && activeSteps < NUM_RAY_STEPS; vRef--) {
@@ -3447,11 +3437,9 @@
         BASE_V_Q8[activeSteps]     = vRef << 8;
         PROJ_SCALE_Q8[activeSteps] = Math.round(((HEIGHT_SCALE * U0y * fVox) / cz) * 256.0);
         RAY_CZ_Q4[activeSteps]     = Math.min(65534, Math.max(1, Math.round(cz * 16.0)));
-        // Nivel de niebla lejano por distancia real 3D (0 = sin niebla .. 7 = 87.5% en el horizonte lejano)
-        const distFog = cz > fogStartM ? Math.min(7, ((cz - fogStartM) * fogSpanInv) | 0) : 0;
-        const horizRows = vRef - vTopLim;
-        const graziFog = horizRows < 7 ? (7 - horizRows) : 0;
-        RAY_FOG_LVL[activeSteps]   = distFog > graziFog ? distFog : graziFog;
+        // Nivel de niebla 0..22 (en escala de 32 capas) comenzando muy lejos en el horizonte
+        const distFog = cz > fogStartM ? Math.min(22, ((cz - fogStartM) * fogSpanInv) | 0) : 0;
+        RAY_FOG_LVL[activeSteps]   = distFog;
         activeSteps++;
       }
 
@@ -3509,10 +3497,13 @@
               } else if (mVal === 3) {
                 col = col + (((col ^ 0xFFFF) >> 4) & 0x0861);
               }
-            } else {
-              const fogLvl = RAY_FOG_LVL[k];
-              if (fogLvl > 0 && activeSteps > 20) {
-                col = blend565Fog8(col, fogCol, fogLvl);
+            } else if (activeSteps > 20) {
+              const dyTerr = vTop - horizonV;
+              const graziFog32 = dyTerr < 9 ? ((9 - (dyTerr < 0 ? 0 : dyTerr)) << 1) : 0;
+              const dFog32 = RAY_FOG_LVL[k];
+              const fog32 = (dFog32 > graziFog32 ? dFog32 : graziFog32) + ((u ^ vTop) & 1);
+              if (fog32 > 1) {
+                col = blend565Fog32(col, fogCol, fog32 > 22 ? 22 : fog32);
               }
             }
             const czQ4 = RAY_CZ_Q4[k];
@@ -3525,26 +3516,24 @@
           }
         }
 
-        // 3. Cielo Azul + Nubes usando LUT entera CLOUD_DIST_Q8 y transición de niebla de 8 capas pegada al horizonte
+        // 3. Cielo Azul + Nubes usando LUT entera CLOUD_DIST_Q8 y 32 capas suaves con dithering pegadas al horizonte
         if (yMax > 0) {
           let ptr = u;
+          const uBit = u & 1;
           for (let y = 0; y < yMax; y++, ptr += VOX_W) {
             const dyHoriz = horizonV - y;
-            if (dyHoriz <= 1) {
-              voxBuf[ptr]     = fogCol;
-              voxDepthQ4[ptr] = 65535;
-            } else {
-              const lutIdx = dyHoriz < 511 ? dyHoriz : 511;
-              const sCloudQ8 = CLOUD_DIST_Q8[lutIdx];
-              const cmx = ((skyStartX_Q16 + dirWX_Q8 * sCloudQ8) >> 16) & SKY_MASK;
-              const cmz = ((skyStartZ_Q16 + dirWZ_Q8 * sCloudQ8) >> 16) & SKY_MASK;
-              let skyCol = voxSkyMap[(cmz << SKY_SHIFT) | cmx];
-              if (dyHoriz < 16) {
-                skyCol = blend565Fog8(skyCol, fogCol, (17 - dyHoriz) >> 1);
-              }
-              voxBuf[ptr]     = skyCol;
-              voxDepthQ4[ptr] = 65535;
+            const lutIdx = dyHoriz < 1 ? 1 : (dyHoriz < 511 ? dyHoriz : 511);
+            const sCloudQ8 = CLOUD_DIST_Q8[lutIdx];
+            const cmx = ((skyStartX_Q16 + dirWX_Q8 * sCloudQ8) >> 16) & SKY_MASK;
+            const cmz = ((skyStartZ_Q16 + dirWZ_Q8 * sCloudQ8) >> 16) & SKY_MASK;
+            let skyCol = voxSkyMap[(cmz << SKY_SHIFT) | cmx];
+            if (dyHoriz < 22) {
+              const bayer = (uBit ^ (y & 1)) + ((u + y) & 1); // 0..2 dither sub-nivel
+              const skyFog32 = (22 - (dyHoriz < 0 ? 0 : dyHoriz)) + bayer;
+              skyCol = blend565Fog32(skyCol, fogCol, skyFog32 > 24 ? 24 : skyFog32);
             }
+            voxBuf[ptr]     = skyCol;
+            voxDepthQ4[ptr] = 65535;
           }
         }
       }
