@@ -2908,17 +2908,17 @@
     for (let i = 0; i < 512; i++) sinLut[i] = Math.sin((i * 2 * Math.PI) / 512);
 
     function fbmCloud(mx, mz) {
-      const n1 = sinLut[(mx * 5 + mz * 4) & 511] * sinLut[(mx * 4 - mz * 5 + 128) & 511];
-      const n2 = sinLut[(mx * 9 - mz * 7 + 40) & 511] * sinLut[(mz * 8 + mx * 6 + 190) & 511];
-      const n3 = sinLut[(mx * 15 + mz * 13 + 70) & 511] * sinLut[(mx * 11 - mz * 16 + 110) & 511];
-      const n4 = sinLut[(mx * 23 + mz * 19) & 511] * sinLut[(mz * 21 - mx * 17 + 85) & 511];
+      const n1 = sinLut[(mx * 2 + mz) & 511] * sinLut[(mx - mz * 2 + 128) & 511];
+      const n2 = sinLut[(mx * 4 - mz * 3 + 40) & 511] * sinLut[(mz * 3 + mx * 2 + 190) & 511];
+      const n3 = sinLut[(mx * 7 + mz * 5 + 70) & 511] * sinLut[(mx * 5 - mz * 6 + 110) & 511];
+      const n4 = sinLut[(mx * 11 + mz * 9) & 511] * sinLut[(mz * 10 - mx * 8 + 85) & 511];
       return n1 * 0.42 + n2 * 0.31 + n3 * 0.17 + n4 * 0.10;
     }
 
-    // Hornea un texel del domo de cielo 512x512 con cúmulos frecuentes y volumen 3D (base gris-azulada + tope iluminado)
+    // Hornea un texel del domo de cielo 512x512 con cúmulos de alta resolución (3.5x más texels por nube) y volumen 3D
     function evalSkyCloudColor565(mx, mz, skyZen, cloudCol) {
       const cn  = fbmCloud(mx, mz);
-      const cnLit = fbmCloud((mx + 4) & 511, (mz + 3) & 511);
+      const cnLit = fbmCloud((mx + 8) & 511, (mz + 6) & 511);
       const cloudDensity = Math.max(0.0, Math.min(1.0, (cn + 0.065) * 2.45));
       const cSmooth = cloudDensity * cloudDensity * (3.0 - 2.0 * cloudDensity);
       // Sombreado volumétrico 3D del cúmulo: panza sombreada y cresta superior brillante para mejor referencia visual
@@ -3332,8 +3332,8 @@
     // Focal unificada para que Voxel Terrain, Voxel Sky, Gates y Horizonte Artificial coincidan al 100%
     const FOCAL_128  = 68.0;
     const FOCAL_240  = FOCAL_128 * SCALE_Y; // 255.0
-    const BLIT_SCALE = 0.635;               // Caben las 4 esquinas a 45° de Roll sin salirse de 256x256 (200 * 0.635 = 127)
-    const FOCAL_VOX  = FOCAL_240 * BLIT_SCALE; // 161.925
+    const BLIT_SCALE = 0.795;               // Aprovecha 254x191 reales de voxBuf (+57% nitidez con 0 bytes extra de SRAM)
+    const FOCAL_VOX  = FOCAL_240 * BLIT_SCALE; // 202.725
     let lastRollAngle = 0;
     let cloudDriftX = 0;
 
@@ -3344,20 +3344,26 @@
     // - BASE_V_Q8[k]: fila vertical exacta en voxBuf * 256 (1 píxel por paso)
     // - PROJ_SCALE_Q8[k]: escala de relieve 3D por fila usando profundidad 3D exacta cz
     // - CLOUD_DIST_Q8[dy]: distancia al plano de nubes * 256 para dyHoriz (0..511)
-    // - MICRO_TEX_LUT[256]: micro-textura sub-texel solo a ras de suelo (< 16m AGL)
+    // - MICRO_TEX_LUT[256]: micro-textura sub-texel a baja/media altura (< 42m AGL)
+    // - SUB_DITHER_X_Q19 / Z_Q19[4]: dithering sub-texel Bayer 2x2 estilo Unreal 1 (16 bytes)
     // =========================================================================
-    const NUM_RAY_STEPS = 312;
-    const RAY_S_Q8      = new Int32Array(NUM_RAY_STEPS);
-    const BASE_V_Q8     = new Int32Array(NUM_RAY_STEPS);
-    const PROJ_SCALE_Q8 = new Int32Array(NUM_RAY_STEPS);
-    const RAY_CZ_Q4     = new Uint16Array(NUM_RAY_STEPS);
-    const RAY_FOG_LVL   = new Uint8Array(NUM_RAY_STEPS);
-    const CLOUD_DIST_Q8 = new Int32Array(512);
-    const MICRO_TEX_LUT = new Uint8Array(256);
+    const NUM_RAY_STEPS    = 312;
+    const RAY_S_Q8         = new Int32Array(NUM_RAY_STEPS);
+    const BASE_V_Q8        = new Int32Array(NUM_RAY_STEPS);
+    const PROJ_SCALE_Q8    = new Int32Array(NUM_RAY_STEPS);
+    const RAY_CZ_Q4        = new Uint16Array(NUM_RAY_STEPS);
+    const RAY_FOG_LVL      = new Uint8Array(NUM_RAY_STEPS);
+    const CLOUD_DIST_Q8    = new Int32Array(512);
+    const MICRO_TEX_LUT    = new Uint8Array(256);
+    const SUB_DITHER_X_Q19 = new Int32Array([0, 262144, 393216, 131072]);
+    const SUB_DITHER_Z_Q19 = new Int32Array([0, 393216, 131072, 262144]);
+    const SKY_DITHER_X_Q16 = new Int32Array([0, 32768, 49152, 16384]);
+    const SKY_DITHER_Z_Q16 = new Int32Array([0, 49152, 16384, 32768]);
 
     (function initS3FixedPointLuts() {
       for (let dy = 0; dy < 512; dy++) {
-        CLOUD_DIST_Q8[dy] = Math.round((3200.0 / (dy + 26)) * 256);
+        // Escala 3.4x más densa en voxSkyMap para que cada nube use ~140 texels en vez de 40 (resolución 1:1 en pantalla)
+        CLOUD_DIST_Q8[dy] = Math.round((10800.0 / (dy + 34)) * 256);
       }
       for (let i = 0; i < 256; i++) {
         const h = (i * 73 + (i >> 4) * 37) ^ (i * 29);
@@ -3367,7 +3373,7 @@
 
     // Renderizador Voxel 100% Punto Fijo Int32 en bucle interno con Perspectiva 3D Exacta + Teleobjetivo Óptico (focalZoom)
     function renderVoxelTerrainAndSky(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz, dt = 0.016, focalZoom = 1.0) {
-      cloudDriftX = (cloudDriftX + dt * 1.8) % 512;
+      cloudDriftX = (cloudDriftX + dt * 4.2) % 512;
       if (SPI_MODES[paletteIdx].mono) {
         fbClear(0);
         vramDepthQ4.fill(65535);
@@ -3443,21 +3449,23 @@
         activeSteps++;
       }
 
-      // En zoom teleobjetivo LOS o baja altura (< 16m AGL) mantiene micro-grano sub-texel de alta nitidez
-      const microMaxK = focalZoom > 1.02 ? NUM_RAY_STEPS : (aglHere < 16.0 ? Math.round((16.0 - aglHere) * 5.0) : 0);
+      // En zoom teleobjetivo LOS o baja/media altura (< 42m AGL) mantiene micro-grano y dithering sub-texel de alta nitidez
+      const microMaxK  = focalZoom > 1.02 ? NUM_RAY_STEPS : (aglHere < 42.0 ? Math.round((42.0 - aglHere) * 3.4) : 0);
+      const ditherMaxK = Math.min(NUM_RAY_STEPS, Math.max(microMaxK, 135));
 
       // Coordenadas base en Q19 (dir_Q11 * s_Q8 = Q19 -> 8x más precisión angular por columna para evitar rayas en esquinas)
       const baseMx = ((SPAWN_MX + camX * MAP_SCALE_X) % MAP_W + MAP_W) % MAP_W;
       const baseMz = ((SPAWN_MZ + camZ * MAP_SCALE_Z) % MAP_H + MAP_H) % MAP_H;
       const startX_Q19    = Math.round(baseMx * 524288);
       const startZ_Q19    = Math.round(baseMz * 524288);
-      const skyStartX_Q16 = Math.round((camX * 0.45 + cloudDriftX) * 65536);
-      const skyStartZ_Q16 = Math.round((camZ * 0.45) * 65536);
+      const skyStartX_Q16 = Math.round((camX * 0.95 + cloudDriftX) * 65536);
+      const skyStartZ_Q16 = Math.round((camZ * 0.95) * 65536);
       const dy0_cFy       = dy0 * cFy;
 
       // 3. Raycasting por columna u (0..255) usando SOLO enteros de 32 bits y LUTs
       for (let u = 0; u < VOX_W; u++) {
         const xi0  = (u - 128) * invFocalVox;
+        const uBit = u & 1;
         // Desplazamiento lateral exacto por profundidad de cabeceo (xLat = xi0 * (s*fH + dy0*cFy))
         const lat0 = xi0 * dy0_cFy;
         const colStartX_Q19 = startX_Q19 + Math.round(lat0 * R0x * MAP_SCALE_X * 524288);
@@ -3488,7 +3496,15 @@
 
           if (v < yMax) {
             const vTop = v < 0 ? 0 : v;
-            let col = voxColor[mIdx];
+            let col;
+            if (k < ditherMaxK) {
+              const dIdx  = uBit | ((vTop & 1) << 1);
+              const mxCol = ((xQ19 + SUB_DITHER_X_Q19[dIdx]) >> 19) & MAP_MASK_X;
+              const mzCol = ((zQ19 + SUB_DITHER_Z_Q19[dIdx]) >> 19) & MAP_MASK_Z;
+              col = voxColor[(mzCol << MAP_SHIFT_X) | mxCol];
+            } else {
+              col = voxColor[mIdx];
+            }
             if (k < microMaxK) {
               const subIdx = ((xQ19 >> 15) & 15) | (((zQ19 >> 15) & 15) << 4);
               const mVal = MICRO_TEX_LUT[subIdx];
@@ -3501,7 +3517,7 @@
               const dyTerr = vTop - horizonV;
               const graziFog32 = dyTerr < 9 ? ((9 - (dyTerr < 0 ? 0 : dyTerr)) << 1) : 0;
               const dFog32 = RAY_FOG_LVL[k];
-              const fog32 = (dFog32 > graziFog32 ? dFog32 : graziFog32) + ((u ^ vTop) & 1);
+              const fog32 = (dFog32 > graziFog32 ? dFog32 : graziFog32) + (uBit ^ (vTop & 1));
               if (fog32 > 1) {
                 col = blend565Fog32(col, fogCol, fog32 > 22 ? 22 : fog32);
               }
@@ -3516,16 +3532,16 @@
           }
         }
 
-        // 3. Cielo Azul + Nubes usando LUT entera CLOUD_DIST_Q8 y 32 capas suaves con dithering pegadas al horizonte
+        // 3. Cielo Azul + Nubes con muestreo 1:1 + Dithering Sub-Texel 2x2 y 32 capas suaves pegadas al horizonte
         if (yMax > 0) {
           let ptr = u;
-          const uBit = u & 1;
           for (let y = 0; y < yMax; y++, ptr += VOX_W) {
             const dyHoriz = horizonV - y;
             const lutIdx = dyHoriz < 1 ? 1 : (dyHoriz < 511 ? dyHoriz : 511);
             const sCloudQ8 = CLOUD_DIST_Q8[lutIdx];
-            const cmx = ((skyStartX_Q16 + dirWX_Q8 * sCloudQ8) >> 16) & SKY_MASK;
-            const cmz = ((skyStartZ_Q16 + dirWZ_Q8 * sCloudQ8) >> 16) & SKY_MASK;
+            const dIdx = uBit | ((y & 1) << 1);
+            const cmx = ((skyStartX_Q16 + dirWX_Q8 * sCloudQ8 + SKY_DITHER_X_Q16[dIdx]) >> 16) & SKY_MASK;
+            const cmz = ((skyStartZ_Q16 + dirWZ_Q8 * sCloudQ8 + SKY_DITHER_Z_Q16[dIdx]) >> 16) & SKY_MASK;
             let skyCol = voxSkyMap[(cmz << SKY_SHIFT) | cmx];
             if (dyHoriz < 22) {
               const bayer = (uBit ^ (y & 1)) + ((u + y) & 1); // 0..2 dither sub-nivel
