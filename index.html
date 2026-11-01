@@ -6708,11 +6708,11 @@
     ];
 
     const fcProfile = {
-      windScale: 1.0,
+      windScale: 0.55,
       windDirMode: 0,     // 0 = AUTO BAHIA/VALLE, 1..8 = Rumbos Cardinales (De dónde viene el viento)
-      windPresetIdx: 3,   // Por defecto: 3 = BRISA REGATA (12 KT)
+      windPresetIdx: 1,   // Por defecto: 1 = DIA TRANQUILO (6 KT)
       windCustom: false,
-      wind: { ...WIND_PRESETS[3] },
+      wind: { ...WIND_PRESETS[1] },
       losZoom: 1.00,      // Zoom ajustable por el usuario en cámaras LOS (0.50x panorámico .. 4.00x teleobjetivo; default 1.00x más amplio)
       aiBots: 1,          // 1 = 2 Rivales IA activos en Regata / Pista, 0 = Solo
       sailCourseIdx: 0,   // 0..4 = 5 Circuitos de Regata Náutica
@@ -11391,7 +11391,7 @@
     }
 
     function resetWorldDefaults() {
-      applyWindPreset(3); // BRISA REGATA (12 KT)
+      applyWindPreset(1); // DIA TRANQUILO (6 KT)
       fcProfile.windDirMode = 0;
       fcProfile.losZoom = 1.00;
       fcProfile.treeDensity = 1.0;
