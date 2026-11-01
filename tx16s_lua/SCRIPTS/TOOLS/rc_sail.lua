@@ -777,7 +777,7 @@ local function setupCamera(dt)
   focalPx = halfH / tan(fovRad * 0.5)
 
   local cy = cos(-S.camYaw);   local sy = sin(-S.camYaw)
-  local cp = cos(-S.camPitch); local sp = sin(-S.camPitch)
+  local cp = cos(S.camPitch);  local sp = sin(S.camPitch) -- antes sin(-pitch): proyectaba con el pitch invertido (el doble hacia abajo) y el velero quedaba fuera de pantalla
 
   r00 = cy;        r01 = 0.0; r02 = sy
   r10 = sy * sp;   r11 = cp;  r12 = -cy * sp
