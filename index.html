@@ -7275,33 +7275,32 @@
           tPitch = ((dirHomeF * 18.0 * DEG2RAD) - curPitch) * 4.5;
           tRoll  = ((dirHomeR * 22.0 * DEG2RAD) - curRoll)  * 4.5;
         } else if (this.mode !== 'ACRO') {
-          // Modo HOR (Auto-nivelado con límite estricto de inclinación: NO permite hacer rolls ni flips 360°)
-          const wVar = 0.35 + fcProfile.windScale * 0.32 + fcProfile.wind.turbPct * 0.45;
-          const ahrsWanderP = (0.020 * Math.sin(this.flightTime * 0.95 + this.px * 0.022) + 0.012 * Math.cos(this.flightTime * 1.85 - this.pz * 0.028)) * wVar;
-          const ahrsWanderR = (0.028 * Math.sin(this.flightTime * 0.82 + this.pz * 0.022) + 0.018 * Math.cos(this.flightTime * 1.65 + this.px * 0.030)) * wVar;
-          const targetPitchAng = Math.max(-42.0 * DEG2RAD, Math.min(42.0 * DEG2RAD, hwInput.ry * 40.0 * DEG2RAD + ahrsWanderP));
-          const targetRollAng  = Math.max(-52.0 * DEG2RAD, Math.min(52.0 * DEG2RAD, hwInput.rx * 50.0 * DEG2RAD + ahrsWanderR));
+          // Modo HOR (Auto-nivelado Betaflight Angle/Horizon limpio y estable, sin temblor)
+          const targetPitchAng = Math.max(-42.0 * DEG2RAD, Math.min(42.0 * DEG2RAD, hwInput.ry * 40.0 * DEG2RAD));
+          const targetRollAng  = Math.max(-52.0 * DEG2RAD, Math.min(52.0 * DEG2RAD, hwInput.rx * 50.0 * DEG2RAD));
           const errP = targetPitchAng - curPitch;
           const errR = targetRollAng  - curRoll;
-          const gainP = 3.40 + 2.60 * Math.min(1.0, Math.abs(errP) / 0.25);
-          const gainR = 3.60 + 2.80 * Math.min(1.0, Math.abs(errR) / 0.28);
-          tPitch = errP * gainP + aeroEnv.turbPitch * 0.45;
-          tRoll  = errR * gainR + aeroEnv.turbRoll  * 0.54;
+          const gainP = 4.20 + 1.80 * Math.min(1.0, Math.abs(errP) / 0.30);
+          const gainR = 4.50 + 2.00 * Math.min(1.0, Math.abs(errR) / 0.30);
+          tPitch = errP * gainP;
+          tRoll  = errR * gainR;
         }
 
-        // 4. Controlador PID en cascada con I-Term Relax (evita rebote al terminar flips rápidos)
+        // 4. Controlador PID Betaflight 4.5 (P + I con I-Term Relax + D-Term amortiguado para bloqueo firme sin vibración)
+        const prevPitchRate = this.pitchRate;
+        const prevRollRate  = this.rollRate;
         const errPitch = tPitch - this.pitchRate;
         const errRoll  = tRoll  - this.rollRate;
         const errYaw   = tYaw   - this.yawRate;
 
         const relaxPR = Math.max(0.1, 1.0 - Math.hypot(hwInput.rx, hwInput.ry) * 0.85);
-        this.iPitch = Math.max(-0.22, Math.min(0.22, this.iPitch + errPitch * 0.14 * relaxPR * dt));
-        this.iRoll  = Math.max(-0.22, Math.min(0.22, this.iRoll  + errRoll  * 0.14 * relaxPR * dt));
-        this.iYaw   = Math.max(-0.18, Math.min(0.18, this.iYaw   + errYaw   * 0.10 * dt));
+        this.iPitch = Math.max(-0.20, Math.min(0.20, this.iPitch + errPitch * 0.12 * relaxPR * dt));
+        this.iRoll  = Math.max(-0.20, Math.min(0.20, this.iRoll  + errRoll  * 0.12 * relaxPR * dt));
+        this.iYaw   = Math.max(-0.16, Math.min(0.16, this.iYaw   + errYaw   * 0.09 * dt));
 
-        const uPitch = Math.max(-0.65, Math.min(0.65, errPitch * 0.115 + this.iPitch));
-        const uRoll  = Math.max(-0.65, Math.min(0.65, errRoll  * 0.115 + this.iRoll));
-        const uYaw   = Math.max(-0.45, Math.min(0.45, errYaw   * 0.105 + this.iYaw));
+        const uPitch = Math.max(-0.65, Math.min(0.65, errPitch * 0.145 + this.iPitch));
+        const uRoll  = Math.max(-0.65, Math.min(0.65, errRoll  * 0.145 + this.iRoll));
+        const uYaw   = Math.max(-0.45, Math.min(0.45, errYaw   * 0.125 + this.iYaw));
 
         // 5. Mezclador Betaflight Quad-X (M1=RR, M2=FR, M3=RL, M4=FL) + AirMode real
         // Convención: Roll+ inclina a la derecha (sube M3,M4 izq); Pitch+ sube el morro (sube M2,M4 frontales)
@@ -7336,64 +7335,52 @@
         this.mCmd[2] = Math.max(0.04, Math.min(1.0, thrMix + d3 * mixScale)) * sagFactor;
         this.mCmd[3] = Math.max(0.04, Math.min(1.0, thrMix + d4 * mixScale)) * sagFactor;
 
-        // 6. Dinámica de 4 Motores Brushless (spool-up más rápido que frenado DShot Dampened Light)
+        // 6. Dinámica de 4 Motores Brushless (spool-up rápido DShot600 + Damped Light)
         let rpmSum = 0;
-        let yawAccelReaction = 0;
         for (let i = 0; i < 4; i++) {
           const prev = this.mRpm[i];
           const cmd  = this.mCmd[i];
-          const tauRate = cmd >= prev ? 32.0 : 21.0; // Aceleración activa vs frenado regenerativo ESC
+          const tauRate = cmd >= prev ? 38.0 : 28.0;
           this.mRpm[i] += (cmd - prev) * Math.min(1.0, tauRate * dt);
-          const dRpm = (this.mRpm[i] - prev) / Math.max(0.002, dt);
-          // M2(1) y M3(2) giran en sentido opuesto a M1(0) y M4(3) -> par de reacción inercial J_prop * dOmega/dt
-          const dirSign = (i === 1 || i === 2) ? 1.0 : -1.0;
-          yawAccelReaction += dirSign * dRpm;
           rpmSum += this.mRpm[i];
         }
         this.motorRpm = rpmSum * 0.25;
 
-        // 7. Pares Físicos 3D de los 4 Rotores + Tensor de Inercia (Ixx, Iyy, Izz) + Precesión Giroscópica
-        // Escala de inercia respecto al chasis de referencia de 0.62 kg
+        // 7. Pares Físicos 3D de los 4 Rotores + Amortiguación D-Term de Giroscopio 8kHz
         const invInertia = 0.62 / Math.max(0.30, cfg.massKg);
-        const tauRoll  = ((this.mRpm[2] + this.mRpm[3]) - (this.mRpm[0] + this.mRpm[1])) * 42.0 * invInertia;
-        const tauPitch = ((this.mRpm[1] + this.mRpm[3]) - (this.mRpm[0] + this.mRpm[2])) * 40.0 * invInertia;
-        const tauYaw   = ((this.mRpm[1] + this.mRpm[2]) - (this.mRpm[0] + this.mRpm[3])) * 26.0 * invInertia
-                       + yawAccelReaction * 0.16 * invInertia;
+        const tauRoll  = ((this.mRpm[2] + this.mRpm[3]) - (this.mRpm[0] + this.mRpm[1])) * 44.0 * invInertia;
+        const tauPitch = ((this.mRpm[1] + this.mRpm[3]) - (this.mRpm[0] + this.mRpm[2])) * 42.0 * invInertia;
+        const tauYaw   = ((this.mRpm[1] + this.mRpm[2]) - (this.mRpm[0] + this.mRpm[3])) * 28.0 * invInertia;
 
-        // Acoplamiento giroscópico de las 4 hélices (netOmega = suma con signo de rotores CW y CCW)
-        const netPropOmega = (this.mRpm[1] + this.mRpm[2] - this.mRpm[0] - this.mRpm[3]) * 8.5;
-        const gyroPitch =  this.rollRate  * netPropOmega * 0.08;
-        const gyroRoll  = -this.pitchRate * netPropOmega * 0.08;
+        // Acoplamiento giroscópico suave de las 4 hélices
+        const netPropOmega = (this.mRpm[1] + this.mRpm[2] - this.mRpm[0] - this.mRpm[3]) * 4.0;
+        const gyroPitch =  this.rollRate  * netPropOmega * 0.04;
+        const gyroRoll  = -this.pitchRate * netPropOmega * 0.04;
 
-        // Acoplamiento de Euler de cuerpo rígido: (Iyy - Izz)*q*r / Ixx (el eje Z tiene ~1.8x más inercia que X/Y)
-        const eulerPitch = -0.42 * this.rollRate * this.yawRate;
-        const eulerRoll  =  0.42 * this.pitchRate * this.yawRate;
+        // Acoplamiento de Euler suavizado por el lazo D-Term
+        const eulerPitch = -0.18 * this.rollRate * this.yawRate;
+        const eulerRoll  =  0.18 * this.pitchRate * this.yawRate;
 
-        // Oscilación de Propwash (Estado de Anillo de Vórtices) al descender sobre la propia estela
+        // Propwash suave solo en descensos verticales fuertes sobre la propia estela
         let propwashRoll = 0, propwashPitch = 0;
-        if (vBodyU < -1.6 && horizAirSpd < 6.0) {
-          const pwIntensity = Math.min(2.0, (-1.6 - vBodyU) * 0.48 * (1.0 - horizAirSpd / 6.0)) * cfg.propwash;
-          propwashRoll  = (Math.sin(this.flightTime * 68.0) * 1.55 + Math.cos(this.flightTime * 113.0) * 0.65) * pwIntensity;
-          propwashPitch = (Math.cos(this.flightTime * 54.0) * 1.25 + Math.sin(this.flightTime * 97.0)  * 0.55) * pwIntensity;
+        if (vBodyU < -2.8 && horizAirSpd < 4.5) {
+          const pwIntensity = Math.min(0.65, (-2.8 - vBodyU) * 0.16 * (1.0 - horizAirSpd / 4.5)) * cfg.propwash;
+          propwashRoll  = Math.sin(this.flightTime * 24.0) * 0.35 * pwIntensity;
+          propwashPitch = Math.cos(this.flightTime * 21.0) * 0.28 * pwIntensity;
         }
 
-        // Momento aerodinámico de cabeceo/alabeo por traslación horizontal del disco (Blade Flapping)
-        const windDihedralRoll = -vBodyR * 0.075;
-        const windPitchUp      =  vBodyF * 0.048;
+        // El lazo PID 8kHz de un quad 5" bloquea la actitud frente al viento (solo pasa un ~12% de ráfaga angular)
+        this.pitchRate += (tauPitch + gyroPitch + eulerPitch + aeroEnv.turbPitch * 0.28 + propwashPitch) * dt;
+        this.rollRate  += (tauRoll  + gyroRoll  + eulerRoll  + aeroEnv.turbRoll  * 0.32 + propwashRoll) * dt;
+        this.yawRate   += (tauYaw   + aeroEnv.turbYaw   * 0.22) * dt;
 
-        // Pares de turbulencia de media frecuencia + vibración aerodinámica de alta frecuencia calibrados al 70%
-        this.pitchRate += (tauPitch + gyroPitch + eulerPitch + aeroEnv.turbPitch * 2.38 + propwashPitch + windPitchUp) * dt;
-        this.rollRate  += (tauRoll  + gyroRoll  + eulerRoll  + aeroEnv.turbRoll  * 2.87 + propwashRoll  + windDihedralRoll) * dt;
-        this.yawRate   += (tauYaw   + aeroEnv.turbYaw * 1.82) * dt;
+        // Amortiguación D-Term directa hacia la tasa objetivo (elimina sobreimpulso y temblor de cámara)
+        const dLock = Math.min(1.0, 22.0 * dt);
+        this.pitchRate += (tPitch - this.pitchRate) * dLock + (prevPitchRate - this.pitchRate) * 0.18;
+        this.rollRate  += (tRoll  - this.rollRate)  * dLock + (prevRollRate  - this.rollRate)  * 0.18;
+        this.yawRate   += (tYaw   - this.yawRate)   * Math.min(1.0, 18.0 * dt);
 
-        const savedP = this.pitchRate, savedR = this.rollRate, savedY = this.yawRate;
-        this.pitchRate += aeroEnv.vibPitch * 0.43;
-        this.rollRate  += aeroEnv.vibRoll  * 0.54;
-        this.yawRate   += aeroEnv.vibYaw   * 0.33;
         stepRotationSO3(this, dt);
-        this.pitchRate = savedP + aeroEnv.vibPitch * 0.10;
-        this.rollRate  = savedR + aeroEnv.vibRoll  * 0.12;
-        this.yawRate   = savedY + aeroEnv.vibYaw   * 0.07;
 
         // 8. Aerodinámica de Elemento de Pala (BEM): Empuje no lineal + Efecto Suelo + Blade Drag Lateral
         // Curva cuadrática/lineal de empuje de hélice 5" + pérdida por ratio de avance (J = V_axial / nD)
@@ -7417,9 +7404,9 @@
         const fDragU = -vBodyU * dragU;
         const fDragF = -vBodyF * dragFR;
 
-        const ax = this.ux * thrustAcc + this.rx * fDragR + this.ux * fDragU + this.fx * fDragF + aeroEnv.joltX * massScale;
-        const ay = this.uy * thrustAcc + this.ry * fDragR + this.uy * fDragU + this.fy * fDragF - 9.81 + aeroEnv.joltY * massScale;
-        const az = this.uz * thrustAcc + this.rz * fDragR + this.uz * fDragU + this.fz * fDragF + aeroEnv.joltZ * massScale;
+        const ax = this.ux * thrustAcc + this.rx * fDragR + this.ux * fDragU + this.fx * fDragF + aeroEnv.joltX * 0.25 * massScale;
+        const ay = this.uy * thrustAcc + this.ry * fDragR + this.uy * fDragU + this.fy * fDragF - 9.81 + aeroEnv.joltY * 0.25 * massScale;
+        const az = this.uz * thrustAcc + this.rz * fDragR + this.uz * fDragU + this.fz * fDragF + aeroEnv.joltZ * 0.25 * massScale;
 
         this.vx += ax * dt;
         this.vy += ay * dt;
