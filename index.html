@@ -9407,11 +9407,11 @@
         const waterSpd = Math.hypot(uFwd, vLat);
 
         // Quilla como ala: sustentación ∝ U·v (= U²·sin α·cos α), se desprende sola con mucha deriva (casco lento)
-        const kKeel  = 4.5 * preset.keelArea;
+        const kKeel  = 7.0 * preset.keelArea;
         const keelLift = -kKeel * absU * vLat;
         const sideDrag = -1.6 * dragMul * vLat * Math.abs(vLat);
         this.keelForceR = keelLift + sideDrag;
-        const keelInducedDrag = 0.55 * Math.abs(keelLift) * Math.abs(vLat) / Math.max(0.3, waterSpd); // inducida = sustentación × ángulo de deriva: costo de ceñir y de virar
+        const keelInducedDrag = 0.30 * Math.abs(keelLift) * Math.abs(vLat) / Math.max(0.3, waterSpd); // inducida = sustentación × ángulo de deriva: costo de ceñir y de virar
 
         // Resistencia de casco: fricción + formación de olas que crece muy fuerte al acercarse a la velocidad de casco
         const fr = absU / hullSpd;
@@ -9431,16 +9431,16 @@
           rudStallDrag  = 1.0 + 1.85 * overRud * (1.0 + highSpdEx * 0.5);
         }
         const dirSign  = uFwd >= -0.05 ? 1.0 : -1.0;
-        const rudU2    = uFwd * uFwd + 0.10;
+        const rudU2    = uFwd * uFwd + 0.45; // + flujo mínimo: a muy baja velocidad aún gobierna un poco
         this.rudForceR = -(dirSign * rudEffSin) * (1.00 * rudU2 * preset.rudderAuth) + rudStallShake;
         const rudDrag  = 0.20 * rudU2 * Math.sin(this.rudderAngle) * Math.sin(this.rudderAngle) * rudStallDrag * (uFwd >= 0 ? 1.0 : -1.0);
 
         // 4. F = m·a en ejes del casco (todas las fuerzas ya están en N/kg)
         const fwdAcc = sailDriveF - hullDrag - keelInducedDrag * (uFwd >= 0 ? 1.0 : -1.0) - rudDrag;
         const latAcc = sailSideR + this.keelForceR + this.rudForceR;
-        // Masa inercial efectiva x2.5: el mundo de juego está agrandado (velocidades ~3x), así el casco conserva
+        // Masa inercial efectiva x1.6: el mundo de juego está agrandado (velocidades ~3x), así el casco conserva
         // su arrancada en viradas y rachas como un IOM real en vez de frenar en 1 s
-        const GAME_INERTIA = 2.5;
+        const GAME_INERTIA = 1.6;
         const newUFwd = Math.max(-6.0, Math.min(12.0, uFwd + (fwdAcc / GAME_INERTIA) * dt));   // solo cotas de seguridad numérica
         const newVLat = Math.max(-6.0, Math.min(6.0,  vLat + (latAcc / GAME_INERTIA) * dt));
 
