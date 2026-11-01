@@ -8227,24 +8227,71 @@
 
       let fc = 0;
 
-      // 0. Sombra 3D proyectada de las 2 velas y el casco sobre la superficie del agua (desplazada según el sol)
-      const C_WATER_SHAD = rgb565(8, 36, 78);
+      // 0. Sombra 3D semitransparente proyectada de las 2 velas y el casco sobre la superficie del agua (50% alpha bitwise RGB565 sin doble oscurecimiento)
+      const C_WATER_SHAD_HALF = (rgb565(6, 28, 64) & 0xF7DE) >> 1;
+      const SHAD_STAMP_Q4     = 65533;
+      function fillTranslucentShadowTri320(p0, p1, p2) {
+        if (!p0 || !p1 || !p2) return;
+        let ax = Math.round(p0.sx), ay = Math.round(p0.sy);
+        let bx = Math.round(p1.sx), by = Math.round(p1.sy);
+        let cx = Math.round(p2.sx), cy = Math.round(p2.sy);
+        if (ay > by) { let t = ax; ax = bx; bx = t; t = ay; ay = by; by = t; }
+        if (ay > cy) { let t = ax; ax = cx; cx = t; t = ay; ay = cy; cy = t; }
+        if (by > cy) { let t = bx; bx = cx; cx = t; t = by; by = cy; cy = t; }
+        const totalH = cy - ay;
+        if (totalH <= 0 || cy < 0 || ay >= DISP_H) return;
+        if (Math.max(ax, bx, cx) < 0 || Math.min(ax, bx, cx) >= DISP_W) return;
+        const yStart = Math.max(0, ay);
+        const yEnd   = Math.min(DISP_H - 1, cy);
+        const stepAC = Math.round(((cx - ax) * 65536) / totalH);
+        const hAB    = by - ay;
+        const stepAB = hAB > 0 ? Math.round(((bx - ax) * 65536) / hAB) : 0;
+        const hBC    = cy - by;
+        const stepBC = hBC > 0 ? Math.round(((cx - bx) * 65536) / hBC) : 0;
+        for (let y = yStart; y <= yEnd; y++) {
+          const xA = (ax * 65536 + (y - ay) * stepAC) >> 16;
+          const xB = y < by
+            ? ((ax * 65536 + (y - ay) * stepAB) >> 16)
+            : (hBC > 0 ? ((bx * 65536 + (y - by) * stepBC) >> 16) : bx);
+          let xl = xA < xB ? xA : xB;
+          let xr = xA < xB ? xB : xA;
+          if (xr < 0 || xl >= DISP_W) continue;
+          if (xl < 0) xl = 0;
+          if (xr >= DISP_W) xr = DISP_W - 1;
+          const rowOff = y * DISP_W;
+          for (let x = xl; x <= xr; x++) {
+            const pIdx = rowOff + x;
+            if (vramDepthQ4[pIdx] !== SHAD_STAMP_Q4) {
+              vramDepthQ4[pIdx] = SHAD_STAMP_Q4;
+              const p = vram565[pIdx];
+              vram565[pIdx] = ((p & 0xF7DE) >> 1) + C_WATER_SHAD_HALF;
+            }
+          }
+        }
+      }
       const bAngSh = sim.boomAngle;
       const sSinSh = Math.sin(bAngSh), sCosSh = Math.cos(bAngSh);
+      const jAngSh = sim.jibAngle || 0.0;
+      const jSinSh = Math.sin(jAngSh), jCosSh = Math.cos(jAngSh);
       function wpShadow(r, u, f) {
         const sr = r * S, su = u * S, sf = f * S;
         const wx = px + rx * sr + fx * sf - su * 0.48;
         const wz = pz + rz * sr + fz * sf - su * 0.34;
         return projPoint320(wx, py - 0.02, wz);
       }
-      const shBow  = wpShadow(0.0, 0.1,  1.50);
-      const shMast = wpShadow(0.0, 0.2,  0.32);
-      const shTop  = wpShadow(0.0, 3.45, 0.25);
-      const shBoom = wpShadow(sSinSh * 1.55, 0.38, 0.32 - sCosSh * 1.55);
-      const shStn  = wpShadow(0.0, 0.1, -1.32);
-      fc = addCraftTri(fc, shMast, shTop, shBoom, C_WATER_SHAD);
-      fc = addCraftTri(fc, shBow, shTop, shMast, C_WATER_SHAD);
-      fc = addCraftTri(fc, shBow, shMast, shStn, C_WATER_SHAD);
+      const shBow     = wpShadow(0.0, 0.1,  1.52);
+      const shMidL    = wpShadow(-0.40, 0.12, 0.10);
+      const shMidR    = wpShadow( 0.40, 0.12, 0.10);
+      const shMast    = wpShadow(0.0, 0.2,  0.32);
+      const shTop     = wpShadow(0.0, 3.45, 0.25);
+      const shBoom    = wpShadow(sSinSh * 1.55, 0.38, 0.32 - sCosSh * 1.55);
+      const shJibTop  = wpShadow(0.0, 2.68, 0.29);
+      const shJibClew = wpShadow(jSinSh * 1.02, 0.40, 1.52 - jCosSh * 1.02);
+      const shStn     = wpShadow(0.0, 0.1, -1.32);
+      fillTranslucentShadowTri320(shMast, shTop, shBoom);
+      fillTranslucentShadowTri320(shBow, shJibTop, shJibClew);
+      fillTranslucentShadowTri320(shBow, shMidL, shStn);
+      fillTranslucentShadowTri320(shBow, shMidR, shStn);
 
       // 1. Quilla profunda y bulbo de plomo (visibles al escorar el casco)
       const kTopF = wp(0.00, -0.04,  0.12);
@@ -8451,7 +8498,35 @@
         }
       }
 
-      // 1. Dibujar líneas de espuma de la estela en V detrás del casco + anillos de agua
+      // 1A. Líneas de Wake Laterales en V a ambos costados del casco (Olas de proa, bigotes medios y brazos Kelvin exteriores)
+      const hFLen = Math.hypot(sim.fx, sim.fz) || 1.0;
+      const hFx   = sim.fx / hFLen, hFz = sim.fz / hFLen;
+      const hRx   = hFz,            hRz = -hFx;
+      if (sim.spd > 0.18) {
+        const spdK = Math.min(1.45, 0.55 + sim.spd * 0.18);
+        const wyS  = 0.05;
+        function wakeSideLine(f0, r0, f1, r1, dashed, colIdx) {
+          const xA = sim.px + hFx * f0, zA = sim.pz + hFz * f0;
+          const xB = sim.px + hFx * f1, zB = sim.pz + hFz * f1;
+          projLine(xA - hRx * r0, wyS, zA - hRz * r0, xB - hRx * r1, wyS, zB - hRz * r1, dashed, colIdx);
+          projLine(xA + hRx * r0, wyS, zA + hRz * r0, xB + hRx * r1, wyS, zB + hRz * r1, dashed, colIdx);
+        }
+        // Capa 1 (Interna blanca): Bigote de espuma pegado a la proa y costados babor/estribor
+        wakeSideLine( 2.12, 0.06,          0.25, 0.62 * spdK, 0, 1);
+        wakeSideLine( 0.25, 0.62 * spdK,  -1.85, 1.08 * spdK, 0, 1);
+        // Capa 2 (Media): Segunda línea de ola lateral abriéndose a los lados del casco
+        wakeSideLine( 1.55, 0.28 * spdK,  -0.25, 1.08 * spdK, 0, 1);
+        wakeSideLine(-0.25, 1.08 * spdK,  -2.25, 1.72 * spdK, 1, 5);
+        // Capa 3 (Externa Kelvin cian): Tercera línea de estela ancha a los lados del velero
+        wakeSideLine( 0.88, 0.56 * spdK,  -0.90, 1.56 * spdK, 0, 5);
+        wakeSideLine(-0.90, 1.56 * spdK,  -2.75, 2.38 * spdK, 1, 5);
+        // Capa 4 (Crestas escalonadas / Echelon waves a ambos lados del casco)
+        wakeSideLine( 1.15, 0.42 * spdK,   0.35, 0.96 * spdK, 0, 5);
+        wakeSideLine( 0.05, 0.72 * spdK,  -0.85, 1.38 * spdK, 0, 5);
+        wakeSideLine(-1.05, 0.98 * spdK,  -2.05, 1.76 * spdK, 1, 5);
+      }
+
+      // 1B. Estela en V persistente detrás de la popa (doble línea lateral por banda + turbulencia central del timón)
       for (let i = 0; i < MAX_WAKE_PTS - 1; i++) {
         const idx0 = (wakeHeadIdx - 1 - i + MAX_WAKE_PTS) % MAX_WAKE_PTS;
         const idx1 = (wakeHeadIdx - 2 - i + MAX_WAKE_PTS) % MAX_WAKE_PTS;
@@ -8460,19 +8535,38 @@
         if (w0 <= 0.01 || w1 <= 0.01) continue;
         if (Math.hypot(x1 - x0, z1 - z0) > 6.0) continue;
 
-        const spread0 = 0.22 + i * 0.09;
-        const spread1 = 0.22 + (i + 1) * 0.09;
-        const colIdx  = i < 6 ? 1 : 5; // Blanco brillante cerca de la popa -> Cian espuma lejos
+        const spreadIn0  = 0.20 + i * 0.085;
+        const spreadIn1  = 0.20 + (i + 1) * 0.085;
+        const spreadOut0 = 0.62 + i * 0.155;
+        const spreadOut1 = 0.62 + (i + 1) * 0.155;
+        const colIdx     = i < 6 ? 1 : 5; // Blanco brillante cerca de la popa -> Cian espuma lejos
+        const isDash     = i > 8 ? 1 : 0;
+        // Par interno de estela
         projLine(
-          x0 - sim.rx * spread0, 0.05, z0 - sim.rz * spread0,
-          x1 - sim.rx * spread1, 0.04, z1 - sim.rz * spread1,
-          i > 8 ? 1 : 0, colIdx
+          x0 - hRx * spreadIn0, 0.05, z0 - hRz * spreadIn0,
+          x1 - hRx * spreadIn1, 0.04, z1 - hRz * spreadIn1,
+          isDash, colIdx
         );
         projLine(
-          x0 + sim.rx * spread0, 0.05, z0 + sim.rz * spread0,
-          x1 + sim.rx * spread1, 0.04, z1 + sim.rz * spread1,
-          i > 8 ? 1 : 0, colIdx
+          x0 + hRx * spreadIn0, 0.05, z0 + hRz * spreadIn0,
+          x1 + hRx * spreadIn1, 0.04, z1 + hRz * spreadIn1,
+          isDash, colIdx
         );
+        // Par externo de estela Kelvin
+        projLine(
+          x0 - hRx * spreadOut0, 0.05, z0 - hRz * spreadOut0,
+          x1 - hRx * spreadOut1, 0.04, z1 - hRz * spreadOut1,
+          1, 5
+        );
+        projLine(
+          x0 + hRx * spreadOut0, 0.05, z0 + hRz * spreadOut0,
+          x1 + hRx * spreadOut1, 0.04, z1 + hRz * spreadOut1,
+          1, 5
+        );
+        // Espuma central del timón/quilla en los primeros tramos tras la popa
+        if (i < 5) {
+          projLine(x0, 0.05, z0, x1, 0.04, z1, 1, i < 2 ? 1 : 5);
+        }
       }
 
       // 2. Línea táctica punteada hacia la boya activa
