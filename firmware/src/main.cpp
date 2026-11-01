@@ -347,11 +347,13 @@ static void displayTask(void*) {
     tft.waitDMA();
     tft.endWrite();
 
+#if ENABLE_TOUCH
     // Touch FT6336U por I2C (fuera del bucle de render del Core 1)
     uint16_t tx = 0, ty = 0;
     const bool down = tft.getTouch(&tx, &ty);
     touchDownShared = down;
     if (down) { touchXShared = (int16_t)tx; touchYShared = (int16_t)ty; }
+#endif
 
     frameStats.displayPushUs = (uint32_t)esp_timer_get_time() - t0;
     xSemaphoreGive(semDisplayIdle);

@@ -101,11 +101,18 @@ namespace C565 {
 // ============================================================================
 // 3. DRIVER LOVYANGFX CON DMA PARA ILI9341V (SPI2) + FT6336U (I2C)
 // ============================================================================
+// La consola no usa el touch: queda fuera por defecto. Compila con -DENABLE_TOUCH=1 para el FT6336U.
+#ifndef ENABLE_TOUCH
+#define ENABLE_TOUCH 0
+#endif
+
 class LGFX_RetroGo : public lgfx::LGFX_Device {
   lgfx::Panel_ILI9341 _panel;
   lgfx::Bus_SPI       _bus;
   lgfx::Light_PWM     _light;
+#if ENABLE_TOUCH
   lgfx::Touch_FT5x06  _touch;
+#endif
 
 public:
   LGFX_RetroGo(void) {
@@ -148,6 +155,7 @@ public:
       _light.config(cfg);
       _panel.setLight(&_light);
     }
+#if ENABLE_TOUCH
     {
       auto cfg = _touch.config();
       cfg.x_min           = 0;
@@ -166,6 +174,7 @@ public:
       _touch.config(cfg);
       _panel.setTouch(&_touch);
     }
+#endif
     setPanel(&_panel);
   }
 };

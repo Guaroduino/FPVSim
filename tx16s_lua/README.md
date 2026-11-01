@@ -20,6 +20,7 @@ Copia la carpeta `SCRIPTS` directamente en la raíz de la tarjeta SD de tu emiso
 
 1. Conecta tu **TX16S** por USB en modo **SD Card Storage** (o extrae la tarjeta microSD).
 2. Copia los tres archivos `.lua` dentro de la carpeta `/SCRIPTS/TOOLS/` de tu tarjeta SD.
+   Requiere **EdgeTX 2.8 o posterior** (`lcd.drawFilledTriangle`).
 3. Enciende la emisora, presiona el botón **`SYS`** para abrir el menú **Tools** y selecciona cualquiera de los 3 simuladores:
    - **FPV Fixed-Wing**
    - **FPV Drone 5"**
@@ -36,12 +37,21 @@ Copia la carpeta `SCRIPTS` directamente en la raíz de la tarjeta SD de tu emiso
   - **Preset de Aeronave**: Cambia entre los 6 aviones o 4 drones.
   - **Circuito**: `C1 Ovalo`, `C2 Ocho`, `C3 Tecnico`, `Vuelo Libre`.
   - **Vista**: `FPV Cockpit` (1ª persona con OSD estilo INAV/Betaflight) o `LOS Torre` (3ª persona desde pista con Auto-Zoom).
-  - **Resolución (`240x136 2x` vs `480x272`)**: Alterna entre media resolución escalada a pantalla completa (máxima fluidez a 30 FPS) y resolución nativa `480×272`.
   - **Reiniciar Vuelo (`RESET`)**: Reposiciona en cabecera de pista con batería al 100%.
+- **Botón `RTN`**: Sale del simulador.
 
 ### 2. RC Sailboat (`rc_sail.lua`)
 - **Stick `AIL` o `RUD` (Izquierda/Derecha)**: Timón (`Rudder`) con física de pérdida hidrodinámica si se fuerza en exceso a baja velocidad.
 - **Stick `THR` (Abajo/Arriba)**: Winche de Escota (`Sheet Winch`) para cazar (`abajo`) o largar (`arriba`) la Mayor y el Foque simultáneamente. Incluye indicador de marca blanca óptima en la barra de escota.
 - **Stick `ELE` (Arriba/Abajo)**: Controla el Zoom en tiempo real cuando la cámara está en modo `2. LOS ZOOM MANUAL`.
 - **Botón `ENT` (Pulsar Rueda)**: Alterna rápidamente entre las 3 cámaras (`CAM:AUTO` desde el muelle, `CAM:MAN` y `CAM:3D` de persecución).
-- **Botón `SYS` / `TELE` o toque en la barra superior**: Abre el menú para elegir barco (`IOM 1M PRO`, `DF65 AGILE`, `RG65 CARBON`), cualquiera de los **5 circuitos de regata**, intensidad del viento base, vectores de fuerza 3D y resolución (`240p` / `480p`).
+- **Botón `SYS` / `TELE` o toque en la barra superior**: Abre el menú para elegir barco (`IOM 1M PRO`, `DF65 AGILE`, `RG65 CARBON`), cualquiera de los **5 circuitos de regata**, intensidad del viento base, vectores de fuerza 3D. Dentro del menú, `RTN` lo cierra.
+- **Botón `RTN` (fuera del menú)**: Sale del simulador.
+
+---
+
+## Notas técnicas
+
+- **Resolución fija 480×272**: con la API Lua cada triángulo se rellena a resolución nativa, así que renderizar a 240×136 y duplicar coordenadas no ahorraba tiempo; solo hacía la imagen más tosca.
+- **Recorte 3D**: pista, gates, edificios y la orilla del velero se recortan contra el plano cercano de la cámara (Sutherland-Hodgman / Liang-Barsky) en lugar de descartarse enteros cuando un vértice queda detrás de la cámara.
+- **Física a paso fijo**: acumulador con `PHYS_DT` (dron y ala 1/120 s, velero 1/60 s), así el vuelo no cambia con los fps ni con la resolución de 10 ms de `getTime()`.

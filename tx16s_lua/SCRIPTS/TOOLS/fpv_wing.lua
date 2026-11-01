@@ -19,7 +19,7 @@ local RAD2DEG = 57.2957795131
 
 -- Resolucion activa: halfRes = true renderiza en un viewport 240x136 (o escalado 2x a 480x272)
 -- Con scale2x = true ocupa toda la pantalla 480x272 con coordenadas logicas 240x136 (DMA2D ultra rapido)
-local halfRes = true
+local halfRes = false -- 480x272 fijo: la API Lua pinta igual a 480x272, media res no ahorra nada
 local VW, VH  = 240, 136
 local SCALE   = 2
 local OX, OY  = 0, 0
@@ -750,6 +750,117 @@ local function sQuad(x1, y1, x2, y2, x3, y3, x4, y4, col)
   drawTri(x1, y1, x3, y3, x4, y4, col)
 end
 
+-- -----------------------------------------------------------------------------
+-- RECORTE 3D CONTRA EL PLANO CERCANO Y UNA BANDA DE GUARDA LATERAL
+-- Antes, si un solo vertice quedaba detras de la camara se descartaba el poligono
+-- entero (la pista, las gates y los galpones desaparecian al pasar cerca). Ahora
+-- cada poligono se recorta (Sutherland-Hodgman) en espacio de camara y cada linea
+-- con Liang-Barsky. La banda de guarda (3x la pantalla) evita coordenadas enormes
+-- en lcd.drawFilledTriangle. Buffers preasignados: cero basura por frame.
+-- -----------------------------------------------------------------------------
+local NEAR_Z = 0.5
+local CLIP_GUARD = 3.0
+local clipKX, clipKY = 1, 1
+local PX, PY, PZ = {}, {}, {}             -- entrada en coordenadas de mundo
+local AX, AY, AZ, BX, BY, BZ = {}, {}, {}, {}, {}, {}
+
+local function updateClipPlanes()
+  clipKX = CLIP_GUARD * (VW * 0.5) / FOCAL
+  clipKY = CLIP_GUARD * (VH * 0.5) / FOCAL
+end
+
+local function toCam(wx, wy, wz)
+  local dx, dy, dz = wx - camX, wy - camY, wz - camZ
+  return dx * cRx + dy * cRy + dz * cRz, dx * cUx + dy * cUy + dz * cUz, dx * cFx + dy * cFy + dz * cFz
+end
+
+local function camToScr(cx, cy, cz)
+  local inv = FOCAL / cz
+  return floor(VW * 0.5 + cx * inv) * SCALE + OX, floor(VH * 0.5 - cy * inv) * SCALE + OY
+end
+
+local function planeD(k, x, y, z)
+  if k == 1 then return z - NEAR_Z
+  elseif k == 2 then return clipKX * z - x
+  elseif k == 3 then return clipKX * z + x
+  elseif k == 4 then return clipKY * z - y
+  else return clipKY * z + y end
+end
+
+-- Recorta el poligono AX/AY/AZ (n vertices, espacio de camara); devuelve n y los buffers resultantes
+local function clipPolyCam(n)
+  local sx, sy, sz, dx, dy, dz = AX, AY, AZ, BX, BY, BZ
+  for k = 1, 5 do
+    local allIn = true
+    for i = 1, n do
+      if planeD(k, sx[i], sy[i], sz[i]) < 0 then allIn = false; break end
+    end
+    if not allIn then
+      local m = 0
+      for i = 1, n do
+        local j = (i % n) + 1
+        local ax, ay, az = sx[i], sy[i], sz[i]
+        local bx, by, bz = sx[j], sy[j], sz[j]
+        local da, db = planeD(k, ax, ay, az), planeD(k, bx, by, bz)
+        if da >= 0 then
+          m = m + 1; dx[m], dy[m], dz[m] = ax, ay, az
+        end
+        if (da >= 0) ~= (db >= 0) then
+          local t = da / (da - db)
+          m = m + 1; dx[m], dy[m], dz[m] = ax + (bx - ax) * t, ay + (by - ay) * t, az + (bz - az) * t
+        end
+      end
+      if m < 3 then return 0, sx, sy, sz end
+      n = m
+      sx, sy, sz, dx, dy, dz = dx, dy, dz, sx, sy, sz
+    end
+  end
+  return n, sx, sy, sz
+end
+
+-- Poligono convexo en mundo (vertices en PX/PY/PZ) recortado y rellenado en abanico
+local function poly3(n, col)
+  for i = 1, n do AX[i], AY[i], AZ[i] = toCam(PX[i], PY[i], PZ[i]) end
+  local m, xs, ys, zs = clipPolyCam(n)
+  if m < 3 then return end
+  local x0, y0 = camToScr(xs[1], ys[1], zs[1])
+  local x1, y1 = camToScr(xs[2], ys[2], zs[2])
+  for i = 3, m do
+    local x2, y2 = camToScr(xs[i], ys[i], zs[i])
+    drawTri(x0, y0, x1, y1, x2, y2, col)
+    x1, y1 = x2, y2
+  end
+end
+
+local function quad3(x1, y1, z1, x2, y2, z2, x3, y3, z3, x4, y4, z4, col)
+  PX[1], PY[1], PZ[1] = x1, y1, z1
+  PX[2], PY[2], PZ[2] = x2, y2, z2
+  PX[3], PY[3], PZ[3] = x3, y3, z3
+  PX[4], PY[4], PZ[4] = x4, y4, z4
+  poly3(4, col)
+end
+
+-- Linea 3D recortada contra los mismos 5 planos (Liang-Barsky)
+local function line3(x1, y1, z1, x2, y2, z2, col)
+  local ax, ay, az = toCam(x1, y1, z1)
+  local bx, by, bz = toCam(x2, y2, z2)
+  local t0, t1 = 0.0, 1.0
+  for k = 1, 5 do
+    local da, db = planeD(k, ax, ay, az), planeD(k, bx, by, bz)
+    if da < 0 and db < 0 then return end
+    if da < 0 then
+      t0 = max(t0, da / (da - db))
+    elseif db < 0 then
+      t1 = min(t1, da / (da - db))
+    end
+  end
+  if t0 >= t1 then return end
+  local ex, ey, ez = bx - ax, by - ay, bz - az
+  local sx0, sy0 = camToScr(ax + ex * t0, ay + ey * t0, az + ez * t0)
+  local sx1, sy1 = camToScr(ax + ex * t1, ay + ey * t1, az + ez * t1)
+  drawLine(sx0, sy0, sx1, sy1, SOLID, col)
+end
+
 local function projLine3D(x0, y0, z0, x1, y1, z1, col)
   local sx0, sy0 = proj(x0, y0, z0)
   local sx1, sy1 = proj(x1, y1, z1)
@@ -805,25 +916,21 @@ local function renderRunwayAndGrid()
   local rCx, rCz   = -35.0, -12.0
   local rHalfL, rHalfW = 140.0, 9.5
 
-  local function rwyPt(l, w)
-    return proj(rCx + l * rCos - w * rSin, 0.28, rCz + l * rSin + w * rCos)
-  end
-
-  local x1, y1 = rwyPt(-rHalfL, -rHalfW)
-  local x2, y2 = rwyPt(-rHalfL,  rHalfW)
-  local x3, y3 = rwyPt( rHalfL,  rHalfW)
-  local x4, y4 = rwyPt( rHalfL, -rHalfW)
-  if x1 and x2 and x3 and x4 then
-    sQuad(x1, y1, x2, y2, x3, y3, x4, y4, COL_RWY_ASPH)
-    drawLine(x1, y1, x4, y4, SOLID, COL_WHITE)
-    drawLine(x2, y2, x3, y3, SOLID, COL_WHITE)
-  end
+  -- Esquinas de la pista en mundo (recortadas en 3D: la pista ya no desaparece al sobrevolarla)
+  local function rwyX(l, w) return rCx + l * rCos - w * rSin end
+  local function rwyZ(l, w) return rCz + l * rSin + w * rCos end
+  local RY = 0.28
+  local ax1, az1 = rwyX(-rHalfL, -rHalfW), rwyZ(-rHalfL, -rHalfW)
+  local ax2, az2 = rwyX(-rHalfL,  rHalfW), rwyZ(-rHalfL,  rHalfW)
+  local ax3, az3 = rwyX( rHalfL,  rHalfW), rwyZ( rHalfL,  rHalfW)
+  local ax4, az4 = rwyX( rHalfL, -rHalfW), rwyZ( rHalfL, -rHalfW)
+  quad3(ax1, RY, az1, ax2, RY, az2, ax3, RY, az3, ax4, RY, az4, COL_RWY_ASPH)
+  line3(ax1, RY, az1, ax4, RY, az4, COL_WHITE)
+  line3(ax2, RY, az2, ax3, RY, az3, COL_WHITE)
 
   -- Lineas centrales discontinuas de pista
-  for s = -110, 110, 28 do
-    local ax, ay = rwyPt(s, 0)
-    local bx, by = rwyPt(s + 14, 0)
-    if ax and bx then drawLine(ax, ay, bx, by, SOLID, COL_RWY_LINE) end
+  for st = -110, 110, 28 do
+    line3(rwyX(st, 0), RY, rwyZ(st, 0), rwyX(st + 14, 0), RY, rwyZ(st + 14, 0), COL_RWY_LINE)
   end
 
   -- Grilla de suelo cercana al avion (cruces de referencia cada 40m para sensacion de velocidad a baja altura)
@@ -847,7 +954,7 @@ local function renderBuildingsAndTrees()
     local b = BUILDINGS[i]
     local dx, dz = b.x - camX, b.z - camZ
     local cz = dx * cFx + dz * cFz
-    if cz > 2.0 and cz < 650.0 then
+    if cz > -(b.w + b.d) and cz < 650.0 then
       local hw, hd = b.w * 0.5, b.d * 0.5
       local cY, sY = b.cosY, b.sinY
       local x1, z1 = b.x + (-hw * cY - (-hd) * sY), b.z + (-hw * sY + (-hd) * cY)
@@ -855,29 +962,19 @@ local function renderBuildingsAndTrees()
       local x3, z3 = b.x + ( hw * cY - ( hd) * sY), b.z + ( hw * sY + ( hd) * cY)
       local x4, z4 = b.x + (-hw * cY - ( hd) * sY), b.z + (-hw * sY + ( hd) * cY)
 
-      local b1x, b1y = proj(x1, 0.25, z1)
-      local b2x, b2y = proj(x2, 0.25, z2)
-      local b3x, b3y = proj(x3, 0.25, z3)
-      local b4x, b4y = proj(x4, 0.25, z4)
-      local t1x, t1y = proj(x1, b.h,  z1)
-      local t2x, t2y = proj(x2, b.h,  z2)
-      local t3x, t3y = proj(x3, b.h,  z3)
-      local t4x, t4y = proj(x4, b.h,  z4)
-
-      if b1x and b2x and b3x and b4x and t1x and t2x and t3x and t4x then
-        if not b.open then
-          sQuad(b1x, b1y, b2x, b2y, t2x, t2y, t1x, t1y, COL_WALL_L)
-          sQuad(b2x, b2y, b3x, b3y, t3x, t3y, t2x, t2y, COL_WALL_D)
-          sQuad(b3x, b3y, b4x, b4y, t4x, t4y, t3x, t3y, COL_WALL_L)
-          sQuad(b4x, b4y, b1x, b1y, t1x, t1y, t4x, t4y, COL_WALL_D)
-        else
-          drawLine(b1x, b1y, t1x, t1y, SOLID, COL_WHITE)
-          drawLine(b2x, b2y, t2x, t2y, SOLID, COL_WHITE)
-          drawLine(b3x, b3y, t3x, t3y, SOLID, COL_WHITE)
-          drawLine(b4x, b4y, t4x, t4y, SOLID, COL_WHITE)
-        end
-        sQuad(t1x, t1y, t2x, t2y, t3x, t3y, t4x, t4y, COL_ROOF)
+      local yb, yt = 0.25, b.h
+      if not b.open then
+        quad3(x1, yb, z1, x2, yb, z2, x2, yt, z2, x1, yt, z1, COL_WALL_L)
+        quad3(x2, yb, z2, x3, yb, z3, x3, yt, z3, x2, yt, z2, COL_WALL_D)
+        quad3(x3, yb, z3, x4, yb, z4, x4, yt, z4, x3, yt, z3, COL_WALL_L)
+        quad3(x4, yb, z4, x1, yb, z1, x1, yt, z1, x4, yt, z4, COL_WALL_D)
+      else
+        line3(x1, yb, z1, x1, yt, z1, COL_WHITE)
+        line3(x2, yb, z2, x2, yt, z2, COL_WHITE)
+        line3(x3, yb, z3, x3, yt, z3, COL_WHITE)
+        line3(x4, yb, z4, x4, yt, z4, COL_WHITE)
       end
+      quad3(x1, yt, z1, x2, yt, z2, x3, yt, z3, x4, yt, z4, COL_ROOF)
     end
   end
 
@@ -922,10 +1019,10 @@ local function renderGates()
     local tlx, tly = proj(lx, yTop, lz)
     local trx, try = proj(rx, yTop, rz)
 
+    line3(lx, yBot, lz, lx, yTop, lz, col)
+    line3(rx, yBot, rz, rx, yTop, rz, col)
+    line3(lx, yTop, lz, rx, yTop, rz, col)
     if blx and brx and tlx and trx then
-      drawLine(blx, bly, tlx, tly, SOLID, col)
-      drawLine(brx, bry, trx, try, SOLID, col)
-      drawLine(tlx, tly, trx, try, SOLID, col)
       if isAct then
         drawLine(blx + 1, bly, tlx + 1, tly, SOLID, COL_WHITE)
         drawLine(brx - 1, bry, trx - 1, try, SOLID, COL_WHITE)
@@ -1024,7 +1121,7 @@ local function renderInavOsd()
   local wSpdKmh = floor(sqrt(aeroEnv.windX * aeroEnv.windX + aeroEnv.windZ * aeroEnv.windZ) * 3.6)
   drawText(6, 1, sformat("W:%dK RSSI:%d%%", wSpdKmh, aeroEnv.rssiPct), SMLSIZE + COL_WHITE)
   drawText(152, 1, sformat("%s [%s]", cfg.name, CIRCUITS[circuitIdx].short), SMLSIZE + COL_GOLD)
-  drawText(340, 1, sformat("%s %dFPS", halfRes and "240x136" or "480x272", fpsCount), SMLSIZE + COL_GREEN)
+  drawText(340, 1, sformat("480x272 %dFPS", fpsCount), SMLSIZE + COL_GREEN)
 
   -- Columna izquierda: Velocidad aire, suelo, gas y bateria LiPo 3S
   local kmh    = floor(wing.spd * 3.6)
@@ -1075,7 +1172,7 @@ local function renderInavOsd()
   drawRect(0, 252, 480, 20, COL_HUD_BG)
   local aoaDeg = floor(wing.lastAlpha * RAD2DEG)
   local modeStr = wing.launchTimer > 0 and "LAUNCH" or wing.mode
-  drawText(6, 254, sformat("[%s] AOA:%+dd | ENT:MODO | ROL:AVION | MDL:CIRC | TELE:CAM | SYS:RES", modeStr, aoaDeg), SMLSIZE + COL_WHITE)
+  drawText(6, 254, sformat("[%s] AOA:%+dd | ENT:MODO | ROL:AVION | MDL:CIRC | TELE:CAM | RTN:SALIR", modeStr, aoaDeg), SMLSIZE + COL_WHITE)
 end
 
 local lastTick = 0
@@ -1122,7 +1219,8 @@ local function init()
     local fRud = getFieldInfo("rud"); if fRud then chRud = fRud.id end
   end
 
-  setResolutionMode(true)
+  setResolutionMode(false)
+  updateClipPlanes()
   initWorldGeometry()
   resetWing()
   lastTick = getTime()
@@ -1149,9 +1247,6 @@ local function handleEvents(event, touchState)
   elseif event == EVT_TELEM_FIRST then
     wing.chaseCam = not wing.chaseCam
     showToast(wing.chaseCam and "VISTA: FOLLOW 3D" or "VISTA: FPV CABINA")
-  elseif event == EVT_SYS_FIRST then
-    setResolutionMode(not halfRes)
-    showToast(halfRes and "RES: 240x136 (FAST 30FPS)" or "RES: 480x272 NATIVO")
   end
 
   if touchState and touchState.tapCount and touchState.tapCount > 0 then
@@ -1165,9 +1260,6 @@ local function handleEvents(event, touchState)
         activeGates = CIRCUITS[circuitIdx].gates
         wing.activeGate = 1
         showToast("CIRCUITO: " .. CIRCUITS[circuitIdx].name)
-      else
-        setResolutionMode(not halfRes)
-        showToast(halfRes and "RES: 240x136 (FAST 30FPS)" or "RES: 480x272 NATIVO")
       end
     elseif ty > 235 then
       if tx < 120 then
@@ -1189,11 +1281,17 @@ local function handleEvents(event, touchState)
   end
 end
 
+local PHYS_DT        = 1.0 / 120.0
+local PHYS_MAX_STEPS = 12
+local physAccum      = 0.0
+
 local function run(event, touchState)
+  if event == EVT_VIRTUAL_EXIT then return 1 end
   local now = getTime()
   local dt  = (now - lastTick) * 0.01
   lastTick  = now
-  if dt <= 0 or dt > 0.12 then dt = 0.033 end
+  if dt <= 0 then dt = 0 end
+  if dt > 0.10 then dt = 0.10 end
 
   frameCounter = frameCounter + 1
   if (now - lastFpsTime) >= 100 then
@@ -1207,9 +1305,16 @@ local function run(event, touchState)
 
   local lx, thr, rx, ry = readSticks()
   -- 2 sub-pasos de fisica por frame para estabilidad aerodinamica total a 30 FPS
-  local subDt = dt * 0.5
-  stepWingPhysics(subDt, lx, thr, rx, ry)
-  stepWingPhysics(subDt, lx, thr, rx, ry)
+  -- Fisica a paso fijo (PHYS_DT) con acumulador: el vuelo no cambia con los fps ni con
+  -- la resolucion de 10 ms de getTime()
+  physAccum = physAccum + dt
+  local nSteps = 0
+  while physAccum >= PHYS_DT and nSteps < PHYS_MAX_STEPS do
+    stepWingPhysics(PHYS_DT, lx, thr, rx, ry)
+    physAccum = physAccum - PHYS_DT
+    nSteps = nSteps + 1
+  end
+  if nSteps == PHYS_MAX_STEPS then physAccum = 0 end
 
   -- Configurar camara FPV o Follow 3D
   if wing.chaseCam then
