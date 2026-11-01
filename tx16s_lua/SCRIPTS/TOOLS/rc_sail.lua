@@ -249,7 +249,7 @@ local S = {
   camPitch = -0.18,
   showVectors = true,
   showGuides = true,
-  halfRes = true,
+  halfRes = false, -- 480x272 fijo: con la API Lua media resolucion no ahorra relleno
 
   -- Menu
   menuOpen = false,
@@ -802,6 +802,75 @@ end
 -- ============================================================================
 -- RENDERIZADO DEL ENTORNO MARINO, RACHAS, OLAS, ISLAS Y BOYAS
 -- ============================================================================
+
+-- -----------------------------------------------------------------------------
+-- RECORTE 3D CONTRA EL PLANO CERCANO Y UNA BANDA DE GUARDA LATERAL
+-- La orilla (z = 1.2 .. -4) rodea al muelle donde esta la camara LOS, asi que
+-- antes siempre tenia un vertice detras de la camara y nunca se dibujaba.
+-- Sutherland-Hodgman en espacio de camara, buffers preasignados (cero basura).
+-- -----------------------------------------------------------------------------
+local NEAR_Z = 0.35
+local CLIP_GUARD = 3.0
+local PX, PY, PZ = {}, {}, {}
+local AX, AY, AZ, BX, BY, BZ = {}, {}, {}, {}, {}, {}
+
+local function planeD(k, x, y, z)
+  if k == 1 then return z - NEAR_Z end
+  local kx = CLIP_GUARD * halfW / focalPx
+  local ky = CLIP_GUARD * halfH / focalPx
+  if k == 2 then return kx * z - x
+  elseif k == 3 then return kx * z + x
+  elseif k == 4 then return ky * z - y
+  else return ky * z + y end
+end
+
+local function camToScr(cx, cy, cz)
+  local invZ = focalPx / cz
+  return floor((halfW + cx * invZ) * scalePix), floor((halfH - cy * invZ) * scalePix)
+end
+
+local function poly3(n, col)
+  for i = 1, n do
+    local dx, dy, dz = PX[i] - camX, PY[i] - camY, PZ[i] - camZ
+    AX[i] = r00 * dx + r01 * dy + r02 * dz
+    AY[i] = r10 * dx + r11 * dy + r12 * dz
+    AZ[i] = r20 * dx + r21 * dy + r22 * dz
+  end
+  local sx, sy, sz, ox, oy, oz = AX, AY, AZ, BX, BY, BZ
+  for k = 1, 5 do
+    local allIn = true
+    for i = 1, n do
+      if planeD(k, sx[i], sy[i], sz[i]) < 0 then allIn = false; break end
+    end
+    if not allIn then
+      local m = 0
+      for i = 1, n do
+        local j = (i % n) + 1
+        local ax, ay, az = sx[i], sy[i], sz[i]
+        local bx, by, bz = sx[j], sy[j], sz[j]
+        local da, db = planeD(k, ax, ay, az), planeD(k, bx, by, bz)
+        if da >= 0 then
+          m = m + 1; ox[m], oy[m], oz[m] = ax, ay, az
+        end
+        if (da >= 0) ~= (db >= 0) then
+          local t = da / (da - db)
+          m = m + 1; ox[m], oy[m], oz[m] = ax + (bx - ax) * t, ay + (by - ay) * t, az + (bz - az) * t
+        end
+      end
+      if m < 3 then return end
+      n = m
+      sx, sy, sz, ox, oy, oz = ox, oy, oz, sx, sy, sz
+    end
+  end
+  local x0, y0 = camToScr(sx[1], sy[1], sz[1])
+  local x1, y1 = camToScr(sx[2], sy[2], sz[2])
+  for i = 3, n do
+    local x2, y2 = camToScr(sx[i], sy[i], sz[i])
+    drawFilledTriangle(x0, y0, x1, y1, x2, y2, col)
+    x1, y1 = x2, y2
+  end
+end
+
 local function drawEnvironment()
   -- Horizonte proyectado segun camPitch
   local horizonY = floor((halfH + tan(S.camPitch) * focalPx) * scalePix)
@@ -827,14 +896,11 @@ local function drawEnvironment()
   end
 
   -- Orilla de arena y cesped al Sur (z <= 1.2)
-  local sx1, sy1 = projectPoint(-45, 0.05, 1.2)
-  local sx2, sy2 = projectPoint( 45, 0.05, 1.2)
-  local sx3, sy3 = projectPoint( 45, 0.25, -4.0)
-  local sx4, sy4 = projectPoint(-45, 0.25, -4.0)
-  if sx1 and sx2 and sx3 and sx4 then
-    drawFilledTriangle(sx1, sy1, sx2, sy2, sx3, sy3, COL_SAND)
-    drawFilledTriangle(sx1, sy1, sx3, sy3, sx4, sy4, COL_SAND)
-  end
+  PX[1], PY[1], PZ[1] = -45, 0.05, 1.2
+  PX[2], PY[2], PZ[2] =  45, 0.05, 1.2
+  PX[3], PY[3], PZ[3] =  45, 0.25, -4.0
+  PX[4], PY[4], PZ[4] = -45, 0.25, -4.0
+  poly3(4, COL_SAND)
 
   -- Malla estatica en el mundo de olas y manchas de racha (Catspaws)
   -- Optimizada a 7x7 puntos con trig precalculado fuera del bucle para 30 FPS clavados
@@ -1173,7 +1239,7 @@ local function drawHud()
   -- 4. Camara y Escora (Abajo Derecha)
   local camNames = { "CAM:AUTO", "CAM:MAN", "CAM:3D" }
   drawText(355, 232, string.format("HEEL:%+d deg", floor(S.heel * RAD2DEG)), SMLSIZE + COL_WHITE)
-  drawText(355, 248, string.format("%s [%s]", camNames[S.camMode], S.halfRes and "240p" or "480p"), SMLSIZE + COL_CYAN)
+  drawText(355, 248, string.format("%s", camNames[S.camMode]), SMLSIZE + COL_CYAN)
 
   if S.markFlash > 0 then
     drawFilledRectangle(165, 36, 150, 22, COL_HUD_BG)
@@ -1197,7 +1263,6 @@ local function drawMenu()
     string.format("Viento Base: %.1f kt (%.1f m/s)", S.windBase * 1.94384, S.windBase),
     string.format("Camara: %s", camNames[S.camMode]),
     string.format("Vectores Aero/Hidro: %s", S.showVectors and "SI" or "NO"),
-    string.format("Resolucion Render: %s", S.halfRes and "240x136 (2x Rapido)" or "480x272 (Nativo)"),
     "Reiniciar Regata Ahora"
   }
 
@@ -1216,9 +1281,9 @@ end
 local function handleEvents(event, touchState)
   if S.menuOpen then
     if event == EVT_VIRTUAL_NEXT or event == EVT_ROT_RIGHT then
-      S.menuCursor = (S.menuCursor % 7) + 1
+      S.menuCursor = (S.menuCursor % 6) + 1
     elseif event == EVT_VIRTUAL_PREV or event == EVT_ROT_LEFT then
-      S.menuCursor = ((S.menuCursor - 2) % 7) + 1
+      S.menuCursor = ((S.menuCursor - 2) % 6) + 1
     elseif event == EVT_VIRTUAL_ENTER then
       if S.menuCursor == 1 then
         S.presetIdx = (S.presetIdx % #SAIL_PRESETS) + 1
@@ -1233,8 +1298,6 @@ local function handleEvents(event, touchState)
       elseif S.menuCursor == 5 then
         S.showVectors = not S.showVectors
       elseif S.menuCursor == 6 then
-        S.halfRes = not S.halfRes
-      elseif S.menuCursor == 7 then
         resetSailboat()
         S.menuOpen = false
       end
@@ -1300,18 +1363,35 @@ local function drawBoatById(id)
   end
 end
 
+local PHYS_DT        = 1.0 / 60.0
+local PHYS_MAX_STEPS = 6
+local physAccum      = 0.0
+
 local function run(event, touchState)
   local now = getTime() -- multiplos de 10ms
   local dt = (now - S.lastTick) * 0.01
   S.lastTick = now
-  if dt <= 0.0 then dt = 0.033 end
-  if dt > 0.06 then dt = 0.06 end
-  S.fps = floor(0.85 * S.fps + 0.15 * (1.0 / max(0.01, dt)))
+  if dt <= 0.0 then dt = 0.0 end
+  if dt > 0.10 then dt = 0.10 end
+  if dt > 0 then S.fps = floor(0.85 * S.fps + 0.15 * (1.0 / max(0.01, dt))) end
+
+  -- RTN fuera del menu sale del script (antes no habia forma de salir)
+  if event == EVT_VIRTUAL_EXIT and not S.menuOpen then return 1 end
 
   handleEvents(event, touchState)
 
+  -- Fisica a paso fijo con acumulador: igual a cualquier fps y sin el jitter de 10 ms de getTime()
   if not S.menuOpen then
-    stepPhysics(dt)
+    physAccum = physAccum + dt
+    local n = 0
+    while physAccum >= PHYS_DT and n < PHYS_MAX_STEPS do
+      stepPhysics(PHYS_DT)
+      physAccum = physAccum - PHYS_DT
+      n = n + 1
+    end
+    if n == PHYS_MAX_STEPS then physAccum = 0 end
+  else
+    physAccum = 0
   end
 
   setupCamera(dt)
