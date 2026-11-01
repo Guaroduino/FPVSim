@@ -13,9 +13,14 @@ pio run
 # 2. Subir a la placa ESP32-S3 N16R8 por USB-C
 pio run -t upload
 
-# 3. Abrir monitor serie (opcional, 115200 baudios)
+# 3. Subir los mapas .fpvm a la partición LittleFS (opcional, ver abajo)
+pio run -t uploadfs
+
+# 4. Abrir monitor serie (opcional, 115200 baudios)
 pio device monitor
 ```
+
+La tabla de particiones `partitions_fpvsim.csv` deja 4 MB para la app y ~12.4 MB de LittleFS (caben 2 mapas de 4 MB).
 
 ## 🧠 Arquitectura de Render y Memoria (objetivo 48 FPS con SPI a 60 MHz)
 
@@ -24,7 +29,21 @@ pio device monitor
 - **Raycast en los dos núcleos**: columnas pares en el Core 1, impares en el Core 0 (`RAY_DUAL_CORE`, compílalo con `-DRAY_DUAL_CORE=0` para comparar).
 - **Física a paso fijo 240 Hz** con acumulador: el vuelo se comporta igual a cualquier fps (igual que el simulador web).
 - **Mapas PSRAM en bloques tileados 8×8** (`voxTileIdx`), mismo formato que el simulador web.
-- **SRAM interna**: `voxBuf` 128 KB + bandas DMA 50 KB + LUTs. **PSRAM**: framebuffers 300 KB + `voxHeight` 2 MB + `voxColor` 4 MB + `voxSkyMap` 0.5 MB.
+- **SRAM interna**: `voxBuf` 128 KB + bandas DMA 50 KB + LUTs. **PSRAM**: framebuffers 300 KB + `voxMap` 2 MB (texel 16 bit = altura 8 bit + índice de paleta 8 bit) + `voxSkyMap` 0.5 MB. Paleta `voxPal[256]` y niebla `FOG_LUT[24][256]` (técnica colormap) en SRAM.
+
+## 🗺️ Mapas exportados desde el simulador
+
+1. En el simulador web abre el mapa que quieras y pulsa **⬇ MAPA**: descarga un archivo `.fpvm` (4 MB, paleta de 256 colores por median-cut, texels tileados 8×8).
+2. Copia el archivo a `firmware/data/maps/` y ejecuta `pio run -t uploadfs`.
+3. En la consola, el botón **`MENU`** recorre los mapas de LittleFS y termina en el mapa procedural integrado.
+
+## 🔊 Audio I2S (MAX98357A)
+
+`BCLK = GPIO 43`, `LRCK = GPIO 44`, `DIN = GPIO 13`, 22.05 kHz mono. La síntesis del motor replica la del simulador web (diente de sierra + cuadrada + ruido filtrado) y suena un pitido al cruzar cada gate. Corre en una tarea del Core 0. Desactívalo con `-DENABLE_AUDIO=0`.
+
+## 📡 Multijugador ESP-NOW
+
+Cada consola difunde su posición ~30 veces por segundo (canal 1, paquete de 40 bytes) y dibuja hasta 4 rivales como un rombo magenta con su distancia. Solo se ven consolas que usan el mismo mapa (CRC del nombre). Desactívalo con `-DENABLE_ESPNOW=0` si necesitas la SRAM que usa el Wi-Fi.
 
 ## ⏱️ Medición por Etapa
 

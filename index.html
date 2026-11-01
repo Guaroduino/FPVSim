@@ -641,6 +641,7 @@
         <button id="btnSound" class="pill-btn" title="Activar / Silenciar Sintetizador de Audio Físico I2S">🔇 AUDIO</button>
         <button id="btnBleMp" class="pill-btn" title="Multijugador Bluetooth BLE / Pestaña Local (ESP32-S3 NimBLE)">📡 BLE</button>
         <a href="hardware.html" class="pill-btn" style="text-decoration:none;display:inline-flex;align-items:center;" title="Ver Guía y Diagrama de Conexiones ESP32-S3 N16R8">PINOUT</a>
+        <button id="btnExportMap" class="pill-btn" title="Exportar el mapa activo como .fpvm (16 bits: altura + paleta de 256 colores) para cargarlo en el firmware ESP32-S3 (LittleFS /maps)">⬇ MAPA</button>
         <button id="btnPalette" class="pill-btn" title="Cambiar Modo de Bus SPI ESP32-S3 (80MHz 60FPS / 60MHz 48FPS / 40MHz 32FPS / 1-Bit)">60MHz 48FPS</button>
       </div>
     </header>
@@ -2785,6 +2786,192 @@
 
       // 'arch' (Pórtico / Arco 3D clásico): ventana rectangular exacta entre postes [-hw, +hw] y [yBot, yTop]
       return absLat <= (hw + craftPad) && cy >= (yBot - craftPad) && cy <= (yTop + craftPad);
+    }
+
+    // =========================================================================
+    // COLISIONES DEL DRON / ALA CON ÁRBOLES, EDIFICIOS Y MARCOS DE PUERTA
+    // Formas simples y baratas (ESP32-S3: < 0.05 ms por paso de física):
+    // - Árbol: cilindro vertical (radio = 30% del ancho del sprite, alto = h)
+    // - Edificio sólido: caja orientada (OBB) w x d x (h + techo); los abiertos (hangar, toldo,
+    //   bando) se pueden atravesar como antes
+    // - Puerta: postes laterales y travesaño superior del marco (solo fuera de la ventana de paso)
+    // Respuesta: se devuelve el aparato al punto previo y se refleja la velocidad con pérdida.
+    // Un golpe a más de CRASH_SPEED_MS cuenta como choque (toast + tono grave).
+    // =========================================================================
+    const CRAFT_RADIUS_M   = 0.35;
+    const CRASH_SPEED_MS   = 7.0;
+    const OPEN_BLDG_KINDS  = { open_bando: 1, open_canopy: 1, open_hangar: 1, bando_arch: 1 };
+    let   collisionsEnabled = true;
+    let   lastCrashToastT   = 0;
+
+    function worldHitAt(px, py, pz) {
+      let hit = false;
+
+      // 1. Árboles (cilindros)
+      for (let i = 0; i < WORLD_TREES.length && !hit; i++) {
+        const tr = WORLD_TREES[i];
+        const dx = px - tr.x, dz = pz - tr.z;
+        const r = tr.w * 0.30 + CRAFT_RADIUS_M;
+        if (dx * dx + dz * dz > r * r) continue;
+        const yBase = tr.y !== undefined ? tr.y : getTerrainHeightMeters(tr.x, tr.z);
+        if (py > yBase + tr.h) continue;
+        hit = true;
+      }
+
+      // 2. Edificios sólidos (OBB en el plano horizontal + altura hasta la cumbrera)
+      for (let i = 0; i < WORLD_BUILDINGS.length && !hit; i++) {
+        const b = WORLD_BUILDINGS[i];
+        if (OPEN_BLDG_KINDS[b.kind]) continue;
+        const dx = px - b.x, dz = pz - b.z;
+        const reach = (b.w + b.d) * 0.5 + CRAFT_RADIUS_M;
+        if (Math.abs(dx) > reach || Math.abs(dz) > reach) continue;
+        const lx = dx * b.cosY + dz * b.sinY;    // eje del ancho (w)
+        const lz = -dx * b.sinY + dz * b.cosY;   // eje del fondo (d)
+        if (Math.abs(lx) > b.w * 0.5 + CRAFT_RADIUS_M || Math.abs(lz) > b.d * 0.5 + CRAFT_RADIUS_M) continue;
+        const y0 = getTerrainHeightMeters(b.x, b.z);
+        if (py > y0 + b.h + b.roofH * 0.6) continue;
+        hit = true;
+      }
+
+      // 3. Marcos de puerta (postes y travesaño), solo puertas cercanas
+      if (!hit && !isFreeFlightNoGates()) {
+        for (let i = 0; i < CIRCUIT_GATES.length && !hit; i++) {
+          const g = CIRCUIT_GATES[i];
+          if (!g || g.type === 'flag_L' || g.type === 'flag_R' || g.type === 'diamond') continue;
+          const dx = px - g.x, dz = pz - g.z;
+          if (dx * dx + dz * dz > (g.w + 4.0) * (g.w + 4.0)) continue;
+          const d   = dx * g.tx + dz * g.tz;           // distancia al plano de la puerta
+          const frameHalfD = g.type === 'dive_cube' ? Math.max(2.6, g.w * 0.34) : 0.35;
+          if (Math.abs(d) > frameHalfD + CRAFT_RADIUS_M) continue;
+          const lat = Math.abs(dx * g.nx + dz * g.nz);
+          const hw = g.w * 0.5, hh = g.h * 0.5;
+          const gFloor = getTerrainHeightMeters(g.x, g.z);
+          const yTop = gFloor + g.y + hh;
+          const postIn  = hw + 0.45;                   // borde interior: la ventana de paso conserva su margen
+          const postOut = hw + 0.45 + 0.30 + CRAFT_RADIUS_M;
+          const onPost = lat > postIn && lat < postOut && py < yTop + 0.75;
+          const onBar  = lat < postOut && py > yTop + 0.45 && py < yTop + 0.45 + 0.30 + CRAFT_RADIUS_M;
+          if (onPost || onBar) hit = true;
+        }
+      }
+      return hit;
+    }
+
+    function collideCraftWithWorld(sim, prevX, prevY, prevZ) {
+      if (!collisionsEnabled) return false;
+      if (!worldHitAt(sim.px, sim.py, sim.pz)) return false;
+      // Si ya estaba dentro (p. ej. reaparición sobre un árbol) se deja salir sin bloquear
+      if (worldHitAt(prevX, prevY, prevZ)) return false;
+
+      const impact = Math.hypot(sim.vx, sim.vy, sim.vz);
+      sim.px = prevX; sim.py = prevY; sim.pz = prevZ;
+      sim.vx *= -0.30; sim.vy *= -0.20; sim.vz *= -0.30;
+      if (impact > CRASH_SPEED_MS && aeroEnv.time - lastCrashToastT > 1.0) {
+        lastCrashToastT = aeroEnv.time;
+        showToast(`CHOQUE ${Math.round(impact * 3.6)} KM/H`);
+        playTone(140, 0.18, 'sawtooth', 0.06);
+      }
+      return true;
+    }
+
+    // =========================================================================
+    // EXPORTACIÓN DE MAPA .FPVM PARA EL FIRMWARE ESP32-S3
+    // Formato (little-endian), idéntico al lector de firmware/src/main.cpp (loadFpvmMap):
+    //   0  char[4]  "FPVM"
+    //   4  u16      versión (1)
+    //   6  u16      MAP_W (2048)        8  u16  MAP_H (1024)
+    //  10  u16      SPAWN_MX           12  u16  SPAWN_MZ
+    //  14  u16      fogCol565
+    //  16  f32      WORLD_W_M          20  f32  WORLD_H_M
+    //  24  f32      HEIGHT_SCALE       28  u32  reservado
+    //  32  u16[256] paleta RGB565
+    // 544  u16[MAP_W*MAP_H] texels tileados 8x8: (altura << 8) | índice de paleta
+    // Total = 4,194,848 B para 2048x1024. Cielo: lo genera el firmware.
+    // La paleta sale de un median-cut sobre el histograma RGB565 del mapa (256 colores).
+    // =========================================================================
+    function buildMedianCutPalette565(hist) {
+      // Cajas en espacio RGB565 (r 0..31, g 0..63, b 0..31) con los colores presentes
+      const colors = [];
+      for (let c = 0; c < 65536; c++) if (hist[c]) colors.push(c);
+      const boxes = [{ list: colors }];
+      const chan = (c, k) => k === 0 ? ((c >> 11) & 31) * 2 : (k === 1 ? (c >> 5) & 63 : (c & 31) * 2);
+      while (boxes.length < 256) {
+        // Partir la caja con más población (ponderada por rango) que tenga > 1 color
+        let bi = -1, best = -1;
+        for (let i = 0; i < boxes.length; i++) {
+          const L = boxes[i].list;
+          if (L.length < 2) continue;
+          let w = 0; for (let j = 0; j < L.length; j++) w += hist[L[j]];
+          let mn = [255, 255, 255], mx = [0, 0, 0];
+          for (let j = 0; j < L.length; j++) for (let k = 0; k < 3; k++) { const v = chan(L[j], k); if (v < mn[k]) mn[k] = v; if (v > mx[k]) mx[k] = v; }
+          const range = Math.max(mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]);
+          const score = w * (range + 1);
+          if (score > best) { best = score; bi = i; boxes[i].mn = mn; boxes[i].mx = mx; }
+        }
+        if (bi < 0) break;
+        const B = boxes[bi];
+        let k = 0, r = -1;
+        for (let q = 0; q < 3; q++) if (B.mx[q] - B.mn[q] > r) { r = B.mx[q] - B.mn[q]; k = q; }
+        B.list.sort((a, b) => chan(a, k) - chan(b, k));
+        let total = 0; for (const c of B.list) total += hist[c];
+        let acc = 0, cut = 1;
+        for (let j = 0; j < B.list.length - 1; j++) { acc += hist[B.list[j]]; if (acc >= total / 2) { cut = j + 1; break; } }
+        boxes.splice(bi, 1, { list: B.list.slice(0, cut) }, { list: B.list.slice(cut) });
+      }
+      const pal = new Uint16Array(256);
+      boxes.forEach((B, i) => {
+        let w = 0, r = 0, g = 0, b = 0;
+        for (const c of B.list) { const h = hist[c]; w += h; r += ((c >> 11) & 31) * h; g += ((c >> 5) & 63) * h; b += (c & 31) * h; }
+        if (w > 0) pal[i] = (Math.round(r / w) << 11) | (Math.round(g / w) << 5) | Math.round(b / w);
+      });
+      return { pal, count: boxes.length };
+    }
+
+    function nearestPaletteIndex565(pal, n, c) {
+      const r = (c >> 11) & 31, g = (c >> 5) & 63, b = c & 31;
+      let best = 0, bd = 1e9;
+      for (let i = 0; i < n; i++) {
+        const p = pal[i];
+        const dr = r - ((p >> 11) & 31), dg = (g - ((p >> 5) & 63)) * 0.5, db = b - (p & 31);
+        const d = dr * dr * 3 + dg * dg * 4 + db * db * 2;
+        if (d < bd) { bd = d; best = i; }
+      }
+      return best;
+    }
+
+    function exportActiveMapFpvm() {
+      const hist = new Uint32Array(65536);
+      for (let i = 0; i < voxColor.length; i++) hist[voxColor[i]]++;
+      const { pal, count } = buildMedianCutPalette565(hist);
+      const lut = new Uint8Array(65536);
+      for (let c = 0; c < 65536; c++) if (hist[c]) lut[c] = nearestPaletteIndex565(pal, count, c);
+
+      const N = MAP_W * MAP_H;
+      const buf = new ArrayBuffer(544 + N * 2);
+      const dv = new DataView(buf);
+      dv.setUint8(0, 70); dv.setUint8(1, 80); dv.setUint8(2, 86); dv.setUint8(3, 77); // "FPVM"
+      dv.setUint16(4, 1, true);
+      dv.setUint16(6, MAP_W, true); dv.setUint16(8, MAP_H, true);
+      dv.setUint16(10, SPAWN_MX, true); dv.setUint16(12, SPAWN_MZ, true);
+      const theme = TERRAIN_THEMES[currentThemeIdx];
+      dv.setUint16(14, (theme && theme.fogCol) || rgb565(166, 198, 228), true);
+      dv.setFloat32(16, WORLD_W_M, true); dv.setFloat32(20, WORLD_H_M, true);
+      dv.setFloat32(24, HEIGHT_SCALE, true);
+      for (let i = 0; i < 256; i++) dv.setUint16(32 + i * 2, pal[i], true);
+      // voxHeight / voxColor ya están en orden tileado 8x8 (VOX_TILE_*_LUT): se copian tal cual
+      const texels = new Uint16Array(buf, 544, N);
+      for (let i = 0; i < N; i++) texels[i] = (voxHeight[i] << 8) | lut[voxColor[i]];
+
+      const mode = activeWorldMapMode === 'fpv' ? ((theme && theme.id) || 'fpv') : activeWorldMapMode;
+      const name = `${mode}.fpvm`;
+      const blob = new Blob([buf], { type: 'application/octet-stream' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+      return { name, bytes: buf.byteLength, colors: count };
     }
 
     // 10 Mapas / Escenarios para Drones FPV y Alas (incluyendo Bando Edificio Abierto, Cañón Comanche 3, Cumbres Alpinas, Isla Volcánica y Chorobobo):
@@ -7533,6 +7720,7 @@
           if (this.vy < 0) this.vy = -this.vy * 0.22;
           this.vx *= 0.90; this.vz *= 0.90;
         }
+        collideCraftWithWorld(this, prevX, prevY, prevZ);
 
         if (!isFreeFlightNoGates()) {
           const g = CIRCUIT_GATES[this.activeGate];
@@ -7994,6 +8182,7 @@
           if (this.vy < 0) this.vy = -this.vy * 0.2;
           this.vx *= 0.96; this.vz *= 0.96;
         }
+        collideCraftWithWorld(this, prevX, prevY, prevZ);
 
         if (!isFreeFlightNoGates()) {
           const g = CIRCUIT_GATES[this.activeGate];
@@ -12517,6 +12706,18 @@
       });
     }
     syncPathAndGateButtons();
+    const btnExportMapEl = document.getElementById('btnExportMap');
+    if (btnExportMapEl) {
+      btnExportMapEl.addEventListener('click', () => {
+        try {
+          const r = exportActiveMapFpvm();
+          showToast(`MAPA ${r.name} ${(r.bytes / 1048576).toFixed(2)}MB`);
+        } catch (err) {
+          console.error(err);
+          showToast('ERROR AL EXPORTAR MAPA');
+        }
+      });
+    }
     const btnPaletteEl = document.getElementById('btnPalette');
     if (btnPaletteEl) {
       btnPaletteEl.addEventListener('click', (e) => {

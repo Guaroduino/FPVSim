@@ -1034,7 +1034,7 @@ lib_deps =
 
 // Pantalla IPS 2.8" ILI9341V (Bus SPI2 Nativo IOMUX @ 60-80 MHz DMA)
 #define PIN_TFT_MOSI    11
-#define PIN_TFT_MISO    13
+#define PIN_TFT_MISO    -1  // GPIO 13 pasa al audio I2S
 #define PIN_TFT_SCLK    12
 #define PIN_TFT_CS      10
 #define PIN_TFT_DC       9
@@ -1189,7 +1189,7 @@ inline bool halInitConsole() {
       { pad: 'GPIO 10',fn: 'Pantalla Chip Select',    net: 'TFT_CS',   cat: 'spi', comp: 'Pantalla ILI9341V (Pin CS)', mode: 'FSPICS0 IOMUX Nativo', bus: 'SPI2_HOST', desc: 'Pin CS nativo del bus SPI2 del ESP32-S3 para transferencias DMA de pantalla.' },
       { pad: 'GPIO 11',fn: 'Pantalla Datos MOSI',     net: 'TFT_MOSI', cat: 'spi', comp: 'Pantalla ILI9341V (Pin SDI)', mode: 'FSPID IOMUX Nativo (60-80MHz)', bus: 'SPI2_HOST', desc: 'Envía los 150 KB del framebuffer vram565 por DMA hacia la pantalla IPS.' },
       { pad: 'GPIO 12',fn: 'Pantalla Reloj SCLK',     net: 'TFT_SCLK', cat: 'spi', comp: 'Pantalla ILI9341V (Pin SCK)', mode: 'FSPICLK IOMUX Nativo (60-80MHz)', bus: 'SPI2_HOST', desc: 'Reloj maestro SPI2 en su pin IOMUX directo para lograr 60 a 80 MHz reales.' },
-      { pad: 'GPIO 13',fn: 'Pantalla Lectura MISO',   net: 'TFT_MISO', cat: 'spi', comp: 'Pantalla ILI9341V (Pin SDO)', mode: 'FSPIQ IOMUX Nativo', bus: 'SPI2_HOST', desc: 'Canal de retorno SPI2 (usado si lees el ID del panel o tarjetas MicroSD).' },
+      { pad: 'GPIO 13',fn: 'Audio I2S DIN',           net: 'I2S_DOUT', cat: 'spi', comp: 'Amplificador MAX98357A (Pin DIN)', mode: 'I2S0 DATA OUT', bus: 'I2S0', desc: 'Datos de audio 16 bits a 22.05 kHz. La pantalla no se lee (pin_miso = -1), así que el antiguo MISO queda para el audio.' },
       { pad: 'GPIO 14',fn: 'Reset Pantalla + Touch',  net: 'TFT_RST',  cat: 'spi', comp: 'ILI9341V (RST) + FT6336 (RST)', mode: 'Salida Digital Reset', bus: 'SPI2 / I2C', desc: 'Reinicia de forma sincronizada el controlador de video ILI9341V y el touch FT6336 al encender.' },
       { pad: '5V (VIN)',fn:'Entrada 5V Batería/Boost',net: '5V_IN',    cat: 'pwr', comp: 'Salida Switch ON/OFF (Boost 5V)', mode: 'Entrada de Potencia', bus: 'Power Rail', desc: 'Recibe los 5V desde el módulo cargador/elevador de la batería LiPo.' },
       { pad: 'GND',    fn: 'Tierra Común Izquierda',  net: 'GND',      cat: 'gnd', comp: 'Malla General de Tierra', mode: 'Referencia 0V', bus: 'Ground', desc: 'Conectar a la tierra de la batería, pantalla, joysticks y botones.' }
@@ -1197,8 +1197,8 @@ inline bool halInitConsole() {
 
     const RIGHT_HEADER = [
       { pad: 'GND',    fn: 'Tierra Común Derecha',    net: 'GND',      cat: 'gnd', comp: 'Malla General de Tierra', mode: 'Referencia 0V', bus: 'Ground', desc: 'Tierra común para botones de acción y cruceta.' },
-      { pad: 'GPIO 43',fn: 'UART0 TX (Debug Serial)', net: 'TXD0',     cat: 'free',comp: 'Monitor Serie USB-UART', mode: 'U0TXD', bus: 'UART0', desc: 'Salida de diagnóstico serial hacia el puente UART de la placa.' },
-      { pad: 'GPIO 44',fn: 'UART0 RX (Debug Serial)', net: 'RXD0',     cat: 'free',comp: 'Monitor Serie USB-UART', mode: 'U0RXD', bus: 'UART0', desc: 'Entrada de diagnóstico serial desde el puente UART de la placa.' },
+      { pad: 'GPIO 43',fn: 'Audio I2S BCLK',          net: 'I2S_BCLK', cat: 'spi', comp: 'Amplificador MAX98357A (Pin BCLK)', mode: 'I2S0 BCK', bus: 'I2S0', desc: 'Reloj de bit I2S. El monitor serie va por el USB nativo (CDC), así que UART0 queda libre. Al encender, la ROM escribe su log por este pin: un chasquido corto en el altavoz es normal.' },
+      { pad: 'GPIO 44',fn: 'Audio I2S LRCLK',         net: 'I2S_LRCK', cat: 'spi', comp: 'Amplificador MAX98357A (Pin LRC)', mode: 'I2S0 WS', bus: 'I2S0', desc: 'Selección de canal I2S (word select). SD del MAX98357A a 3V3 (o sin conectar) = canal izquierdo/mono.' },
       { pad: 'GPIO 1', fn: 'Stick Izq. Eje X (Yaw)',  net: 'ADC_LX',   cat: 'adc', comp: 'Joystick Izquierdo (Pin VRx)', mode: 'ADC1_CH0 (12-Bit 0..4095)', bus: 'ADC1 Analógico', desc: 'Controla la Guiñada (Yaw / Timón de dirección). Añadir condensador 100nF a GND.' },
       { pad: 'GPIO 2', fn: 'Stick Izq. Eje Y (Thr)',  net: 'ADC_LY',   cat: 'adc', comp: 'Joystick Izquierdo (Pin VRy)', mode: 'ADC1_CH1 (12-Bit 0..4095)', bus: 'ADC1 Analógico', desc: 'Controla el Acelerador (Throttle / Colectivo). Añadir condensador 100nF a GND.' },
       { pad: 'GPIO 42',fn: 'Botón ★ MENU (START)',    net: 'BTN_MENU', cat: 'btn', comp: 'Botón Central ★ MENU', mode: 'INPUT_PULLUP (Cierra a GND)', bus: 'GPIO Digital', desc: 'Abre el menú OSD estilo INAV o mantiene pulsado para volver al selector de simuladores.' },
@@ -1294,7 +1294,7 @@ inline bool halInitConsole() {
       { id: 'w3',  grp: 'Pantalla IPS 2.8"',  sig: 'VCC + Jumper J1 (3.3V)',     pin: '3V3',      cfg: 'Salida 3.3V Regulada',  fn: 'Alimentación lógica y backlight de la pantalla' },
       { id: 'w4',  grp: 'Pantalla IPS 2.8"',  sig: 'SCK (Reloj SPI)',            pin: 'GPIO 12',  cfg: 'SPI2 FSPICLK (60-80MHz)',fn: 'Reloj DMA de alta velocidad sin matriz GPIO' },
       { id: 'w5',  grp: 'Pantalla IPS 2.8"',  sig: 'SDI / MOSI (Datos)',         pin: 'GPIO 11',  cfg: 'SPI2 FSPID (60-80MHz)', fn: 'Envío de píxeles RGB565 por DMA' },
-      { id: 'w6',  grp: 'Pantalla IPS 2.8"',  sig: 'SDO / MISO',                 pin: 'GPIO 13',  cfg: 'SPI2 FSPIQ',            fn: 'Lectura de pantalla / tarjeta MicroSD' },
+      { id: 'w6',  grp: 'Pantalla IPS 2.8"',  sig: 'SDO / MISO (no se conecta)', pin: '—',        cfg: 'pin_miso = -1',         fn: 'La consola no lee la pantalla; GPIO 13 pasa al audio' },
       { id: 'w7',  grp: 'Pantalla IPS 2.8"',  sig: 'TFT_CS (Chip Select)',       pin: 'GPIO 10',  cfg: 'SPI2 FSPICS0',          fn: 'Selección de chip de video ILI9341V' },
       { id: 'w8',  grp: 'Pantalla IPS 2.8"',  sig: 'TFT_DC / RS',                pin: 'GPIO 9',   cfg: 'Salida Digital',        fn: 'Conmutación Dato / Comando SPI' },
       { id: 'w9',  grp: 'Pantalla + Touch',   sig: 'TFT_RST + CTP_RST (Unidos)', pin: 'GPIO 14',  cfg: 'Salida Digital',        fn: 'Reset físico compartido de pantalla y touch' },
@@ -1314,7 +1314,9 @@ inline bool halInitConsole() {
       { id: 'w23', grp: 'Cruceta D-Pad',      sig: 'Botón RIGHT (▶)',            pin: 'GPIO 40',  cfg: 'INPUT_PULLUP a GND',    fn: 'Navegación Derecha / Subir valor' },
       { id: 'w24', grp: 'Sistema Centro',     sig: 'Botón SELECT',               pin: 'GPIO 41',  cfg: 'INPUT_PULLUP a GND',    fn: 'Cambiar cámara / modo de pantalla' },
       { id: 'w25', grp: 'Sistema Centro',     sig: 'Botón ★ MENU (START)',       pin: 'GPIO 42',  cfg: 'INPUT_PULLUP a GND',    fn: 'Abrir OSD de Calibración / Salir al Launcher' },
-      { id: 'w26', grp: 'Diamante Acción',    sig: 'Botones A(48), B(47), X(16), Y(3)', pin: 'GPIO 48 / 47 / 16 / 3', cfg: 'INPUT_PULLUP a GND', fn: 'A=GAS/OK, B=BRK/Back, X=Reset, Y=Modo Vuelo' }
+      { id: 'w26', grp: 'Diamante Acción',    sig: 'Botones A(48), B(47), X(16), Y(3)', pin: 'GPIO 48 / 47 / 16 / 3', cfg: 'INPUT_PULLUP a GND', fn: 'A=GAS/OK, B=BRK/Back, X=Reset, Y=Modo Vuelo' },
+      { id: 'w27', grp: 'Audio I2S',          sig: 'MAX98357A DIN / BCLK / LRC', pin: 'GPIO 13 / 43 / 44', cfg: 'I2S0 maestro TX 22.05 kHz', fn: 'Sintetizador de motor, viento y pitidos' },
+      { id: 'w28', grp: 'Audio I2S',          sig: 'MAX98357A VIN / GND / SD',   pin: '5V / GND / 3V3', cfg: 'SD a 3V3 = mono',       fn: 'Altavoz 4–8 Ω, 1–3 W a los pines + / − del módulo' }
     ];
 
     const STORAGE_KEY = 'fpvsim_hw_checklist_v1';
