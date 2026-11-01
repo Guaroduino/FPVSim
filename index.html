@@ -2908,11 +2908,28 @@
     for (let i = 0; i < 512; i++) sinLut[i] = Math.sin((i * 2 * Math.PI) / 512);
 
     function fbmCloud(mx, mz) {
-      const n1 = sinLut[(mx + mz) & 511] * sinLut[(mx - mz + 128) & 511];
-      const n2 = sinLut[(mx * 2 + mz * 3 + 40) & 511] * sinLut[(mz * 2 - mx + 190) & 511];
-      const n3 = sinLut[(mx * 4 - mz * 3 + 70) & 511] * sinLut[(mx * 3 + mz * 5 + 110) & 511];
-      const n4 = sinLut[(mx * 7 + mz * 6) & 511];
-      return n1 * 0.45 + n2 * 0.30 + n3 * 0.16 + n4 * 0.09;
+      const n1 = sinLut[(mx * 5 + mz * 4) & 511] * sinLut[(mx * 4 - mz * 5 + 128) & 511];
+      const n2 = sinLut[(mx * 9 - mz * 7 + 40) & 511] * sinLut[(mz * 8 + mx * 6 + 190) & 511];
+      const n3 = sinLut[(mx * 15 + mz * 13 + 70) & 511] * sinLut[(mx * 11 - mz * 16 + 110) & 511];
+      const n4 = sinLut[(mx * 23 + mz * 19) & 511] * sinLut[(mz * 21 - mx * 17 + 85) & 511];
+      return n1 * 0.42 + n2 * 0.31 + n3 * 0.17 + n4 * 0.10;
+    }
+
+    // Hornea un texel del domo de cielo 512x512 con cúmulos frecuentes y volumen 3D (base gris-azulada + tope iluminado)
+    function evalSkyCloudColor565(mx, mz, skyZen, cloudCol) {
+      const cn  = fbmCloud(mx, mz);
+      const cnLit = fbmCloud((mx + 4) & 511, (mz + 3) & 511);
+      const cloudDensity = Math.max(0.0, Math.min(1.0, (cn + 0.065) * 2.45));
+      const cSmooth = cloudDensity * cloudDensity * (3.0 - 2.0 * cloudDensity);
+      // Sombreado volumétrico 3D del cúmulo: panza sombreada y cresta superior brillante para mejor referencia visual
+      const sunRelief = Math.max(-0.22, Math.min(0.22, (cn - cnLit) * 0.95 + (cloudDensity - 0.45) * 0.28));
+      const cR = Math.max(150, Math.min(255, cloudCol[0] * (0.90 + sunRelief)));
+      const cG = Math.max(158, Math.min(255, cloudCol[1] * (0.91 + sunRelief)));
+      const cB = Math.max(172, Math.min(255, cloudCol[2] * (0.94 + sunRelief * 0.85)));
+      const sr = skyZen[0] * (1.0 - cSmooth) + cR * cSmooth;
+      const sg = skyZen[1] * (1.0 - cSmooth) + cG * cSmooth;
+      const sb = skyZen[2] * (1.0 - cSmooth) + cB * cSmooth;
+      return rgb565(clampByte(sr), clampByte(sg), clampByte(sb));
     }
 
     let activeWorldMapMode = 'fpv'; // 'fpv' | 'sailboat' | 'rccar'
@@ -2955,13 +2972,7 @@
       for (let mz = 0; mz < SKY_DIM; mz++) {
         const zOff = mz << SKY_SHIFT;
         for (let mx = 0; mx < SKY_DIM; mx++) {
-          const cn = fbmCloud(mx, mz);
-          const cloudDensity = Math.max(0, Math.min(1, (cn - 0.08) * 1.85));
-          const cSmooth = cloudDensity * cloudDensity * (3 - 2 * cloudDensity);
-          const sr = theme.skyZenith[0] * (1 - cSmooth) + theme.cloudCol[0] * cSmooth;
-          const sg = theme.skyZenith[1] * (1 - cSmooth) + theme.cloudCol[1] * cSmooth;
-          const sb = theme.skyZenith[2] * (1 - cSmooth) + theme.cloudCol[2] * cSmooth;
-          voxSkyMap[zOff + mx] = rgb565(clampByte(sr), clampByte(sg), clampByte(sb));
+          voxSkyMap[zOff + mx] = evalSkyCloudColor565(mx, mz, theme.skyZenith, theme.cloudCol);
         }
       }
 
@@ -3334,7 +3345,7 @@
 
     (function initS3FixedPointLuts() {
       for (let dy = 0; dy < 512; dy++) {
-        CLOUD_DIST_Q8[dy] = Math.round((2400.0 / (dy + 10)) * 256);
+        CLOUD_DIST_Q8[dy] = Math.round((4200.0 / (dy + 12)) * 256);
       }
       for (let i = 0; i < 256; i++) {
         const h = (i * 73 + (i >> 4) * 37) ^ (i * 29);
@@ -5721,8 +5732,96 @@
       const hasRudder = !!(fcProfile.wing.hasRudder && fcProfile.wing.yawRate > 0);
       let fc = 0;
 
-      if (!hasRudder) {
-        // 1. ALA VOLANTE SÓLIDA (Z-84 / AR WING LR): fuselaje central + alas delta en flecha + winglets + elevones móviles
+      if (!hasRudder && fcProfile.wing.fwdSweep) {
+        // 1A. ZOHD DART 250G (ALA CON FLECHA INVERTIDA / FORWARD-SWEPT + DOBLE DERIVA VERTICAL NEGRA + GÓNDOLA CENTRAL)
+        const C_WHITE_TOP = rgb565(244, 248, 252);
+        const C_WHITE_SHD = rgb565(212, 220, 232);
+        const C_BLK_POD   = rgb565(28, 32, 38);
+        const C_BLK_FIN   = rgb565(22, 26, 32);
+        const C_ELEV      = rgb565(228, 234, 242);
+
+        // Góndola central alargada hacia adelante (morro negro con cámara FPV + tapa negra + laterales blancos)
+        const nose   = wp( 0.00, -0.02,  0.98);
+        const canF   = wp( 0.00,  0.14,  0.66);
+        const canR   = wp( 0.00,  0.15,  0.08);
+        const podLF  = wp(-0.19,  0.02,  0.58);
+        const podRF  = wp( 0.19,  0.02,  0.58);
+        const rootL  = wp(-0.22,  0.04,  0.14);
+        const rootR  = wp( 0.22,  0.04,  0.14);
+        const belly  = wp( 0.00, -0.13,  0.18);
+        const tailC  = wp( 0.00,  0.06, -0.52);
+        const tailB  = wp( 0.00, -0.06, -0.48);
+        const rearL  = wp(-0.26,  0.03, -0.46);
+        const rearR  = wp( 0.26,  0.03, -0.46);
+
+        // Semialas con Flecha Hacia Adelante (Forward Sweep: la punta está más adelantada que el encastre)
+        const leRootL = wp(-0.22,  0.04,  0.06);
+        const leRootR = wp( 0.22,  0.04,  0.06);
+        const tipLF   = wp(-1.42,  0.08,  0.34); // Borde de ataque adelantado en la punta
+        const tipRF   = wp( 1.42,  0.08,  0.34);
+        const leInL   = wp(-1.40,  0.08,  0.22); // Franja negra protectora del borde de ataque
+        const leInR   = wp( 1.40,  0.08,  0.22);
+        const tipLR   = wp(-1.42,  0.06, -0.14); // Borde de salida adelantado respecto a la cola
+        const tipRR   = wp( 1.42,  0.06, -0.14);
+        const tipLT   = wp(-1.47,  0.22,  0.06); // Winglet blanco sutil en punta de ala
+        const tipRT   = wp( 1.47,  0.22,  0.06);
+
+        // Doble deriva vertical negra a media envergadura (típica del ZOHD Dart 250G)
+        const finLF   = wp(-0.48,  0.05, -0.02);
+        const finLR   = wp(-0.48,  0.04, -0.44);
+        const finLT   = wp(-0.50,  0.42, -0.40);
+        const finRF   = wp( 0.48,  0.05, -0.02);
+        const finRR   = wp( 0.48,  0.04, -0.44);
+        const finRT   = wp( 0.50,  0.42, -0.40);
+
+        // Elevones móviles exteriores siguiendo la flecha invertida
+        const elDefL = Math.max(-0.22, Math.min(0.22, sim.elevL * 0.16));
+        const elDefR = Math.max(-0.22, Math.min(0.22, sim.elevR * 0.16));
+        const elRootL = wp(-0.48,  0.04, -0.38);
+        const elRootR = wp( 0.48,  0.04, -0.38);
+        const elL1    = wp(-0.48,  0.03 + elDefL, -0.52);
+        const elL2    = wp(-1.36,  0.05 + elDefL, -0.28);
+        const elR1    = wp( 0.48,  0.03 + elDefR, -0.52);
+        const elR2    = wp( 1.36,  0.05 + elDefR, -0.28);
+
+        // 1) Góndola central (tapa negra superior + laterales blancos + panza oscura)
+        fc = addCraftTri(fc, nose, podLF, canF, C_BLK_POD);
+        fc = addCraftTri(fc, nose, canF, podRF, C_BLK_POD);
+        fc = addCraftQuad(fc, canF, podLF, rootL, canR, C_BLK_POD);
+        fc = addCraftQuad(fc, canF, canR, rootR, podRF, C_BLK_POD);
+        fc = addCraftQuad(fc, canR, rootL, rearL, tailC, C_BLK_POD);
+        fc = addCraftQuad(fc, canR, tailC, rearR, rootR, C_BLK_POD);
+        fc = addCraftTri(fc, podLF, belly, rootL, C_WHITE_SHD);
+        fc = addCraftTri(fc, podRF, rootR, belly, C_WHITE_SHD);
+        fc = addCraftTri(fc, belly, tailB, rearL, C_BLK_POD);
+        fc = addCraftTri(fc, belly, rearR, tailB, C_BLK_POD);
+
+        // 2) Alas blancas con flecha hacia adelante + borde de ataque negro
+        fc = addCraftQuad(fc, rootL, tipLF, leInL, leRootL, C_BLK_FIN);
+        fc = addCraftQuad(fc, rootR, leRootR, leInR, tipRF, C_BLK_FIN);
+        fc = addCraftQuad(fc, leRootL, leInL, tipLR, rearL, C_WHITE_TOP);
+        fc = addCraftQuad(fc, leRootR, rearR, tipRR, leInR, C_WHITE_SHD);
+
+        // 3) Winglets de punta + Doble deriva vertical negra sobre las semialas + Elevones
+        fc = addCraftTri(fc, tipLF, tipLR, tipLT, C_WHITE_SHD);
+        fc = addCraftTri(fc, tipRF, tipRR, tipRT, C_WHITE_TOP);
+        fc = addCraftTri(fc, finLF, finLR, finLT, C_BLK_FIN);
+        fc = addCraftTri(fc, finRF, finRR, finRT, C_BLK_FIN);
+        fc = addCraftQuad(fc, elRootL, tipLR, elL2, elL1, C_ELEV);
+        fc = addCraftQuad(fc, elRootR, elR1, elR2, tipRR, C_ELEV);
+
+        renderSortedCraftFaces(fc);
+
+        // Disco de hélice trasera Pusher girando
+        const propAng = sim.flightTime * (20.0 + sim.motorRpm * 48.0);
+        const pCos = Math.cos(propAng) * 0.24, pSin = Math.sin(propAng) * 0.24;
+        projLine(
+          px - fx * 0.55 + rx * pCos + ux * pSin, py - fy * 0.55 + ry * pCos + uy * pSin, pz - fz * 0.55 + rz * pCos + uz * pSin,
+          px - fx * 0.55 - rx * pCos - ux * pSin, py - fy * 0.55 - ry * pCos - uy * pSin, pz - fz * 0.55 - rz * pCos - uz * pSin,
+          0, 1
+        );
+      } else if (!hasRudder) {
+        // 1B. ALA VOLANTE DELTA CLÁSICA (Z-84 / AR WING LR): fuselaje central + alas delta en flecha atrás + winglets + elevones móviles
         const C_BODY_TOP = rgb565(56, 62, 72);
         const C_BODY_BOT = rgb565(34, 38, 46);
         const C_WING_L   = rgb565(238, 72, 38);  // Franja naranja/roja de alta visibilidad
@@ -6690,12 +6789,14 @@
 
     const WING_PRESETS = [
       // Alas volantes puras (2 servos / elevones): SIN timón de dirección (hasRudder: 0, yawRate: 0)
-      { name: 'Z-84 WING',   hasRudder: 0, pitchRate: 210, rollRate: 290, yawRate:   0, rudderRoll: 0.00, expo: 0.38, wingLoad: 1.00, maxThrustAcc: 18.0, cgOffset:  0.00, tipStall: 1.0, thrHold: 1 },
-      { name: 'AR WING LR',  hasRudder: 0, pitchRate: 175, rollRate: 240, yawRate:   0, rudderRoll: 0.00, expo: 0.42, wingLoad: 1.25, maxThrustAcc: 20.5, cgOffset:  0.01, tipStall: 1.2, thrHold: 1 },
+      // DART 250G (Por defecto): flecha hacia adelante (fwdSweep: 1), pérdida a 30 km/h, crucero a 70 km/h (60% gas) y máx 120 km/h (100% gas)
+      { name: 'DART 250G',   hasRudder: 0, fwdSweep: 1, pitchRate: 215, rollRate: 300, yawRate:   0, rudderRoll: 0.00, expo: 0.38, wingLoad: 1.00, maxThrustAcc: 18.0, cgOffset:  0.00, tipStall: 0.72, thrHold: 1 },
+      { name: 'Z-84 WING',   hasRudder: 0, fwdSweep: 0, pitchRate: 210, rollRate: 290, yawRate:   0, rudderRoll: 0.00, expo: 0.38, wingLoad: 1.00, maxThrustAcc: 18.0, cgOffset:  0.00, tipStall: 1.00, thrHold: 1 },
+      { name: 'AR WING LR',  hasRudder: 0, fwdSweep: 0, pitchRate: 175, rollRate: 240, yawRate:   0, rudderRoll: 0.00, expo: 0.42, wingLoad: 1.25, maxThrustAcc: 20.5, cgOffset:  0.01, tipStall: 1.20, thrHold: 1 },
       // Aviones con fuselaje y cola (Alerón + Elevador + Timón de dirección Rudder activo)
-      { name: 'BIXLER TAIL', hasRudder: 1, pitchRate: 145, rollRate: 195, yawRate:  95, rudderRoll: 0.48, expo: 0.48, wingLoad: 0.85, maxThrustAcc: 15.5, cgOffset:  0.02, tipStall: 0.5, thrHold: 1 },
-      { name: 'TALON VTAIL', hasRudder: 1, pitchRate: 185, rollRate: 250, yawRate: 115, rudderRoll: 0.32, expo: 0.40, wingLoad: 1.15, maxThrustAcc: 19.5, cgOffset:  0.01, tipStall: 0.9, thrHold: 1 },
-      { name: 'EDGE 540 3D', hasRudder: 1, pitchRate: 320, rollRate: 430, yawRate: 190, rudderRoll: 0.18, expo: 0.45, wingLoad: 0.82, maxThrustAcc: 25.0, cgOffset: -0.02, tipStall: 1.3, thrHold: 1 }
+      { name: 'BIXLER TAIL', hasRudder: 1, fwdSweep: 0, pitchRate: 145, rollRate: 195, yawRate:  95, rudderRoll: 0.48, expo: 0.48, wingLoad: 0.85, maxThrustAcc: 15.5, cgOffset:  0.02, tipStall: 0.50, thrHold: 1 },
+      { name: 'TALON VTAIL', hasRudder: 1, fwdSweep: 0, pitchRate: 185, rollRate: 250, yawRate: 115, rudderRoll: 0.32, expo: 0.40, wingLoad: 1.15, maxThrustAcc: 19.5, cgOffset:  0.01, tipStall: 0.90, thrHold: 1 },
+      { name: 'EDGE 540 3D', hasRudder: 1, fwdSweep: 0, pitchRate: 320, rollRate: 430, yawRate: 190, rudderRoll: 0.18, expo: 0.45, wingLoad: 0.82, maxThrustAcc: 25.0, cgOffset: -0.02, tipStall: 1.30, thrHold: 1 }
     ];
 
     const WIND_DIR_NAMES = [
@@ -6826,6 +6927,7 @@
       const keepThrHold = fcProfile.wing.thrHold !== undefined ? fcProfile.wing.thrHold : p.thrHold;
       fcProfile.wing.name         = p.name;
       fcProfile.wing.hasRudder    = p.hasRudder;
+      fcProfile.wing.fwdSweep     = p.fwdSweep || 0;
       fcProfile.wing.pitchRate    = p.pitchRate;
       fcProfile.wing.rollRate     = p.rollRate;
       fcProfile.wing.yawRate      = p.yawRate;
@@ -7401,9 +7503,9 @@
       launchTimer: 0, // Temporizador de asistencia de lanzamiento a mano (INAV NAV_LAUNCH)
       chaseCam: false,
       activeGate: 0,
-      thrLatch: 0.55,
-      thrCmd: 0.55,
-      motorRpm: 0.52,
+      thrLatch: 0.60,
+      thrCmd: 0.60,
+      motorRpm: 0.58,
       elevL: 0,
       elevR: 0,
       lastAlpha: 0,
@@ -7447,8 +7549,8 @@
         this.ry =  0;
         this.rz =  dirNz;
 
-        // Impulso físico del lanzamiento a mano (~14.2 m/s = 51 km/h) con leve rotación inicial de suelta
-        const throwSpd = 14.2;
+        // Impulso físico del lanzamiento a mano (~15.5 m/s = 56 km/h) con leve rotación inicial de suelta
+        const throwSpd = 15.5;
         this.vx = this.fx * throwSpd;
         this.vy = this.fy * throwSpd + 0.55;
         this.vz = this.fz * throwSpd;
@@ -7459,10 +7561,10 @@
         this.yawRate   = 0.0;
 
         this.launchTimer = 1.05; // 1.05s de fase INAV LAUNCH (ascenso limpio tras soltar el ala)
-        this.thrLatch = 0.55;
-        this.thrCmd   = 0.58;
-        this.motorRpm = 0.52;
-        this.elevL = 0; this.elevR = 0; this.lastAlpha = 0.05;
+        this.thrLatch = 0.60;    // 60% gas por defecto = crucero nivelado de ~70 km/h (19.4 m/s) en ZOHD Dart 250G
+        this.thrCmd   = 0.60;
+        this.motorRpm = 0.58;
+        this.elevL = 0; this.elevR = 0; this.lastAlpha = 0.02;
         this.activeGate = 0;
         this.flightTime = 0;
         this.totalDistKm = 0;
@@ -7540,17 +7642,22 @@
         this.elevR = Math.max(-1.0, Math.min(1.0, pullUpCmd + rcRoll * 0.80));
 
         // 4. Aerodinámica de Semialas (alpha_L, alpha_R) y Pérdida Suave (Tip-Stall)
-        // Cuando rollRate > 0 (alabeo a la derecha), la semiala derecha baja -> ve MAYOR ángulo de ataque (+dAlphaRoll)
-        const halfSpan   = 0.45;
-        const dAlphaRoll = (this.rollRate * halfSpan) / Math.max(5.0, Va);
-        const alpha0     = -0.048; // Sustentación a alfa cero del perfil réflex con el ángulo de trim
-        const alphaEff   = alpha - alpha0;
-        const alphaEffL  = alphaEff - dAlphaRoll;
-        const alphaEffR  = alphaEff + dAlphaRoll;
+        // Calibrado para ZOHD Dart 250G:
+        // - Pérdida (Stall): ~30 km/h (8.33 m/s) con wingLoad = 1.00
+        // - Crucero (60% gas): ~70 km/h (19.44 m/s) en vuelo nivelado
+        // - Velocidad Máxima (100% gas): ~120 km/h (33.33 m/s) en vuelo nivelado
+        const halfSpan    = 0.45;
+        const dAlphaRoll  = (this.rollRate * halfSpan) / Math.max(5.0, Va);
+        const alpha0      = -0.052; // Sustentación a alfa cero del perfil réflex en crucero (70 km/h)
+        const alphaEff    = alpha - alpha0;
+        const alphaEffL   = alphaEff - dAlphaRoll;
+        const alphaEffR   = alphaEff + dAlphaRoll;
 
-        const stallAngle = 0.29 / Math.sqrt(Math.max(0.6, cfg.wingLoad));
-        const stallSpeed = 8.4 * Math.sqrt(Math.max(0.6, cfg.wingLoad));
-        const isStalled  = (Math.abs(alphaEff) > stallAngle) || (Va < stallSpeed);
+        const invWingLoad = 1.0 / Math.max(0.55, cfg.wingLoad);
+        const qDyn        = 0.110 * Va * Va * invWingLoad;
+        const stallAngle  = 0.285 / Math.sqrt(Math.max(0.6, cfg.wingLoad));
+        const stallSpeed  = 8.33 * Math.sqrt(Math.max(0.6, cfg.wingLoad)); // 8.33 m/s = 30.0 km/h
+        const isStalled   = (Math.abs(alphaEff) > stallAngle) || (Va < stallSpeed);
         aeroEnv.stallWarn = isStalled;
 
         const CL_L = evalWingLiftCoeff(alphaEffL, stallAngle, this.elevL);
@@ -7561,37 +7668,32 @@
         // solo al entrar en pérdida (isStalled) aparece asimetría de tip-stall
         let stallPitchRate = 0, stallRollRate = 0;
         if (isStalled) {
-          const stallSev = Math.min(1.2, Math.max(0.15, (stallSpeed - Va) * 0.18 + Math.max(0, Math.abs(alphaEff) - stallAngle) * 2.4)) * cfg.tipStall;
+          const stallSev = Math.min(1.2, Math.max(0.15, (stallSpeed - Va) * 0.20 + Math.max(0, Math.abs(alphaEff) - stallAngle) * 2.4)) * cfg.tipStall;
           // En pérdida el morro cae (pitchRate > 0 baja el morro en stepRotationSO3) para recuperar velocidad naturalmente
           stallPitchRate = +1.35 * stallSev;
           stallRollRate  = ((CL_L - CL_R) * 1.4 + Math.sin(this.flightTime * 19.0) * 0.85) * stallSev;
         }
 
         // Autoridad aerodinámica dependiente de la velocidad del aire Va:
-        // - A baja velocidad (cerca de pérdida Va < 11 m/s): cae cuadráticamente con la presión dinámica (mandos esponjosos/casi sin efecto)
-        // - A velocidad de crucero (15..21 m/s): autoridad óptima 1.0
-        // - A muy alta velocidad (Va > 23 m/s): endurecimiento aerodinámico (servo blowback) y pérdida acelerada por G si tiras a fondo del stick
-        const spdNorm = Va / 16.0;
-        const lowSpdAuth = spdNorm < 1.0 ? Math.max(0.06, spdNorm * spdNorm) : Math.min(1.30, 1.0 + (spdNorm - 1.0) * 0.45);
+        // - A baja velocidad (cerca de pérdida Va < 10 m/s): cae cuadráticamente con la presión dinámica (mandos esponjosos)
+        // - A velocidad de crucero (~19.4 m/s = 70 km/h): autoridad óptima 1.0
+        // - A muy alta velocidad (Va > 25 m/s -> 120 km/h): endurecimiento aerodinámico progresivo (servo blowback)
+        const spdNorm = Va / 18.5;
+        const lowSpdAuth = spdNorm < 1.0 ? Math.max(0.06, spdNorm * spdNorm) : Math.min(1.28, 1.0 + (spdNorm - 1.0) * 0.38);
         const stickMag   = Math.max(Math.abs(rcPitch), Math.abs(rcRoll));
-        const highSpdBlowback = Va > 22.0 ? (1.0 / (1.0 + 0.045 * (Va - 22.0) * stickMag * stickMag)) : 1.0;
+        const highSpdBlowback = Va > 24.0 ? (1.0 / (1.0 + 0.042 * (Va - 24.0) * stickMag * stickMag)) : 1.0;
         const ctrlAuth   = lowSpdAuth * highSpdBlowback;
 
         // 5. Cinemática de Giro Canteado Coordinado en 3D (Bank-to-Turn real proyectado en ejes cuerpo)
-        // Cuando el ala está inclinada (ry != 0), el vector de sustentación curva la trayectoria a razón:
-        //   turnOmegaWorld = (g * (-ry)) / Va
-        // Proyectado en la base ortonormal (R, U, F) de stepRotationSO3:
-        //   - Componente Yaw cuerpo (+y gira morro hacia +R)   = turnOmegaWorld * uy
-        //   - Componente Pitch cuerpo (-p gira morro hacia +U) = turnOmegaWorld * ry (siempre <= 0: sube el morro en el giro)
         const uyPos = Math.max(0.0, this.uy);
-        const turnOmegaWorld = (9.81 * (-this.ry) * uyPos) / Math.max(8.5, Va);
+        const turnOmegaWorld = (9.81 * (-this.ry) * uyPos) / Math.max(8.3, Va);
         const coordTurnYaw   = turnOmegaWorld * uyPos * 0.92;
         const coordTurnPitch = turnOmegaWorld * this.ry * 0.82; // Negativo -> mantiene el morro en el horizonte durante el viraje
 
-        // Estabilidad longitudinal (Cm_alpha) y direccional de winglets/cola (Cn_beta) con el signo exacto de stepRotationSO3:
-        // Si alpha > alphaTrim (morro demasiado alto), weathervanePitch > 0 (baja el morro suavemente hacia el viento relativo)
-        const alphaTrim        = 0.048 - cfg.cgOffset * 0.30;
-        const weathervanePitch = (alpha - alphaTrim) * (2.6 + cfg.cgOffset * 18.0) * ctrlAuth;
+        // Trim longitudinal dinámico con la presión dinámica qDyn para mantener vuelo nivelado 1G tanto a 70 km/h como a 120 km/h sin inflarse
+        const alpha1G          = Math.min(stallAngle * 0.82, (9.81 / Math.max(7.8, qDyn)) / 4.50) + alpha0;
+        const alphaTrim        = alpha1G - cfg.cgOffset * 0.30;
+        const weathervanePitch = (alpha - alphaTrim) * (2.8 + cfg.cgOffset * 18.0) * ctrlAuth;
         const weathervaneYaw   = beta * (hasRudder ? 4.2 : 3.4) * ctrlAuth;
         const sweptDihedralRoll = -beta * (hasRudder ? 1.85 : 1.4) * ctrlAuth;
         // En aviones con timón de cola, meter Rudder induce también alabeo pro-verso por diedro
@@ -7661,18 +7763,18 @@
           // - Al soltar el stick, autonivela suavemente a 0° mientras acusa térmicas, ráfagas y turbulencia al 70%.
           const cmdYawRate = rcYaw * cfg.yawRate * DEG2RAD * ctrlAuth;
 
-          // Ondulación atmosférica suave (térmicas lentas + trim ligero de velocidad + par sutil de hélice)
+          // Ondulación atmosférica suave (térmicas lentas + trim exacto de equilibrio 1G + par sutil de hélice)
           const wVar = 0.38 + fcProfile.windScale * 0.35 + fcProfile.wind.turbPct * 0.52;
-          const speedTrimDeg = Math.max(-2.2, Math.min(2.2, (Va - 14.6) * 0.18 + (this.motorRpm - 0.50) * 1.4));
+          const speedTrimDeg = Math.max(-3.5, Math.min(4.5, -alpha1G * RAD2DEG));
           const ahrsDriftPitch = (1.15 * Math.sin(this.flightTime * 0.78 + this.px * 0.018)
                                 + 0.72 * Math.cos(this.flightTime * 1.55 - this.pz * 0.022)) * wVar * DEG2RAD;
-          const propTorqueDeg  = (this.motorRpm - 0.48) * 1.1;
+          const propTorqueDeg  = (this.motorRpm - 0.58) * 1.1;
           const rudderBankDeg  = hasRudder ? (rcYaw * (cfg.rudderRoll || 0.30) * 18.0) : 0.0;
           const ahrsDriftRoll  = (1.95 * Math.sin(this.flightTime * 0.68 + this.pz * 0.018)
                                 + 1.15 * Math.cos(this.flightTime * 1.35 + this.px * 0.022)
                                 + propTorqueDeg + rudderBankDeg) * wVar * DEG2RAD;
 
-          const targetNoseDown = Math.max(-35.0 * DEG2RAD, Math.min(35.0 * DEG2RAD, (hwInput.ry * 34.0 - 2.0 - speedTrimDeg) * DEG2RAD + ahrsDriftPitch));
+          const targetNoseDown = Math.max(-35.0 * DEG2RAD, Math.min(35.0 * DEG2RAD, (hwInput.ry * 34.0 - speedTrimDeg) * DEG2RAD + ahrsDriftPitch));
           const targetBank     = Math.max(-52.0 * DEG2RAD, Math.min(52.0 * DEG2RAD, (hwInput.rx * 50.0) * DEG2RAD + ahrsDriftRoll));
 
           const errPitch = targetNoseDown - noseDownAngle;
@@ -7703,7 +7805,6 @@
         this.yawRate   = savedWingY + aeroEnv.vibYaw   * 0.07;
 
         // 6. Fuerzas Aerodinámicas 3D con Conservación Exacta de Energía (L _|_ V_air, D || -V_air)
-        const invWingLoad = 1.0 / Math.max(0.55, cfg.wingLoad);
         const invVa = 1.0 / Va;
         const airDirX = vAirX * invVa, airDirY = vAirY * invVa, airDirZ = vAirZ * invVa;
 
@@ -7715,23 +7816,26 @@
         const liftLen = Math.hypot(liftDirX, liftDirY, liftDirZ) || 1.0;
         liftDirX /= liftLen; liftDirY /= liftLen; liftDirZ /= liftLen;
 
-        // Polar de arrastre de ala volante Z-84: parásito + inducido (k*CL^2) + deflexión de elevones + resbalamiento
-        const qDyn     = 0.064 * Va * Va * invWingLoad;
-        const elevDrag = 0.045 * (this.elevL * this.elevL + this.elevR * this.elevR);
-        const CD       = 0.046 + 0.165 * CL * CL + elevDrag + 0.55 * beta * beta + (isStalled ? 0.24 * Math.sin(Math.abs(alphaEff)) : 0);
+        // Polar de arrastre calibrada para ZOHD Dart 250G:
+        // - A 70 km/h (19.44 m/s, 60% gas): qDyn = 41.59, CL = 0.236, CD = 0.0401 -> dragAcc = 1.67 m/s²
+        // - A 120 km/h (33.33 m/s, 100% gas): qDyn = 122.22, CL = 0.080, CD = 0.0329 -> dragAcc = 4.02 m/s²
+        const elevDrag = 0.042 * (this.elevL * this.elevL + this.elevR * this.elevR);
+        const CD       = 0.032 + 0.145 * CL * CL + elevDrag + 0.55 * beta * beta + (isStalled ? 0.28 * Math.sin(Math.abs(alphaEff)) : 0);
         const CY       = -1.85 * beta;
 
         const liftAcc = Math.max(-30.0, Math.min(40.0, qDyn * CL));
         const dragAcc = qDyn * CD;
         const sideAcc = Math.max(-16.0, Math.min(16.0, qDyn * CY));
 
-        // Modelo de Hélice de Paso Fijo (Advance Ratio) + Freno de Molinete (Windmilling) al cortar gas
-        const propPitchMaxSpd = 18.5 + cfg.maxThrustAcc * 0.92;
-        const propTargetSpd   = propPitchMaxSpd * (0.10 + 0.90 * this.motorRpm);
+        // Modelo de Hélice Pusher de Paso Fijo (Advance Ratio) + Freno de Molinete (Windmilling) al cortar gas:
+        // - Con 60% de gas (motorRpm = 0.60): propTargetSpd = 21.7 m/s -> equilibrio thrustAcc = dragAcc a 19.44 m/s (70 km/h)
+        // - Con 100% de gas (motorRpm = 1.00): propTargetSpd = 39.0 m/s -> equilibrio thrustAcc = dragAcc a 33.33 m/s (120 km/h)
+        const propPitchMaxSpd = 21.0 + cfg.maxThrustAcc * 1.00;
+        const propTargetSpd   = propPitchMaxSpd * this.motorRpm * (0.82 + 0.18 * this.motorRpm);
         let thrustAcc = 0;
-        if (uBody < propTargetSpd) {
+        if (uBody < propTargetSpd && propTargetSpd > 0.5) {
           const slipRatio = (propTargetSpd - Math.max(0, uBody)) / Math.max(4.0, propTargetSpd);
-          thrustAcc = this.motorRpm * cfg.maxThrustAcc * invWingLoad * (0.38 + 0.62 * slipRatio);
+          thrustAcc = this.motorRpm * cfg.maxThrustAcc * invWingLoad * Math.min(1.0, 1.55 * slipRatio);
         } else {
           thrustAcc = -0.22 * (uBody - propTargetSpd) * (1.0 - 0.45 * this.motorRpm) * invWingLoad;
         }
@@ -7982,13 +8086,7 @@
       for (let mz = 0; mz < SKY_DIM; mz++) {
         const zOff = mz << SKY_SHIFT;
         for (let mx = 0; mx < SKY_DIM; mx++) {
-          const cn = fbmCloud(mx, mz);
-          const cloudDensity = Math.max(0, Math.min(1, (cn - 0.06) * 1.9));
-          const cSmooth = cloudDensity * cloudDensity * (3 - 2 * cloudDensity);
-          const sr = 32 * (1 - cSmooth) + 250 * cSmooth;
-          const sg = 96 * (1 - cSmooth) + 252 * cSmooth;
-          const sb = 192 * (1 - cSmooth) + 255 * cSmooth;
-          voxSkyMap[zOff + mx] = rgb565(clampByte(sr), clampByte(sg), clampByte(sb));
+          voxSkyMap[zOff + mx] = evalSkyCloudColor565(mx, mz, [32, 96, 192], [250, 252, 255]);
         }
       }
 
@@ -9345,13 +9443,7 @@
       for (let mz = 0; mz < SKY_DIM; mz++) {
         const zOff = mz << SKY_SHIFT;
         for (let mx = 0; mx < SKY_DIM; mx++) {
-          const cn = fbmCloud(mx, mz);
-          const cloudDensity = Math.max(0, Math.min(1, (cn - 0.08) * 1.8));
-          const cSmooth = cloudDensity * cloudDensity * (3 - 2 * cloudDensity);
-          const sr = 38 * (1 - cSmooth) + 248 * cSmooth;
-          const sg = 88 * (1 - cSmooth) + 250 * cSmooth;
-          const sb = 178 * (1 - cSmooth) + 254 * cSmooth;
-          voxSkyMap[zOff + mx] = rgb565(clampByte(sr), clampByte(sg), clampByte(sb));
+          voxSkyMap[zOff + mx] = evalSkyCloudColor565(mx, mz, [38, 88, 178], [248, 250, 254]);
         }
       }
 
@@ -10549,13 +10641,7 @@
       for (let mz = 0; mz < SKY_DIM; mz++) {
         const zOff = mz << SKY_SHIFT;
         for (let mx = 0; mx < SKY_DIM; mx++) {
-          const cn = fbmCloud(mx, mz);
-          const cloudDensity = Math.max(0, Math.min(1, (cn - 0.10) * 1.7));
-          const cSmooth = cloudDensity * cloudDensity * (3 - 2 * cloudDensity);
-          const sr = cmap.skyZen[0] * (1 - cSmooth) + cmap.skyCloud[0] * cSmooth;
-          const sg = cmap.skyZen[1] * (1 - cSmooth) + cmap.skyCloud[1] * cSmooth;
-          const sb = cmap.skyZen[2] * (1 - cSmooth) + cmap.skyCloud[2] * cSmooth;
-          voxSkyMap[zOff + mx] = rgb565(clampByte(sr), clampByte(sg), clampByte(sb));
+          voxSkyMap[zOff + mx] = evalSkyCloudColor565(mx, mz, cmap.skyZen, cmap.skyCloud);
         }
       }
 
@@ -12112,7 +12198,7 @@
         drawInavCircleDot320(dotX, dotY, 3, NIN565.GOLD);
 
         drawInavText320(`${Math.abs(liveRateDeg)} D/S`, gx0 + 8, gy0 + 124, NIN565.GOLD);
-        drawOsdSmall320(isDroneTab ? `TWR: ${(d.maxThrustAcc / 9.81).toFixed(1)}:1` : `STALL: ${(8.8 * Math.sqrt(w.wingLoad)).toFixed(1)}M/S`, gx0 + 8, gy0 + 141, NIN565.WHITE);
+        drawOsdSmall320(isDroneTab ? `TWR: ${(d.maxThrustAcc / 9.81).toFixed(1)}:1` : `STALL: ${Math.round(8.33 * Math.sqrt(w.wingLoad) * 3.6)}KM/H`, gx0 + 8, gy0 + 141, NIN565.WHITE);
         drawOsdSmall320('TEST RIGHT STICK', gx0 + 8, gy0 + 155, NIN565.GREEN);
       }
 
