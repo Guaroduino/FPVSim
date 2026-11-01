@@ -722,7 +722,7 @@
   <div id="mapEditorModal" class="map-editor-modal">
     <div class="me-header">
       <div class="me-title">
-        <span>🗺️ EDITOR SATELITAL CHOROBOBO (7.26×4.84 KM / 1.82×1.21 KM / 787×524 M)</span>
+        <span>🗺️ EDITOR SATELITAL CHOROBOBO (8.71×5.81 KM / 2.18×1.45 KM / 944×629 M)</span>
         <span id="meStatsBadge" style="font-size:11px;color:#98a4b8;font-weight:600;"></span>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
@@ -950,9 +950,9 @@
           <div class="me-row">
             <span>Mapa:</span>
             <select id="meSelMapTheme" style="flex:1;">
-              <option value="0">CHOROBOBO HD (1.82×1.21km)</option>
-              <option value="5">CHORO PARK (787×524m)</option>
-              <option value="9">CHOROBOBO LR (7.26×4.84km)</option>
+              <option value="0">CHOROBOBO HD (2.18×1.45km)</option>
+              <option value="5">CHORO PARK (944×629m)</option>
+              <option value="9">CHOROBOBO LR (8.71×5.81km)</option>
               <option value="1">BANDO EDIFICIO (500×360m)</option>
               <option value="2">COMANCHE 3 CANYON (2.8×2.0km)</option>
               <option value="3">ALPES CUMBRES (3.2×2.2km)</option>
@@ -963,9 +963,9 @@
             </select>
           </div>
           <div style="display:flex;gap:4px;">
-            <button class="me-btn" data-me-scale="5" style="flex:1;">PARK 787×524m</button>
-            <button class="me-btn active" data-me-scale="0" style="flex:1;">HD 1.82×1.21km</button>
-            <button class="me-btn" data-me-scale="9" style="flex:1;">LR 7.26×4.84km</button>
+            <button class="me-btn" data-me-scale="5" style="flex:1;">PARK 944×629m</button>
+            <button class="me-btn active" data-me-scale="0" style="flex:1;">HD 2.18×1.45km</button>
+            <button class="me-btn" data-me-scale="9" style="flex:1;">LR 8.71×5.81km</button>
           </div>
           <small style="color:#98a4b8;line-height:1.35;">
             💡 Las 3 escalas de <b>Chorobobo</b> comparten sus circuitos y sprites sobre <b>chorobobo.jpg</b>. Los demás mapas tienen sus propios circuitos y sprites independientes.
@@ -2247,10 +2247,10 @@
     const MAP_MASK_X   = 2047;
     const MAP_MASK_Z   = 1023;
     const MAP_SHIFT_X  = 11;           // mz << 11 == mz * 2048
-    let   WORLD_W_M    = 1815.0;       // Escala activa Este-Oeste (1.815 km en Chorobobo HD / 786.5m en Park / 7.26 km en Chorobobo LR)
-    let   WORLD_H_M    = 1210.0;       // Escala activa Norte-Sur  (1.21 km en Chorobobo HD / 532.4m en Park / 4.84 km en Chorobobo LR)
-    let   MAP_SCALE_X  = MAP_W / WORLD_W_M; // 1.128375 texels/m en 1.815x1.21km (0.89m/voxel) | 0.282094 en 7.26x4.84km (3.54m/voxel)
-    let   MAP_SCALE_Z  = MAP_H / WORLD_H_M; // 0.846281 texels/m en 1.815x1.21km (1.18m/voxel) | 0.211570 en 7.26x4.84km (4.73m/voxel)
+    let   WORLD_W_M    = 2178.0;       // Escala activa Este-Oeste (2.178 km en Chorobobo HD / 943.8m en Park / 8.712 km en Chorobobo LR)
+    let   WORLD_H_M    = 1452.0;       // Escala activa Norte-Sur  (1.452 km en Chorobobo HD / 629.2m en Park / 5.808 km en Chorobobo LR)
+    let   MAP_SCALE_X  = MAP_W / WORLD_W_M; // 0.940312 texels/m en 2.178x1.452km (1.06m/voxel) | 0.235078 en 8.712x5.808km (4.25m/voxel)
+    let   MAP_SCALE_Z  = MAP_H / WORLD_H_M; // 0.705234 texels/m en 2.178x1.452km (1.42m/voxel) | 0.176309 en 8.712x5.808km (5.67m/voxel)
     let   HEIGHT_SCALE = 0.125;        // Escala vertical por unidad uint8 (0.125m en pistas planas, hasta 0.42m = 105m en alta montaña Comanche 3)
 
     // Coordenada exacta de la Pista Aeromodelismo A.I.A Chorobobo en el ortomosaico (chorobobo.jpg)
@@ -2262,8 +2262,8 @@
     const SPAWN_MZ       = 650;          // mz = (1 - 0.365) * 1024 (Norte hacia +wz)
     const SPAWN_U        = SPAWN_MX / MAP_W;
     const SPAWN_V        = 1.0 - (SPAWN_MZ / MAP_H);
-    const CHORO_FULL_W_M = 7260.0;       // Ancho físico de referencia (Este-Oeste) en escala LR (7.26 km = 1.1x adicional)
-    const CHORO_FULL_H_M = 4840.0;       // Alto físico de referencia (Norte-Sur) en escala LR (4.84 km = 1.1x adicional)
+    const CHORO_FULL_W_M = 8712.0;       // Ancho físico de referencia (Este-Oeste) en escala LR (8.712 km = 1.2x adicional)
+    const CHORO_FULL_H_M = 5808.0;       // Alto físico de referencia (Norte-Sur) en escala LR (5.808 km = 1.2x adicional)
     var   isChoroboboThemeActive = true; // Activo cuando el mapa actual es Chorobobo (PARK, HD o LR)
 
     // Posición configurable por compatibilidad JSON
@@ -2742,10 +2742,10 @@
     var TERRAIN_THEMES = [
       {
         id: 'chorobobo_hd',
-        name: 'CHOROBOBO HD 1.82KM',
+        name: 'CHOROBOBO HD 2.18KM',
         isChorobobo: true,
-        worldW: 1815.0,
-        worldH: 1210.0,
+        worldW: 2178.0,
+        worldH: 1452.0,
         hScale: 0.125,
         skyZenith:  [44, 92, 178],
         skyHorizon: [166, 198, 228],
@@ -2821,10 +2821,10 @@
       },
       {
         id: 'chorobobo_park',
-        name: 'CHORO PARK 787M',
+        name: 'CHORO PARK 944M',
         isChorobobo: true,
-        worldW: 786.5,
-        worldH: 524.33,
+        worldW: 943.8,
+        worldH: 629.2,
         hScale: 0.125,
         skyZenith:  [38, 88, 182],
         skyHorizon: [162, 198, 230],
@@ -2884,10 +2884,10 @@
       },
       {
         id: 'chorobobo',
-        name: 'CHOROBOBO LR 7.26X4.84KM',
+        name: 'CHOROBOBO LR 8.71X5.81KM',
         isChorobobo: true,
-        worldW: 7260.0,
-        worldH: 4840.0,
+        worldW: 8712.0,
+        worldH: 5808.0,
         hScale: 0.125,
         skyZenith:  [44, 92, 178],
         skyHorizon: [166, 198, 228],
@@ -2952,13 +2952,13 @@
       }
 
       // Actualizar dimensiones físicas del mundo, escala vertical y resolución por voxel
-      WORLD_W_M    = theme.worldW || 1815.0;
-      WORLD_H_M    = theme.worldH || 1210.0;
+      WORLD_W_M    = theme.worldW || 2178.0;
+      WORLD_H_M    = theme.worldH || 1452.0;
       HEIGHT_SCALE = theme.hScale || 0.125;
       MAP_SCALE_X  = MAP_W / WORLD_W_M;
       MAP_SCALE_Z  = MAP_H / WORLD_H_M;
 
-      // Si cambia entre las 3 escalas de Chorobobo (PARK 786.5x524.3m / HD 1815x1210m / LR 7260x4840m), escalar (px, pz) y altura AGL para conservar exactamente la misma vista y proporción sobre chorobobo.jpg
+      // Si cambia entre las 3 escalas de Chorobobo (PARK 943.8x629.2m / HD 2178x1452m / LR 8712x5808m), escalar (px, pz) y altura AGL para conservar exactamente la misma vista y proporción sobre chorobobo.jpg
       if (wasFpvMap && prevGroupKey === newGroupKey && prevWorldW !== WORLD_W_M && typeof fpvDroneSim !== 'undefined' && typeof fpvWingSim !== 'undefined') {
         const ratioX = WORLD_W_M / prevWorldW;
         const ratioZ = WORLD_H_M / prevWorldH;
@@ -4842,11 +4842,10 @@
       const tid = curTheme.id;
 
       // 1. EDIFICIOS Y SPRITES PROPIOS DEL MAPA ACTIVO:
-      //    En Chorobobo (PARK 786.5x524.33m / HD 1815x1210m / LR 7260x4840m), todos los objetos fueron diseñados en CHOROBOBO HD (1815x1210m = 1.0x).
-      //    Escalar uniformemente (w, d, h, roofH) de edificios y (w, h) de sprites por choroScale garantiza que en PARK y LR
-      //    tengan exactamente el mismo tamaño relativo a la ortofoto/pista y proporción 1:1 sin estirarse jamás.
-      const choroScaleX = curTheme.isChorobobo ? (WORLD_W_M / 1815.0) : 1.0;
-      const choroScaleZ = curTheme.isChorobobo ? (WORLD_H_M / 1210.0) : 1.0;
+      //    En Chorobobo (PARK 943.8x629.2m / HD 2178x1452m / LR 8712x5808m), todos los objetos conservan su tamaño físico 1.0x en CHOROBOBO HD (2178x1452m)
+      //    y escalan uniformemente en PARK (0.4333x) y LR (4.0x) sin estirarse jamás.
+      const choroScaleX = curTheme.isChorobobo ? (WORLD_W_M / 2178.0) : 1.0;
+      const choroScaleZ = curTheme.isChorobobo ? (WORLD_H_M / 1452.0) : 1.0;
       const choroScaleY = curTheme.isChorobobo ? choroScaleX : 1.0;
       if (Array.isArray(BUILDING_UV_DEFS)) {
         for (let i = 0; i < BUILDING_UV_DEFS.length; i++) {
@@ -5540,7 +5539,7 @@
       let count = 0;
       visMaxSlot = 0;
       visMaxCz   = 0.0;
-      const distScale = WORLD_W_M > 2400.0 ? (WORLD_W_M / 1815.0) : 1.0;
+      const distScale = WORLD_W_M > 2400.0 ? (WORLD_W_M / 2178.0) : 1.0;
       const maxDistTree = 1900.0 * distScale;
       const maxDistBldg = 1900.0 * distScale;
       const sortCutoffTree = 340.0 * distScale;
@@ -7212,7 +7211,7 @@
           const rad  = ((Number(CHOROBOBO_SPAWN_DEF.hdgDeg) || 0) * Math.PI) / 180.0;
           const fx0  = Math.cos(rad);
           const fz0  = -Math.sin(rad);
-          const choroAltScale = (TERRAIN_THEMES[currentThemeIdx] && TERRAIN_THEMES[currentThemeIdx].isChorobobo) ? (WORLD_W_M / 1815.0) : 1.0;
+          const choroAltScale = (TERRAIN_THEMES[currentThemeIdx] && TERRAIN_THEMES[currentThemeIdx].isChorobobo) ? (WORLD_W_M / 2178.0) : 1.0;
           this.px = wPos.x;
           this.pz = wPos.z;
           this.py = getTerrainHeightMeters(this.px, this.pz) + Math.max(1.8, (Number(CHOROBOBO_SPAWN_DEF.altM) || 12.0) * choroAltScale);
@@ -7221,7 +7220,7 @@
           this.ux = 0;   this.uy = 1; this.uz = 0;
           this.rx = fz0; this.ry = 0; this.rz = -fx0;
         } else {
-          const spawnBack = WORLD_W_M <= 2000.0 ? 22.0 : 35.0;
+          const spawnBack = WORLD_W_M <= 2400.0 ? 22.0 : 35.0;
           this.px = g0.x - g0.tx * spawnBack;
           this.pz = g0.z - g0.tz * spawnBack;
           this.py = getTerrainHeightMeters(this.px, this.pz) + g0.y;
@@ -7559,13 +7558,13 @@
           dirTz = -Math.sin(rad);
           dirNx = dirTz;
           dirNz = -dirTx;
-          const choroAltScale = (TERRAIN_THEMES[currentThemeIdx] && TERRAIN_THEMES[currentThemeIdx].isChorobobo) ? (WORLD_W_M / 1815.0) : 1.0;
+          const choroAltScale = (TERRAIN_THEMES[currentThemeIdx] && TERRAIN_THEMES[currentThemeIdx].isChorobobo) ? (WORLD_W_M / 2178.0) : 1.0;
           this.px = wPos.x;
           this.pz = wPos.z;
           const groundH = getTerrainHeightMeters(this.px, this.pz);
           this.py = groundH + Math.max(1.75, (Number(CHOROBOBO_SPAWN_DEF.altM) || 12.0) * choroAltScale);
         } else {
-          const spawnBack = WORLD_W_M <= 2000.0 ? 28.0 : 42.0;
+          const spawnBack = WORLD_W_M <= 2400.0 ? 28.0 : 42.0;
           this.px = g0.x - g0.tx * spawnBack;
           this.pz = g0.z - g0.tz * spawnBack;
           // Lanzamiento a mano (Hand-Launch) desde altura de hombro (1.75 m sobre el suelo)
@@ -12944,8 +12943,8 @@
         }
 
         // 3. Dibujar Árboles / Sprites personalizados puestos a mano (con Frustum Culling 2D y escala uniforme 1:1 en las 3 escalas de Chorobobo)
-        const choroMapScaleX = curTheme.isChorobobo ? (WORLD_W_M / 1815.0) : 1.0;
-        const choroMapScaleZ = curTheme.isChorobobo ? (WORLD_H_M / 1210.0) : 1.0;
+        const choroMapScaleX = curTheme.isChorobobo ? (WORLD_W_M / 2178.0) : 1.0;
+        const choroMapScaleZ = curTheme.isChorobobo ? (WORLD_H_M / 1452.0) : 1.0;
         const uViewMin = (-8 - vb.ox) / vb.drawW;
         const uViewMax = (canvas.width + 8 - vb.ox) / vb.drawW;
         const vViewMin = (-8 - vb.oy) / vb.drawH;
@@ -13336,7 +13335,7 @@
       function applySpawnDefToActiveCraft() {
         const wPos = uvToWorld(CHOROBOBO_SPAWN_DEF.u, CHOROBOBO_SPAWN_DEF.v);
         const hFloor = getTerrainHeightMeters(wPos.x, wPos.z);
-        const choroAltScale = (TERRAIN_THEMES[currentThemeIdx] && TERRAIN_THEMES[currentThemeIdx].isChorobobo) ? (WORLD_W_M / 1815.0) : 1.0;
+        const choroAltScale = (TERRAIN_THEMES[currentThemeIdx] && TERRAIN_THEMES[currentThemeIdx].isChorobobo) ? (WORLD_W_M / 2178.0) : 1.0;
         const altRel = Math.max(1.8, (Number(CHOROBOBO_SPAWN_DEF.altM) || 12.0) * choroAltScale);
         const rad = ((Number(CHOROBOBO_SPAWN_DEF.hdgDeg) || 0) * Math.PI) / 180.0;
         const fx = Math.cos(rad);
@@ -13494,8 +13493,8 @@
             const rect = compute3PtBldgRect(p1, p2, { u: uv.u, v: uv.v, x: wPos.x, z: wPos.z });
             const kind = document.getElementById('meSelBldgKind').value || 'standard';
             const curTh = TERRAIN_THEMES[currentThemeIdx] || TERRAIN_THEMES[0];
-            const bScaleX = curTh.isChorobobo ? (WORLD_W_M / 1815.0) : 1.0;
-            const bScaleZ = curTh.isChorobobo ? (WORLD_H_M / 1210.0) : 1.0;
+            const bScaleX = curTh.isChorobobo ? (WORLD_W_M / 2178.0) : 1.0;
+            const bScaleZ = curTh.isChorobobo ? (WORLD_H_M / 1452.0) : 1.0;
             const w = Math.max(2, Math.min(120, Math.round(rect.wMeters / bScaleX)));
             const d = Math.max(2, Math.min(120, Math.round(rect.dMeters / bScaleZ)));
             const h = Number(document.getElementById('meRngBldgH').value) || 4.8;
