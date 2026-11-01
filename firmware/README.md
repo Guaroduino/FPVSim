@@ -17,16 +17,18 @@ pio run -t upload
 pio device monitor
 ```
 
-## 🧠 Arquitectura de Memoria y Paridad (AGENTS.md)
+## 🧠 Arquitectura de Render y Memoria (objetivo 48 FPS con SPI a 60 MHz)
 
-- **SRAM Interna (`MALLOC_CAP_INTERNAL`)**:
-  - `vram565`: `320 × 240 × 2 = 153,600 B` (`150 KB` con `MALLOC_CAP_DMA` para transferencia SPI2 DMA a 60 MHz).
-  - `voxBuf`: `256 × 256 × 2 = 131,072 B` (`128 KB` para el raycaster vertical des-rotado).
-  - `OSD_SMALL_ROM` y tablas LUT en punto fijo `Int32` (`RAY_S_Q8`, `BASE_V_Q8`, `PROJ_SCALE_Q8`, `CLOUD_DIST_Q8`): `< 9 KB`.
-- **PSRAM Octal (`MALLOC_CAP_SPIRAM`, 8 MB a 80 MHz)**:
-  - `voxHeight`: `2048 × 1024 × 1 = 2.0 MB`.
-  - `voxColor`: `2048 × 1024 × 2 = 4.0 MB`.
-  - `voxSkyMap`: `512 × 512 × 2 = 0.5 MB`.
+- **Doble framebuffer en PSRAM** (`fbPsram[2]`, 2 × 150 KB): el Core 1 dibuja el frame N+1 mientras la tarea de pantalla (Core 0) envía el frame N.
+- **Envío por bandas DMA**: la tarea de pantalla copia el frame de PSRAM a 2 bandas de 320×40 en SRAM (`dmaBand[2]`, 2 × 25 KB) invirtiendo los bytes (el ILI9341 espera RGB565 big-endian) y las manda por DMA en ping-pong. La copia de una banda se solapa con la transmisión de la anterior.
+- **Raycast en los dos núcleos**: columnas pares en el Core 1, impares en el Core 0 (`RAY_DUAL_CORE`, compílalo con `-DRAY_DUAL_CORE=0` para comparar).
+- **Física a paso fijo 240 Hz** con acumulador: el vuelo se comporta igual a cualquier fps (igual que el simulador web).
+- **Mapas PSRAM en bloques tileados 8×8** (`voxTileIdx`), mismo formato que el simulador web.
+- **SRAM interna**: `voxBuf` 128 KB + bandas DMA 50 KB + LUTs. **PSRAM**: framebuffers 300 KB + `voxHeight` 2 MB + `voxColor` 4 MB + `voxSkyMap` 0.5 MB.
+
+## ⏱️ Medición por Etapa
+
+Pulsa **`SELECT`** para ver en pantalla los tiempos del último frame: raycast de cada núcleo, blit, OSD, entradas, física, espera del bus SPI y duración del DMA. Los mismos datos salen cada 2 s por el monitor serie (`[FRAME] ...`). Si `ESPERA SPI` es alta, el límite es el bus de la pantalla; si `RAY`/`BLIT` suman más de ~20 ms, el límite es el CPU.
 
 ## 🛠️ Modo de Prueba de Soldadura y Hardware (`SELECT`)
 

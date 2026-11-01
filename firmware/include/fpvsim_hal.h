@@ -65,6 +65,9 @@ constexpr int SKY_DIM    = 512;
 constexpr int SKY_MASK   = 511;
 constexpr int SKY_SHIFT  = 9;   // cmz << 9 == cmz * 512
 
+// Bandas de transferencia DMA (SRAM interna): 240 / 40 = 6 bandas por frame
+constexpr int DMA_BAND_H = 40;
+
 static inline constexpr uint16_t rgb565(uint8_t r, uint8_t g, uint8_t b) {
   return ((uint16_t)(r & 0xF8) << 8) | ((uint16_t)(g & 0xFC) << 3) | ((uint16_t)(b & 0xF8) >> 3);
 }
@@ -165,14 +168,25 @@ public:
 // ============================================================================
 extern LGFX_RetroGo tft;
 
-// SRAM Interna (MALLOC_CAP_INTERNAL): Acceso aleatorio por columna y DMA
-extern uint16_t* vram565;   // 320 * 240 * 2 = 153,600 B (150 KB SRAM DMA)
-extern uint16_t* voxBuf;    // 256 * 256 * 2 = 131,072 B (128 KB SRAM)
+// Doble framebuffer completo en PSRAM Octal (2 x 150 KB): el núcleo de render dibuja
+// en el buffer trasero mientras la tarea de pantalla envía el delantero por DMA en bandas.
+// vram565 apunta siempre al buffer trasero del frame en curso (RGB565 nativo little-endian).
+extern uint16_t* fbPsram[2];  // 2 * 320 * 240 * 2 = 300 KB PSRAM
+extern uint16_t* vram565;     // = fbPsram[backIdx]
 
-// PSRAM Octal (MALLOC_CAP_SPIRAM): 6.5 MB de los 8.0 MB disponibles
+// SRAM Interna (MALLOC_CAP_INTERNAL): acceso aleatorio por columna y DMA
+extern uint16_t* voxBuf;      // 256 * 256 * 2 = 131,072 B (128 KB SRAM)
+extern uint16_t* dmaBand[2];  // 2 * 320 * DMA_BAND_H * 2 B (ping-pong DMA en SRAM)
+
+// PSRAM Octal (MALLOC_CAP_SPIRAM): mapas en bloques tileados 8x8 (igual que el simulador web)
 extern uint8_t*  voxHeight; // 2048 * 1024 * 1 = 2.0 MB PSRAM
 extern uint16_t* voxColor;  // 2048 * 1024 * 2 = 4.0 MB PSRAM
 extern uint16_t* voxSkyMap; //  512 *  512 * 2 = 0.5 MB PSRAM
+
+// Índice tileado 8x8 de los mapas PSRAM (idéntico a VOX_TILE_Z_LUT[mz] | VOX_TILE_X_LUT[mx] del web)
+static inline uint32_t voxTileIdx(uint32_t mx, uint32_t mz) {
+  return ((mz >> 3) << 14) | ((mx >> 3) << 6) | ((mz & 7u) << 3) | (mx & 7u);
+}
 
 // ROM de Glifos OSD de 2 bits pre-bordeados estilo MAX7456 en SRAM Interna
 constexpr int OSD_SM_W = 5;
@@ -208,6 +222,20 @@ struct HwInputState {
 };
 
 extern HwInputState hwInput;
+
+// ============================================================================
+// 5B. MEDICIÓN POR ETAPA (microsegundos, último frame) — visible con SELECT
+// ============================================================================
+struct FrameStats {
+  uint32_t inputUs = 0, physicsUs = 0;
+  uint32_t rayCore1Us = 0, rayCore0Us = 0;
+  uint32_t blitUs = 0, overlayUs = 0;
+  uint32_t waitDisplayUs = 0;   // tiempo que el render esperó a que la pantalla quedara libre
+  uint32_t displayPushUs = 0;   // duración de la transferencia DMA completa del último frame
+  uint32_t frameUs = 0;
+  int      physicsSteps = 0;
+};
+extern FrameStats frameStats;
 
 // ============================================================================
 // 6. PRIMITIVAS DE DIBUJO EN VRAM565 Y TEXTO 2-BIT MAX7456 (1 SOLA PASADA)
