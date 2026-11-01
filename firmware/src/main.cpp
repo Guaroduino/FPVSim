@@ -1,19 +1,27 @@
 #include "fpvsim_hal.h"
 #include <stdio.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <freertos/semphr.h>
+#include <esp_timer.h>
 
 // ============================================================================
-// 1. BUFFERS GLOBALES (SRAM INTERNA DMA vs PSRAM OCTAL 8MB)
+// 1. BUFFERS GLOBALES (SRAM INTERNA vs PSRAM OCTAL 8MB)
 // ============================================================================
 LGFX_RetroGo tft;
 
-uint16_t* vram565   = nullptr; // 150 KB en SRAM Interna (DMA)
-uint16_t* voxBuf    = nullptr; // 128 KB en SRAM Interna (Raycasting vertical)
-uint8_t*  voxHeight = nullptr; // 2.0 MB en PSRAM Octal (Alturas 2048x1024)
-uint16_t* voxColor  = nullptr; // 4.0 MB en PSRAM Octal (Color RGB565 2048x1024)
-uint16_t* voxSkyMap = nullptr; // 0.5 MB en PSRAM Octal (Domo de Cielo 512x512)
+uint16_t* fbPsram[2] = { nullptr, nullptr }; // 2 x 150 KB en PSRAM (doble framebuffer)
+uint16_t* vram565    = nullptr;              // Apunta al buffer trasero del frame en curso
+uint16_t* dmaBand[2] = { nullptr, nullptr }; // 2 x 12.5 KB en SRAM DMA (bandas ping-pong)
+uint16_t* voxBuf     = nullptr; // 128 KB en SRAM Interna (Raycasting vertical)
+uint8_t*  voxHeight  = nullptr; // 2.0 MB en PSRAM Octal (Alturas 2048x1024, tiles 8x8)
+uint16_t* voxColor   = nullptr; // 4.0 MB en PSRAM Octal (Color RGB565 2048x1024, tiles 8x8)
+uint16_t* voxSkyMap  = nullptr; // 0.5 MB en PSRAM Octal (Domo de Cielo 512x512)
 
 uint8_t OSD_SMALL_ROM[128 * OSD_SM_W * OSD_SM_H];
 HwInputState hwInput;
+FrameStats   frameStats;
+
 
 // ============================================================================
 // 2. FUENTE BASE 3x5 Y COMPILADOR DE GLIFOS 2-BIT ESTILO MAX7456 (AGENTS.md #3)
@@ -192,6 +200,11 @@ void halCalibrateSticksCenter() {
   hwInput.centerRY = (int)(sumRY >> 4);
 }
 
+
+// Touch leído por la tarea de pantalla (dueña única del objeto tft) para no compartir el bus entre núcleos
+static volatile bool    touchDownShared = false;
+static volatile int16_t touchXShared = 0, touchYShared = 0;
+
 void halPollInputs() {
   hwInput.prevSelect = hwInput.select;
   hwInput.prevMenu   = hwInput.menu;
@@ -233,25 +246,37 @@ void halPollInputs() {
     hwInput.ly = (hwInput.up ? 0.75f : 0.0f) - (hwInput.down ? 0.75f : 0.0f);
   }
 
-  // 3. Lectura del panel Touch Capacitivo FT6336U
-  uint16_t tx = 0, ty = 0;
-  hwInput.touchDown = tft.getTouch(&tx, &ty);
+  // 3. Touch FT6336U: último valor leído por la tarea de pantalla (sin I2C bloqueante aquí)
+  hwInput.touchDown = touchDownShared;
   if (hwInput.touchDown) {
-    hwInput.touchX = (int16_t)tx;
-    hwInput.touchY = (int16_t)ty;
+    hwInput.touchX = touchXShared;
+    hwInput.touchY = touchYShared;
   }
 }
 
 bool halInitConsole() {
-  vram565   = (uint16_t*)heap_caps_malloc(DISP_W * DISP_H * sizeof(uint16_t), MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
-  voxBuf    = (uint16_t*)heap_caps_malloc(VOX_W * VOX_H * sizeof(uint16_t),   MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-  voxHeight = (uint8_t*) heap_caps_malloc(MAP_W * MAP_H * sizeof(uint8_t),    MALLOC_CAP_SPIRAM);
-  voxColor  = (uint16_t*)heap_caps_malloc(MAP_W * MAP_H * sizeof(uint16_t),   MALLOC_CAP_SPIRAM);
-  voxSkyMap = (uint16_t*)heap_caps_malloc(SKY_DIM * SKY_DIM * sizeof(uint16_t), MALLOC_CAP_SPIRAM);
+  // PSRAM: doble framebuffer + mapas. SRAM: voxBuf + bandas DMA.
+  fbPsram[0] = (uint16_t*)heap_caps_malloc(DISP_W * DISP_H * sizeof(uint16_t), MALLOC_CAP_SPIRAM);
+  fbPsram[1] = (uint16_t*)heap_caps_malloc(DISP_W * DISP_H * sizeof(uint16_t), MALLOC_CAP_SPIRAM);
+  dmaBand[0] = (uint16_t*)heap_caps_malloc(DISP_W * DMA_BAND_H * sizeof(uint16_t), MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
+  dmaBand[1] = (uint16_t*)heap_caps_malloc(DISP_W * DMA_BAND_H * sizeof(uint16_t), MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
+  voxBuf     = (uint16_t*)heap_caps_malloc(VOX_W * VOX_H * sizeof(uint16_t),     MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  voxHeight  = (uint8_t*) heap_caps_malloc(MAP_W * MAP_H * sizeof(uint8_t),      MALLOC_CAP_SPIRAM);
+  voxColor   = (uint16_t*)heap_caps_malloc(MAP_W * MAP_H * sizeof(uint16_t),     MALLOC_CAP_SPIRAM);
+  voxSkyMap  = (uint16_t*)heap_caps_malloc(SKY_DIM * SKY_DIM * sizeof(uint16_t), MALLOC_CAP_SPIRAM);
 
-  if (!vram565 || !voxBuf || !voxHeight || !voxColor || !voxSkyMap) {
+  Serial.printf("[MEM] SRAM libre: %u B (bloque max %u B) | PSRAM libre: %u B\n",
+    (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+    (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL),
+    (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+
+  if (!fbPsram[0] || !fbPsram[1] || !dmaBand[0] || !dmaBand[1] ||
+      !voxBuf || !voxHeight || !voxColor || !voxSkyMap) {
     return false;
   }
+  memset(fbPsram[0], 0, DISP_W * DISP_H * sizeof(uint16_t));
+  memset(fbPsram[1], 0, DISP_W * DISP_H * sizeof(uint16_t));
+  vram565 = fbPsram[0];
 
   analogReadResolution(12);
   analogSetPinAttenuation(PIN_ADC_LX, ADC_11db);
@@ -274,8 +299,79 @@ bool halInitConsole() {
 }
 
 // ============================================================================
-// 5. MOTOR VOXEL COMANCHE EN PUNTO FIJO INT32 (AGENTS.md Regla 2)
-//    Cero divisiones flotantes o funciones trascendentales en bucles de rayos/píxeles
+// 4B. TAREA DE PANTALLA (Core 0): envía el framebuffer delantero en bandas DMA
+//     mientras el Core 1 dibuja el siguiente frame en el framebuffer trasero.
+//     Copia PSRAM -> SRAM con swap de bytes (el ILI9341 espera RGB565 big-endian),
+//     así el DMA envía las bandas tal cual, sin conversión por CPU en LovyanGFX.
+// ============================================================================
+static SemaphoreHandle_t semFrameReady   = nullptr; // render -> pantalla: hay frame nuevo
+static SemaphoreHandle_t semDisplayIdle  = nullptr; // pantalla -> render: buffer delantero libre
+static volatile int      frontIdx        = 0;
+
+static inline void copyBandSwapped(uint16_t* dst, const uint16_t* src, int pixels) {
+  const uint32_t* s32 = (const uint32_t*)src;
+  uint32_t*       d32 = (uint32_t*)dst;
+  const int words = pixels >> 1;
+  for (int i = 0; i < words; i++) {
+    const uint32_t w = s32[i];
+    d32[i] = ((w & 0x00FF00FFu) << 8) | ((w >> 8) & 0x00FF00FFu);
+  }
+}
+
+static void displayTask(void*) {
+  constexpr int BAND_PX   = DISP_W * DMA_BAND_H;
+  constexpr int NUM_BANDS = DISP_H / DMA_BAND_H;
+  for (;;) {
+    xSemaphoreTake(semFrameReady, portMAX_DELAY);
+    const uint32_t t0 = (uint32_t)esp_timer_get_time();
+    const uint16_t* src = fbPsram[frontIdx];
+
+    tft.startWrite();
+    tft.setAddrWindow(0, 0, DISP_W, DISP_H);
+    for (int b = 0; b < NUM_BANDS; b++) {
+      uint16_t* band = dmaBand[b & 1];
+      copyBandSwapped(band, src + b * BAND_PX, BAND_PX); // se solapa con el DMA de la banda anterior
+      // Esperar a que la banda anterior termine de salir cediendo el Core 0 al raycast (sin busy-wait)
+      while (tft.dmaBusy()) taskYIELD();
+      tft.pushPixelsDMA((const uint16_t*)band, BAND_PX, false); // false = datos ya en big-endian
+    }
+    tft.waitDMA();
+    tft.endWrite();
+
+    // Touch FT6336U por I2C (fuera del bucle de render del Core 1)
+    uint16_t tx = 0, ty = 0;
+    const bool down = tft.getTouch(&tx, &ty);
+    touchDownShared = down;
+    if (down) { touchXShared = (int16_t)tx; touchYShared = (int16_t)ty; }
+
+    frameStats.displayPushUs = (uint32_t)esp_timer_get_time() - t0;
+    xSemaphoreGive(semDisplayIdle);
+  }
+}
+
+static void halStartDisplayTask() {
+  semFrameReady  = xSemaphoreCreateBinary();
+  semDisplayIdle = xSemaphoreCreateBinary();
+  xSemaphoreGive(semDisplayIdle);
+  xTaskCreatePinnedToCore(displayTask, "display", 4096, nullptr, 3, nullptr, 0);
+}
+
+// Entrega el buffer trasero a la pantalla y cambia vram565 al otro buffer.
+// Bloquea solo si la pantalla aún está enviando el frame anterior (límite físico del bus SPI).
+static int backIdx = 0;
+static void halPresentFrame() {
+  const uint32_t t0 = (uint32_t)esp_timer_get_time();
+  xSemaphoreTake(semDisplayIdle, portMAX_DELAY);
+  frameStats.waitDisplayUs = (uint32_t)esp_timer_get_time() - t0;
+  frontIdx = backIdx;
+  xSemaphoreGive(semFrameReady);
+  backIdx ^= 1;
+  vram565 = fbPsram[backIdx];
+}
+
+// ============================================================================
+// 5. MOTOR VOXEL COMANCHE EN PUNTO FIJO (AGENTS.md Regla 2)
+//    Constantes alineadas con el simulador web (index.html → renderVoxelTerrainAndSky)
 // ============================================================================
 constexpr float WORLD_W_M    = 1500.0f;
 constexpr float WORLD_H_M    = 1000.0f;
@@ -286,33 +382,44 @@ constexpr int   SPAWN_MX     = 1198;
 constexpr int   SPAWN_MZ     = 650;
 
 constexpr float FOCAL_240    = 255.0f;
-constexpr float BLIT_SCALE   = 0.635f;
+constexpr float BLIT_SCALE   = 0.795f;   // = web
 constexpr float FOCAL_VOX    = FOCAL_240 * BLIT_SCALE;
 
-// Tablas LUT en SRAM Interna (< 4.5 KB)
-constexpr int NUM_RAY_STEPS = 312;
-static int32_t RAY_S_Q8[NUM_RAY_STEPS];
-static int32_t BASE_V_Q8[NUM_RAY_STEPS];
-static int32_t PROJ_SCALE_Q8[NUM_RAY_STEPS];
-static int32_t CLOUD_DIST_Q8[512];
-static uint8_t MICRO_TEX_LUT[256];
-static float   sinLut512[512];
+// Tablas LUT en SRAM Interna (< 4 KB)
+constexpr int NUM_RAY_STEPS = 220;       // = web
+static int32_t  RAY_S_Q8[NUM_RAY_STEPS];
+static int32_t  BASE_V_Q8[NUM_RAY_STEPS];
+static int32_t  PROJ_SCALE_Q8[NUM_RAY_STEPS];
+static uint8_t  RAY_FOG_LVL[NUM_RAY_STEPS];
+static int32_t  CLOUD_DIST_Q8[512];
+static uint8_t  MICRO_TEX_LUT[256];
+static float    sinLut512[512];
 
 static float lastRollAngle = 0.0f;
 static float cloudDriftX   = 0.0f;
 static uint16_t fogCol565  = rgb565(166, 198, 228);
 
+static inline uint16_t blend565Fog32(uint16_t col, uint16_t fog, int lvl) {
+  if (lvl <= 0) return col;
+  if (lvl >= 32) return fog;
+  const int inv = 32 - lvl;
+  const int r = (((col >> 11) & 31) * inv + ((fog >> 11) & 31) * lvl + 16) >> 5;
+  const int g = (((col >> 5)  & 63) * inv + ((fog >> 5)  & 63) * lvl + 16) >> 5;
+  const int b = (( col        & 31) * inv + ( fog        & 31) * lvl + 16) >> 5;
+  return (uint16_t)((r << 11) | (g << 5) | b);
+}
+
 static void initVoxelFixedPointLutsAndWorld() {
   for (int i = 0; i < 512; i++) {
     sinLut512[i]     = sinf((i * 2.0f * (float)M_PI) / 512.0f);
-    CLOUD_DIST_Q8[i] = (int32_t)lroundf((2400.0f / (float)(i + 10)) * 256.0f);
+    CLOUD_DIST_Q8[i] = (int32_t)lroundf((10800.0f / (float)(i + 34)) * 256.0f); // = web
   }
   for (int i = 0; i < 256; i++) {
     const int h = (i * 73 + (i >> 4) * 37) ^ (i * 29);
     MICRO_TEX_LUT[i] = (uint8_t)(h & 3);
   }
 
-  // 1. Generar Domo de Cielo + Nubes 512x512 en PSRAM Octal
+  // 1. Domo de Cielo + Nubes 512x512 en PSRAM Octal
   for (int mz = 0; mz < SKY_DIM; mz++) {
     const int zOff = mz << SKY_SHIFT;
     for (int mx = 0; mx < SKY_DIM; mx++) {
@@ -329,10 +436,10 @@ static void initVoxelFixedPointLutsAndWorld() {
     }
   }
 
-  // 2. Generar Terreno Voxel 2048x1024 en PSRAM Octal (con Pista A.I.A Chorobobo plana en el centro)
+  // 2. Terreno Voxel 2048x1024 en PSRAM Octal, en bloques tileados 8x8 (una línea de caché por bloque)
   for (int mz = 0; mz < MAP_H; mz++) {
-    const int rowOff = mz << MAP_SHIFT_X;
     for (int mx = 0; mx < MAP_W; mx++) {
+      const uint32_t tIdx = voxTileIdx((uint32_t)mx, (uint32_t)mz);
       const float dxSpawn = (float)(mx - SPAWN_MX);
       const float dzSpawn = (float)(mz - SPAWN_MZ);
       const float distSq  = dxSpawn * dxSpawn + dzSpawn * dzSpawn;
@@ -341,15 +448,13 @@ static void initVoxelFixedPointLutsAndWorld() {
       const float w2 = sinLut512[(mx >> 1) & 511] * sinLut512[((mz >> 1) + 90) & 511];
       float hRaw = 24.0f + w1 * 38.0f + w2 * 18.0f;
 
-      // Aplanar la zona de la pista de aterrizaje cerca de SPAWN_MX, SPAWN_MZ
       if (distSq < 18000.0f) {
         const float flatFactor = distSq / 18000.0f;
         hRaw = 16.0f + (hRaw - 16.0f) * flatFactor;
       }
       if (hRaw < 4.0f) hRaw = 4.0f; else if (hRaw > 220.0f) hRaw = 220.0f;
-      voxHeight[rowOff | mx] = (uint8_t)hRaw;
+      voxHeight[tIdx] = (uint8_t)hRaw;
 
-      // Color de pradera, parcelas agrícolas y pista de asfalto central
       uint8_t r = (uint8_t)(46 + ((int)hRaw >> 2));
       uint8_t g = (uint8_t)(94 + ((int)hRaw >> 2));
       uint8_t b = (uint8_t)(42 + ((int)hRaw >> 3));
@@ -358,15 +463,142 @@ static void initVoxelFixedPointLutsAndWorld() {
       } else if (((mx >> 6) + (mz >> 6)) & 1) {
         r = (uint8_t)(r + 14); g = (uint8_t)(g + 8);
       }
-      voxColor[rowOff | mx] = rgb565(r, g, b);
+      voxColor[tIdx] = rgb565(r, g, b);
     }
   }
 }
 
+static inline float texelHeightM(int mx, int mz) {
+  return voxHeight[voxTileIdx((uint32_t)mx & MAP_MASK_X, (uint32_t)mz & MAP_MASK_Z)] * HEIGHT_SCALE;
+}
+
+// Altura del terreno con interpolación bilineal (sin escalones de 0.125 m para la física)
 static inline float getTerrainHeightMeters(float wx, float wz) {
-  const int mx = ((int)floorf(SPAWN_MX + wx * MAP_SCALE_X)) & MAP_MASK_X;
-  const int mz = ((int)floorf(SPAWN_MZ + wz * MAP_SCALE_Z)) & MAP_MASK_Z;
-  return voxHeight[(mz << MAP_SHIFT_X) | mx] * HEIGHT_SCALE;
+  const float fx = SPAWN_MX + wx * MAP_SCALE_X;
+  const float fz = SPAWN_MZ + wz * MAP_SCALE_Z;
+  const float x0f = floorf(fx), z0f = floorf(fz);
+  const float tx = fx - x0f, tz = fz - z0f;
+  const int x0 = (int)x0f, z0 = (int)z0f;
+  const float h00 = texelHeightM(x0, z0),     h10 = texelHeightM(x0 + 1, z0);
+  const float h01 = texelHeightM(x0, z0 + 1), h11 = texelHeightM(x0 + 1, z0 + 1);
+  const float a = h00 + (h10 - h00) * tx;
+  const float c = h01 + (h11 - h01) * tx;
+  return a + (c - a) * tz;
+}
+
+// Parámetros por frame compartidos entre los dos núcleos durante el raycast
+struct RayFrameParams {
+  int      activeSteps;
+  int      horizonV;
+  int      groundTex;
+  int      microMaxK;
+  float    invFocalVox, dy0_cFy, fH;
+  float    R0x, R0z, H0x, H0z;
+  uint32_t startX_Q19, startZ_Q19;
+  uint32_t skyStartX_Q16, skyStartZ_Q16;
+};
+static RayFrameParams rp;
+
+// Raycast de las columnas u = firstCol, firstCol+2, ... (columnas intercaladas por núcleo)
+// Todas las coordenadas de mapa en uint32_t: el desborde envuelve igual que en JavaScript
+// (ToInt32) y "& MASK" da el mismo texel, sin comportamiento indefinido en C con -O3.
+static void raycastColumns(int firstCol) {
+  const int activeSteps = rp.activeSteps;
+  for (int u = firstCol; u < VOX_W; u += 2) {
+    const float xi0  = (float)(u - 128) * rp.invFocalVox;
+    const float lat0 = xi0 * rp.dy0_cFy;
+    const uint32_t colStartX_Q19 = rp.startX_Q19 + (uint32_t)(int32_t)lroundf(lat0 * rp.R0x * MAP_SCALE_X * 524288.0f);
+    const uint32_t colStartZ_Q19 = rp.startZ_Q19 + (uint32_t)(int32_t)lroundf(lat0 * rp.R0z * MAP_SCALE_Z * 524288.0f);
+
+    const float dirW_X = rp.H0x + (xi0 * rp.fH) * rp.R0x;
+    const float dirW_Z = rp.H0z + (xi0 * rp.fH) * rp.R0z;
+
+    const uint32_t dirX_Q11 = (uint32_t)(int32_t)lroundf(dirW_X * MAP_SCALE_X * 2048.0f);
+    const uint32_t dirZ_Q11 = (uint32_t)(int32_t)lroundf(dirW_Z * MAP_SCALE_Z * 2048.0f);
+    const int32_t  dirWX_Q8 = (int32_t)lroundf(dirW_X * 256.0f);
+    const int32_t  dirWZ_Q8 = (int32_t)lroundf(dirW_Z * 256.0f);
+
+    int yMax = VOX_H;
+
+    for (int k = 0; k < activeSteps && yMax > 0; k++) {
+      const uint32_t sQ8  = (uint32_t)RAY_S_Q8[k];
+      const uint32_t xQ19 = colStartX_Q19 + dirX_Q11 * sQ8;
+      const uint32_t zQ19 = colStartZ_Q19 + dirZ_Q11 * sQ8;
+      const uint32_t mIdx = voxTileIdx((xQ19 >> 19) & MAP_MASK_X, (zQ19 >> 19) & MAP_MASK_Z);
+
+      const int rawDh = (int)voxHeight[mIdx] - rp.groundTex;
+      const int dhTex = k < 16 ? ((rawDh * k) >> 4) : rawDh;
+      const int v     = (BASE_V_Q8[k] - dhTex * PROJ_SCALE_Q8[k]) >> 8;
+
+      if (v < yMax) {
+        const int vTop = v < 0 ? 0 : v;
+        uint16_t col = voxColor[mIdx];
+        if (k < rp.microMaxK) {
+          const int subIdx = (int)(((xQ19 >> 15) & 15) | (((zQ19 >> 15) & 15) << 4));
+          const uint8_t mVal = MICRO_TEX_LUT[subIdx];
+          if (mVal == 2)      col = col - ((col >> 4) & 0x0861u);
+          else if (mVal == 3) col = col + (((col ^ 0xFFFFu) >> 4) & 0x0861u);
+        } else if (activeSteps > 20) {
+          const int dyTerr = vTop - rp.horizonV;
+          const int grazFog = dyTerr < 9 ? ((9 - (dyTerr < 0 ? 0 : dyTerr)) << 1) : 0;
+          const int dFog = RAY_FOG_LVL[k];
+          const int fog32 = (dFog > grazFog ? dFog : grazFog) + ((u ^ vTop) & 1);
+          if (fog32 > 1) col = blend565Fog32(col, fogCol565, fog32 > 22 ? 22 : fog32);
+        }
+        int ptr = (vTop << 8) | u;
+        for (int y = vTop; y < yMax; y++, ptr += VOX_W) {
+          voxBuf[ptr] = col;
+        }
+        yMax = vTop;
+      }
+    }
+
+    // Cielo + Nubes usando LUT entera CLOUD_DIST_Q8 (cero divisiones)
+    if (yMax > 0) {
+      int ptr = u;
+      for (int y = 0; y < yMax; y++, ptr += VOX_W) {
+        const int dyHoriz = rp.horizonV - y;
+        const int lutIdx  = dyHoriz < 1 ? 1 : (dyHoriz < 511 ? dyHoriz : 511);
+        const uint32_t sCloudQ8 = (uint32_t)CLOUD_DIST_Q8[lutIdx];
+        const uint32_t cmx = ((rp.skyStartX_Q16 + (uint32_t)dirWX_Q8 * sCloudQ8) >> 16) & SKY_MASK;
+        const uint32_t cmz = ((rp.skyStartZ_Q16 + (uint32_t)dirWZ_Q8 * sCloudQ8) >> 16) & SKY_MASK;
+        uint16_t skyCol = voxSkyMap[(cmz << SKY_SHIFT) | cmx];
+        if (dyHoriz < 22) {
+          const int skyFog = (22 - (dyHoriz < 0 ? 0 : dyHoriz)) + ((u + y) & 1);
+          skyCol = blend565Fog32(skyCol, fogCol565, skyFog > 24 ? 24 : skyFog);
+        }
+        voxBuf[ptr] = skyCol;
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Worker del Core 0: raycast de columnas impares en paralelo con el Core 1
+// ---------------------------------------------------------------------------
+#ifndef RAY_DUAL_CORE
+#define RAY_DUAL_CORE 1
+#endif
+static SemaphoreHandle_t semRayStart = nullptr;
+static SemaphoreHandle_t semRayDone  = nullptr;
+
+static void rayWorkerTask(void*) {
+  for (;;) {
+    xSemaphoreTake(semRayStart, portMAX_DELAY);
+    const uint32_t t0 = (uint32_t)esp_timer_get_time();
+    raycastColumns(1);
+    frameStats.rayCore0Us = (uint32_t)esp_timer_get_time() - t0;
+    xSemaphoreGive(semRayDone);
+  }
+}
+
+static void startRayWorker() {
+#if RAY_DUAL_CORE
+  semRayStart = xSemaphoreCreateBinary();
+  semRayDone  = xSemaphoreCreateBinary();
+  // Misma prioridad que la tarea de pantalla: comparten el Core 0 por turnos mientras el DMA corre
+  xTaskCreatePinnedToCore(rayWorkerTask, "rayW", 4096, nullptr, 3, nullptr, 0);
+#endif
 }
 
 static void renderVoxelTerrainAndSky(
@@ -376,9 +608,9 @@ static void renderVoxelTerrainAndSky(
   float cFx, float cFy, float cFz,
   float dt
 ) {
-  cloudDriftX = fmodf(cloudDriftX + dt * 1.8f, 512.0f);
+  cloudDriftX = fmodf(cloudDriftX + dt * 4.2f, 512.0f);
 
-  // 1. Extraer ángulo de Roll y base des-rotada (1 sola vez por frame fuera de los bucles)
+  // 1. Ángulo de Roll y base des-rotada (1 sola vez por frame fuera de los bucles)
   const float upMag = hypotf(cRy, cUy);
   if (upMag > 0.04f) {
     lastRollAngle = atan2f(cRy, cUy);
@@ -411,17 +643,20 @@ static void renderVoxelTerrainAndSky(
   const float subPxShift       = (float)horizonV - horizonFloat;
   const int32_t horizonSubPxQ16 = (int32_t)lroundf(subPxShift * 65536.0f);
 
-  // 2. Precalcular intersección por fila (1 vez por frame)
+  // 2. Intersección por fila (1 vez por frame), paso doble en la banda lejana del horizonte (= web)
   const float invFocalVox = 1.0f / FOCAL_VOX;
   const float groundHere  = getTerrainHeightMeters(camX, camZ);
   const int   groundTex   = (int)lroundf(groundHere / HEIGHT_SCALE);
   const float aglHere     = fmaxf(0.6f, camY - groundHere);
   const float dy0         = -aglHere;
-  const int   vBotStart   = aglHere < 24.0f ? 304 : 262;
+  const int   vBotStart   = aglHere < 24.0f ? 292 : 258;
   const int   vTopLim     = horizonV + 1 < 0 ? 0 : (horizonV + 1 > 256 ? 256 : horizonV + 1);
+  const int   vNearCutoff = vTopLim + 38;
+  const float fogStartM   = 1440.0f;
+  const float fogSpanInv  = 22.0f / 2400.0f;
 
   int activeSteps = 0;
-  for (int vRef = vBotStart; vRef >= vTopLim && activeSteps < NUM_RAY_STEPS; vRef--) {
+  for (int vRef = vBotStart; vRef >= vTopLim && activeSteps < NUM_RAY_STEPS; ) {
     const float eta   = (128.0f + subPxShift - (float)vRef) * invFocalVox;
     const float denom = uH - fH * eta;
     if (denom <= 1e-4f) break;
@@ -429,94 +664,50 @@ static void renderVoxelTerrainAndSky(
     float s = num / denom;
     if (s < -12000.0f) s = -12000.0f; else if (s > 12000.0f) s = 12000.0f;
     const float cz = s * fH + dy0 * cFy;
-    if (cz <= 0.20f) continue;
-    RAY_S_Q8[activeSteps]      = (int32_t)lroundf(s * 256.0f);
-    BASE_V_Q8[activeSteps]     = vRef << 8;
-    PROJ_SCALE_Q8[activeSteps] = (int32_t)lroundf(((HEIGHT_SCALE * U0y * FOCAL_VOX) / cz) * 256.0f);
-    activeSteps++;
+    if (cz > 0.20f) {
+      RAY_S_Q8[activeSteps]      = (int32_t)lroundf(s * 256.0f);
+      BASE_V_Q8[activeSteps]     = vRef << 8;
+      PROJ_SCALE_Q8[activeSteps] = (int32_t)lroundf(((HEIGHT_SCALE * U0y * FOCAL_VOX) / cz) * 256.0f);
+      const int distFog = cz > fogStartM ? (int)fminf(22.0f, (cz - fogStartM) * fogSpanInv) : 0;
+      RAY_FOG_LVL[activeSteps]   = (uint8_t)distFog;
+      activeSteps++;
+    }
+    if (vRef > vNearCutoff || vRef == vTopLim + 1) vRef -= 1;
+    else vRef -= 2;
   }
 
-  const int microMaxK = aglHere < 16.0f ? (int)lroundf((16.0f - aglHere) * 5.0f) : 0;
-  const float baseMx  = fmodf(fmodf(SPAWN_MX + camX * MAP_SCALE_X, (float)MAP_W) + (float)MAP_W, (float)MAP_W);
-  const float baseMz  = fmodf(fmodf(SPAWN_MZ + camZ * MAP_SCALE_Z, (float)MAP_H) + (float)MAP_H, (float)MAP_H);
-  const int32_t startX_Q19    = (int32_t)lroundf(baseMx * 524288.0f);
-  const int32_t startZ_Q19    = (int32_t)lroundf(baseMz * 524288.0f);
-  const int32_t skyStartX_Q16 = (int32_t)lroundf((camX * 0.45f + cloudDriftX) * 65536.0f);
-  const int32_t skyStartZ_Q16 = (int32_t)lroundf((camZ * 0.45f) * 65536.0f);
-  const float dy0_cFy         = dy0 * cFy;
+  const float baseMx = fmodf(fmodf(SPAWN_MX + camX * MAP_SCALE_X, (float)MAP_W) + (float)MAP_W, (float)MAP_W);
+  const float baseMz = fmodf(fmodf(SPAWN_MZ + camZ * MAP_SCALE_Z, (float)MAP_H) + (float)MAP_H, (float)MAP_H);
 
-  // 3. Bucle de Raycasting por columna u (0..255): 100% Punto Fijo Int32 y LUTs
-  for (int u = 0; u < VOX_W; u++) {
-    const float xi0  = (float)(u - 128) * invFocalVox;
-    const float lat0 = xi0 * dy0_cFy;
-    const int32_t colStartX_Q19 = startX_Q19 + (int32_t)lroundf(lat0 * R0x * MAP_SCALE_X * 524288.0f);
-    const int32_t colStartZ_Q19 = startZ_Q19 + (int32_t)lroundf(lat0 * R0z * MAP_SCALE_Z * 524288.0f);
+  rp.activeSteps   = activeSteps;
+  rp.horizonV      = horizonV;
+  rp.groundTex     = groundTex;
+  rp.microMaxK     = aglHere < 42.0f ? (int)lroundf((42.0f - aglHere) * 3.4f) : 0;
+  rp.invFocalVox   = invFocalVox;
+  rp.dy0_cFy       = dy0 * cFy;
+  rp.fH            = fH;
+  rp.R0x = R0x; rp.R0z = R0z; rp.H0x = H0x; rp.H0z = H0z;
+  rp.startX_Q19    = (uint32_t)lroundf(baseMx * 524288.0f);
+  rp.startZ_Q19    = (uint32_t)lroundf(baseMz * 524288.0f);
+  rp.skyStartX_Q16 = (uint32_t)(int32_t)lroundf((camX * 0.95f + cloudDriftX) * 65536.0f);
+  rp.skyStartZ_Q16 = (uint32_t)(int32_t)lroundf((camZ * 0.95f) * 65536.0f);
 
-    const float dirW_X = H0x + (xi0 * fH) * R0x;
-    const float dirW_Z = H0z + (xi0 * fH) * R0z;
+  // 3. Raycast repartido: Core 0 columnas impares, Core 1 columnas pares
+  const uint32_t tRay = (uint32_t)esp_timer_get_time();
+#if RAY_DUAL_CORE
+  xSemaphoreGive(semRayStart);
+  raycastColumns(0);
+  frameStats.rayCore1Us = (uint32_t)esp_timer_get_time() - tRay;
+  xSemaphoreTake(semRayDone, portMAX_DELAY);
+#else
+  raycastColumns(0);
+  raycastColumns(1);
+  frameStats.rayCore1Us = (uint32_t)esp_timer_get_time() - tRay;
+  frameStats.rayCore0Us = 0;
+#endif
 
-    const int32_t dirX_Q11 = (int32_t)lroundf(dirW_X * MAP_SCALE_X * 2048.0f);
-    const int32_t dirZ_Q11 = (int32_t)lroundf(dirW_Z * MAP_SCALE_Z * 2048.0f);
-    const int32_t dirWX_Q8 = (int32_t)lroundf(dirW_X * 256.0f);
-    const int32_t dirWZ_Q8 = (int32_t)lroundf(dirW_Z * 256.0f);
-
-    int yMax = VOX_H;
-
-    for (int k = 0; k < activeSteps && yMax > 0; k++) {
-      const int32_t sQ8  = RAY_S_Q8[k];
-      const int32_t xQ19 = colStartX_Q19 + dirX_Q11 * sQ8;
-      const int32_t zQ19 = colStartZ_Q19 + dirZ_Q11 * sQ8;
-      const int mx       = (xQ19 >> 19) & MAP_MASK_X;
-      const int mz       = (zQ19 >> 19) & MAP_MASK_Z;
-      const int mIdx     = (mz << MAP_SHIFT_X) | mx;
-
-      const int rawDh = (int)voxHeight[mIdx] - groundTex;
-      const int dhTex = k < 16 ? ((rawDh * k) >> 4) : rawDh;
-      const int v     = (BASE_V_Q8[k] - dhTex * PROJ_SCALE_Q8[k]) >> 8;
-
-      if (v < yMax) {
-        const int vTop = v < 0 ? 0 : v;
-        uint16_t col = voxColor[mIdx];
-        if (k < microMaxK) {
-          const int subIdx = ((xQ19 >> 15) & 15) | (((zQ19 >> 15) & 15) << 4);
-          const uint8_t mVal = MICRO_TEX_LUT[subIdx];
-          if (mVal == 2)      col = col - ((col >> 4) & 0x0861u);
-          else if (mVal == 3) col = col + (((col ^ 0xFFFFu) >> 4) & 0x0861u);
-        } else if (k > activeSteps - 5 && activeSteps > 24) {
-          col = blend565Half(col, fogCol565);
-        }
-        int ptr = (vTop << 8) | u;
-        for (int y = vTop; y < yMax; y++, ptr += VOX_W) {
-          voxBuf[ptr] = col;
-        }
-        yMax = vTop;
-      }
-    }
-
-    // Cielo + Nubes usando LUT entera CLOUD_DIST_Q8 (cero divisiones)
-    if (yMax > 0) {
-      int ptr = u;
-      for (int y = 0; y < yMax; y++, ptr += VOX_W) {
-        const int dyHoriz = horizonV - y;
-        if (dyHoriz <= 2) {
-          voxBuf[ptr] = fogCol565;
-        } else {
-          const int lutIdx       = dyHoriz < 511 ? dyHoriz : 511;
-          const int32_t sCloudQ8 = CLOUD_DIST_Q8[lutIdx];
-          const int cmx = ((skyStartX_Q16 + dirWX_Q8 * sCloudQ8) >> 16) & SKY_MASK;
-          const int cmz = ((skyStartZ_Q16 + dirWZ_Q8 * sCloudQ8) >> 16) & SKY_MASK;
-          uint16_t skyCol = voxSkyMap[(cmz << SKY_SHIFT) | cmx];
-          if (dyHoriz < 36) {
-            skyCol = blend565Half(skyCol, fogCol565);
-            if (dyHoriz < 16) skyCol = blend565Half(skyCol, fogCol565);
-          }
-          voxBuf[ptr] = skyCol;
-        }
-      }
-    }
-  }
-
-  // 4. Blit Rotado en Punto Fijo 16.16 hacia vram565 (320x240)
+  // 4. Blit Rotado en Punto Fijo 16.16 hacia vram565 (escritura secuencial en PSRAM)
+  const uint32_t tBlit = (uint32_t)esp_timer_get_time();
   const int32_t du_dx = (int32_t)( cosR * BLIT_SCALE * 65536.0f);
   const int32_t dv_dx = (int32_t)(-sinR * BLIT_SCALE * 65536.0f);
   const int32_t du_dy = (int32_t)( sinR * BLIT_SCALE * 65536.0f);
@@ -528,7 +719,7 @@ static void renderVoxelTerrainAndSky(
   int32_t rowU = centerU - 160 * du_dx - 120 * du_dy;
   int32_t rowV = centerV - 160 * dv_dx - 120 * dv_dy;
 
-  int dstIdx = 0;
+  uint16_t* dst = vram565;
   for (int sy = 0; sy < DISP_H; sy++) {
     int32_t uFP = rowU;
     int32_t vFP = rowV;
@@ -537,18 +728,25 @@ static void renderVoxelTerrainAndSky(
       const int vRaw = vFP >> 16;
       const int uu   = uRaw < 0 ? 0 : (uRaw > 255 ? 255 : uRaw);
       const int vv   = vRaw < 0 ? 0 : (vRaw > 255 ? 255 : vRaw);
-      vram565[dstIdx++] = voxBuf[(vv << 8) | uu];
+      *dst++ = voxBuf[(vv << 8) | uu];
       uFP += du_dx;
       vFP += dv_dx;
     }
     rowU += du_dy;
     rowV += dv_dy;
   }
+  frameStats.blitUs = (uint32_t)esp_timer_get_time() - tBlit;
 }
 
 // ============================================================================
-// 6. FÍSICA FPV ACRO / HORIZON CON CUATERNIONES A 240 Hz + GATES 3D
+// 6. FÍSICA FPV ACRO / HORIZON CON CUATERNIONES A PASO FIJO 240 Hz + GATES 3D
+//    Paso fijo con acumulador: el vuelo se comporta igual a 48, 60 o 30 fps
+//    (idéntico a la función stepFixedPhysics del simulador web).
 // ============================================================================
+constexpr float PHYS_DT        = 1.0f / 240.0f;
+constexpr int   PHYS_MAX_STEPS = 12; // evita la espiral de la muerte si un frame se atrasa
+static float physAccum = 0.0f;
+
 struct DroneState {
   float px = 0.0f, py = 12.0f, pz = 0.0f;
   float vx = 0.0f, vy = 0.0f,  vz = 0.0f;
@@ -581,28 +779,15 @@ static void resetDrone() {
   drone.qw = 1.0f; drone.qx = drone.qy = drone.qz = 0.0f;
   drone.activeGate = 0;
   drone.lapTime    = 0.0f;
+  physAccum        = 0.0f;
 }
 
 static float applyExpoCurve(float v, float expo) {
   return v * (1.0f - expo) + (v * v * v) * expo;
 }
 
-static void updateDronePhysics(float dt) {
-  if (hwInput.x && !hwInput.prevX) {
-    resetDrone();
-  }
-  if (hwInput.y && !hwInput.prevY) {
-    drone.horizonMode = !drone.horizonMode;
-  }
-  if (hwInput.select && !hwInput.prevSelect) {
-    showHwDiagOverlay = !showHwDiagOverlay;
-  }
-
-  // 4 Sub-pasos de integración de cuaterniones a 240 Hz
-  const int subSteps = 4;
-  const float subDt  = dt / (float)subSteps;
-
-  // Throttle en stick autocentrado (centro = 42% hover; botón A suma gas, B frena)
+// Un paso de integración de PHYS_DT segundos
+static void stepDronePhysics(float h) {
   float thrCmd = hwInput.ly >= 0.0f
     ? (0.42f + hwInput.ly * 0.58f)
     : (0.42f * (1.0f + hwInput.ly));
@@ -613,63 +798,82 @@ static void updateDronePhysics(float dt) {
   const float ratePitch = applyExpoCurve(hwInput.ry, 0.35f) * 4.8f;
   const float rateYaw   = -applyExpoCurve(hwInput.lx, 0.25f) * 3.8f;
 
-  for (int s = 0; s < subSteps; s++) {
-    float wx = ratePitch;
-    float wy = rateYaw;
-    float wz = -rateRoll;
+  float wx = ratePitch;
+  float wy = rateYaw;
+  float wz = -rateRoll;
 
-    if (drone.horizonMode) {
-      // Auto-nivelación suave hacia la vertical del mundo
-      const float upX = 2.0f * (drone.qx * drone.qy - drone.qw * drone.qz);
-      const float upZ = 2.0f * (drone.qy * drone.qz + drone.qw * drone.qx);
-      wx -= upZ * 3.5f * (1.0f - fabsf(hwInput.ry));
-      wz += upX * 3.5f * (1.0f - fabsf(hwInput.rx));
-    }
-
-    const float dqW = 0.5f * (-drone.qx * wx - drone.qy * wy - drone.qz * wz) * subDt;
-    const float dqX = 0.5f * ( drone.qw * wx + drone.qy * wz - drone.qz * wy) * subDt;
-    const float dqY = 0.5f * ( drone.qw * wy - drone.qx * wz + drone.qz * wx) * subDt;
-    const float dqZ = 0.5f * ( drone.qw * wz + drone.qx * wy - drone.qy * wx) * subDt;
-
-    drone.qw += dqW; drone.qx += dqX; drone.qy += dqY; drone.qz += dqZ;
-    const float qNorm = 1.0f / sqrtf(drone.qw*drone.qw + drone.qx*drone.qx + drone.qy*drone.qy + drone.qz*drone.qz);
-    drone.qw *= qNorm; drone.qx *= qNorm; drone.qy *= qNorm; drone.qz *= qNorm;
-
-    // Vector Up del chasis (dirección del empuje de los 4 motores)
-    const float ux = 2.0f * (drone.qx * drone.qy - drone.qw * drone.qz);
-    const float uy = 1.0f - 2.0f * (drone.qx * drone.qx + drone.qz * drone.qz);
-    const float uz = 2.0f * (drone.qy * drone.qz + drone.qw * drone.qx);
-
-    const float thrustAcc = thrCmd * 24.5f;
-    const float drag      = 0.42f;
-    drone.vx += (ux * thrustAcc - drone.vx * drag) * subDt;
-    drone.vy += (uy * thrustAcc - 9.81f - drone.vy * drag) * subDt;
-    drone.vz += (uz * thrustAcc - drone.vz * drag) * subDt;
-
-    drone.px += drone.vx * subDt;
-    drone.py += drone.vy * subDt;
-    drone.pz += drone.vz * subDt;
-
-    const float floorY = getTerrainHeightMeters(drone.px, drone.pz) + 1.2f;
-    if (drone.py < floorY) {
-      drone.py = floorY;
-      if (drone.vy < 0.0f) drone.vy = 0.0f;
-    }
+  if (drone.horizonMode) {
+    const float upX = 2.0f * (drone.qx * drone.qy - drone.qw * drone.qz);
+    const float upZ = 2.0f * (drone.qy * drone.qz + drone.qw * drone.qx);
+    wx -= upZ * 3.5f * (1.0f - fabsf(hwInput.ry));
+    wz += upX * 3.5f * (1.0f - fabsf(hwInput.rx));
   }
 
-  drone.lapTime += dt;
+  const float dqW = 0.5f * (-drone.qx * wx - drone.qy * wy - drone.qz * wz) * h;
+  const float dqX = 0.5f * ( drone.qw * wx + drone.qy * wz - drone.qz * wy) * h;
+  const float dqY = 0.5f * ( drone.qw * wy - drone.qx * wz + drone.qz * wx) * h;
+  const float dqZ = 0.5f * ( drone.qw * wz + drone.qx * wy - drone.qy * wx) * h;
+
+  drone.qw += dqW; drone.qx += dqX; drone.qy += dqY; drone.qz += dqZ;
+  const float qNorm = 1.0f / sqrtf(drone.qw*drone.qw + drone.qx*drone.qx + drone.qy*drone.qy + drone.qz*drone.qz);
+  drone.qw *= qNorm; drone.qx *= qNorm; drone.qy *= qNorm; drone.qz *= qNorm;
+
+  const float ux = 2.0f * (drone.qx * drone.qy - drone.qw * drone.qz);
+  const float uy = 1.0f - 2.0f * (drone.qx * drone.qx + drone.qz * drone.qz);
+  const float uz = 2.0f * (drone.qy * drone.qz + drone.qw * drone.qx);
+
+  const float thrustAcc = thrCmd * 24.5f;
+  const float drag      = 0.42f;
+  drone.vx += (ux * thrustAcc - drone.vx * drag) * h;
+  drone.vy += (uy * thrustAcc - 9.81f - drone.vy * drag) * h;
+  drone.vz += (uz * thrustAcc - drone.vz * drag) * h;
+
+  const float prevX = drone.px, prevZ = drone.pz;
+  drone.px += drone.vx * h;
+  drone.py += drone.vy * h;
+  drone.pz += drone.vz * h;
+
+  const float floorY = getTerrainHeightMeters(drone.px, drone.pz) + 1.2f;
+  if (drone.py < floorY) {
+    drone.py = floorY;
+    if (drone.vy < 0.0f) drone.vy = 0.0f;
+  }
+
+  // Cruce del plano de la puerta activa (z = g.z) dentro del marco, como checkCircuitGatePass3D del web
   const Gate3D& g = GATES[drone.activeGate];
-  const float dGate = hypotf(drone.px - g.x, drone.pz - g.z);
-  if (dGate < g.w * 0.65f) {
-    drone.activeGate = (drone.activeGate + 1) & 7;
+  const float d0 = prevZ - g.z, d1 = drone.pz - g.z;
+  if ((d0 > 0.0f) != (d1 > 0.0f)) {
+    const float t  = d0 / (d0 - d1);
+    const float cx = prevX + (drone.px - prevX) * t;
+    const float gFloor = getTerrainHeightMeters(g.x, g.z);
+    if (fabsf(cx - g.x) < g.w * 0.5f && drone.py > gFloor + 1.0f && drone.py < gFloor + g.y + g.h * 0.5f) {
+      drone.activeGate = (drone.activeGate + 1) & 7;
+    }
   }
 }
 
+static int updateDronePhysics(float dtFrame) {
+  if (hwInput.x && !hwInput.prevX) resetDrone();
+  if (hwInput.y && !hwInput.prevY) drone.horizonMode = !drone.horizonMode;
+  if (hwInput.select && !hwInput.prevSelect) showHwDiagOverlay = !showHwDiagOverlay;
+
+  physAccum += dtFrame;
+  int steps = 0;
+  while (physAccum >= PHYS_DT && steps < PHYS_MAX_STEPS) {
+    stepDronePhysics(PHYS_DT);
+    physAccum -= PHYS_DT;
+    steps++;
+  }
+  if (steps == PHYS_MAX_STEPS) physAccum = 0.0f;
+  drone.lapTime += dtFrame;
+  return steps;
+}
+
 // ============================================================================
-// 7. BUCLE PRINCIPAL ARDUINO / ESP-IDF EN ESP32-S3 N16R8
+// 7. BUCLE PRINCIPAL (Core 1): entradas -> física -> render -> entregar frame
 // ============================================================================
 static uint32_t lastFrameMicros = 0;
-static float    fpsFiltered     = 60.0f;
+static float    fpsFiltered     = 48.0f;
 
 void setup() {
   Serial.begin(115200);
@@ -688,22 +892,34 @@ void setup() {
 
   initVoxelFixedPointLutsAndWorld();
   resetDrone();
-  tft.startWrite(); // Mantener CS activo para transferencias DMA continuas
+  halStartDisplayTask();
+  startRayWorker();
   lastFrameMicros = micros();
+}
+
+static void drawStatsLine(char* buf, size_t n, const char* label, uint32_t us, int y, uint16_t col) {
+  snprintf(buf, n, "%s %u.%uMS", label, (unsigned)(us / 1000), (unsigned)((us % 1000) / 100));
+  drawInavSmallText320(buf, 16, y, col);
 }
 
 void loop() {
   const uint32_t nowMicros = micros();
   float dt = (float)(nowMicros - lastFrameMicros) * 1e-6f;
+  frameStats.frameUs = nowMicros - lastFrameMicros;
   lastFrameMicros = nowMicros;
-  if (dt <= 0.001f || dt > 0.1f) dt = 0.016f;
+  if (dt <= 0.0f || dt > 0.1f) dt = 1.0f / 48.0f;
   fpsFiltered = fpsFiltered * 0.92f + (1.0f / dt) * 0.08f;
 
-  // 1. Escanear Joysticks ADC1, 12 Botones y Touch FT6336U
+  // 1. Joysticks ADC1, 12 botones y touch (cacheado por la tarea de pantalla)
+  uint32_t t0 = (uint32_t)esp_timer_get_time();
   halPollInputs();
+  uint32_t t1 = (uint32_t)esp_timer_get_time();
+  frameStats.inputUs = t1 - t0;
 
-  // 2. Actualizar física de vuelo a 240 Hz
-  updateDronePhysics(dt);
+  // 2. Física a paso fijo 240 Hz
+  frameStats.physicsSteps = updateDronePhysics(dt);
+  t0 = (uint32_t)esp_timer_get_time();
+  frameStats.physicsUs = t0 - t1;
 
   // 3. Base ortonormal de la cámara con Camera Uptilt de 20°
   const float qx = drone.qx, qy = drone.qy, qz = drone.qz, qw = drone.qw;
@@ -718,18 +934,18 @@ void loop() {
   // En nuestro sistema local Forward mira hacia -Z
   const float fx = -2.0f * (qx*qz + qw*qy);
   const float fy = -2.0f * (qy*qz - qw*qx);
-  const floatfz  = -(1.0f - 2.0f * (qx*qx + qy*qy));
+  const float fz = -(1.0f - 2.0f * (qx*qx + qy*qy));
 
   constexpr float uptiltRad = 20.0f * ((float)M_PI / 180.0f);
   const float cT = cosf(uptiltRad), sT = sinf(uptiltRad);
   const float cUx = cT * ux - sT * fx;
   const float cUy = cT * uy - sT * fy;
-  const float cUz = cT * uz - sT * floatfz;
+  const float cUz = cT * uz - sT * fz;
   const float cFx = sT * ux + cT * fx;
   const float cFy = sT * uy + cT * fy;
-  const float cFz = sT * uz + cT * floatfz;
+  const float cFz = sT * uz + cT * fz;
 
-  // 4. Renderizar Terreno Voxel + Cielo con Nubes en vram565 (Punto Fijo Int32)
+  // 4. Terreno Voxel + Cielo (raycast en los 2 núcleos + blit a PSRAM)
   renderVoxelTerrainAndSky(
     drone.px, drone.py, drone.pz,
     rx, ry, rz,
@@ -738,7 +954,8 @@ void loop() {
     dt
   );
 
-  // 5. Proyectar las 8 Puertas 3D del Circuito sobre vram565
+  // 5. Puertas 3D y OSD
+  const uint32_t tOv = (uint32_t)esp_timer_get_time();
   for (int i = 0; i < 8; i++) {
     const Gate3D& g = GATES[i];
     const float gFloor = getTerrainHeightMeters(g.x, g.z);
@@ -762,8 +979,9 @@ void loop() {
       const float cy = dx * cUx + dy * cUy + dz * cUz;
       const float cz = dx * cFx + dy * cFy + dz * cFz;
       if (cz < 0.5f || cz > 650.0f) { vis = false; break; }
-      sx[c] = 160.0f + (cx * FOCAL_240) / cz;
-      sy[c] = 120.0f - (cy * FOCAL_240) / cz;
+      const float invCz = FOCAL_240 / cz;
+      sx[c] = 160.0f + cx * invCz;
+      sy[c] = 120.0f - cy * invCz;
     }
     if (vis) {
       const uint16_t col = (i == drone.activeGate) ? C565::GREEN : C565::RED;
@@ -773,9 +991,8 @@ void loop() {
     }
   }
 
-  // 6. Dibujar OSD Estilo INAV en 1 Sola Pasada Lineal (2-Bit MAX7456 ROM)
   char buf[64];
-  const float speedKmh = hypotf(hypotf(drone.vx, drone.vy), drone.vz) * 3.6f;
+  const float speedKmh = sqrtf(drone.vx * drone.vx + drone.vy * drone.vy + drone.vz * drone.vz) * 3.6f;
   const float aglM     = fmaxf(0.0f, drone.py - getTerrainHeightMeters(drone.px, drone.pz));
 
   snprintf(buf, sizeof(buf), "S3 N16R8 %s", drone.horizonMode ? "HORIZON" : "ACRO");
@@ -790,7 +1007,7 @@ void loop() {
   snprintf(buf, sizeof(buf), "ALT:%dM GATE:%d/8", (int)lroundf(aglM), drone.activeGate + 1);
   drawInavSmallText320(buf, 196, 224, C565::CYAN);
 
-  // 7. Panel de Diagnóstico Hardware en Vivo (Al pulsar SELECT)
+  // 6. Panel de Diagnóstico Hardware + tiempos por etapa (SELECT)
   if (showHwDiagOverlay) {
     snprintf(buf, sizeof(buf), "ADC1 L:%d,%d R:%d,%d", hwInput.rawLX, hwInput.rawLY, hwInput.rawRX, hwInput.rawRY);
     drawInavSmallText320(buf, 16, 36, C565::CYAN);
@@ -808,8 +1025,30 @@ void loop() {
     const uint32_t freePsramKb = heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024;
     snprintf(buf, sizeof(buf), "FREE SRAM:%uKB PSRAM:%uKB", (unsigned)freeSramKb, (unsigned)freePsramKb);
     drawInavSmallText320(buf, 16, 72, C565::WHITE);
-  }
 
-  // 8. Transferencia SPI2 DMA de vram565 hacia el panel IPS ILI9341V
-  tft.pushImageDMA(0, 0, DISP_W, DISP_H, vram565);
+    drawStatsLine(buf, sizeof(buf), "FRAME",       frameStats.frameUs,       90,  C565::WHITE);
+    drawStatsLine(buf, sizeof(buf), "RAY CORE1",   frameStats.rayCore1Us,    100, C565::CYAN);
+    drawStatsLine(buf, sizeof(buf), "RAY CORE0",   frameStats.rayCore0Us,    110, C565::CYAN);
+    drawStatsLine(buf, sizeof(buf), "BLIT",        frameStats.blitUs,        120, C565::CYAN);
+    drawStatsLine(buf, sizeof(buf), "OSD+GATES",   frameStats.overlayUs,     130, C565::CYAN);
+    drawStatsLine(buf, sizeof(buf), "INPUT",       frameStats.inputUs,       140, C565::GOLD);
+    snprintf(buf, sizeof(buf), "PHYS %uUS %d PASOS", (unsigned)frameStats.physicsUs, frameStats.physicsSteps);
+    drawInavSmallText320(buf, 16, 150, C565::GOLD);
+    drawStatsLine(buf, sizeof(buf), "ESPERA SPI",  frameStats.waitDisplayUs, 160, C565::ORANGE);
+    drawStatsLine(buf, sizeof(buf), "DMA FRAME",   frameStats.displayPushUs, 170, C565::ORANGE);
+  }
+  frameStats.overlayUs = (uint32_t)esp_timer_get_time() - tOv;
+
+  // 7. Entregar el frame a la tarea de pantalla (Core 0) y pasar al otro framebuffer
+  halPresentFrame();
+
+  // Volcado periódico por USB-CDC para registrar tiempos sin mirar la pantalla
+  static uint32_t lastLogMs = 0;
+  if (millis() - lastLogMs > 2000) {
+    lastLogMs = millis();
+    Serial.printf("[FRAME] fps=%.1f frame=%uus rayC1=%uus rayC0=%uus blit=%uus osd=%uus wait=%uus dma=%uus phys=%d\n",
+      fpsFiltered, (unsigned)frameStats.frameUs, (unsigned)frameStats.rayCore1Us, (unsigned)frameStats.rayCore0Us,
+      (unsigned)frameStats.blitUs, (unsigned)frameStats.overlayUs, (unsigned)frameStats.waitDisplayUs,
+      (unsigned)frameStats.displayPushUs, frameStats.physicsSteps);
+  }
 }
