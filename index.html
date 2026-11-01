@@ -6871,19 +6871,20 @@
       drawOsdSmall320(`GS ${String(kmh).padStart(2, ' ')}K`,   8, 114, WHITE);
       drawOsdSmall320(`THR ${Math.round(thrPct)}%`,           8, 126, WHITE);
 
+      // Batería simulada (CRAFT_BATT): corriente, mAh y voltaje con caída por resistencia interna
+      const useBatt = CRAFT_BATT.active && (activeRomId === 'fpv_drone' || activeRomId === 'fpv_wing');
       const loadFactor = (thrPct / 100);
-      const amps = (1.8 + loadFactor * loadFactor * 22.5).toFixed(1);
-      const mah  = Math.round(120 + flightTimeSec * 4.8);
-      const sagV = loadFactor * loadFactor * 0.85;
-      const packV = Math.max(13.6, 16.8 - flightTimeSec * 0.004 - sagV);
-      const cellV = (packV / 4).toFixed(2);
+      const amps = useBatt ? CRAFT_BATT.amps.toFixed(1) : (1.8 + loadFactor * loadFactor * 22.5).toFixed(1);
+      const mah  = useBatt ? Math.round(CRAFT_BATT.usedMah) : Math.round(120 + flightTimeSec * 4.8);
+      const packV = useBatt ? CRAFT_BATT.vLoad : Math.max(13.6, 16.8 - flightTimeSec * 0.004 - loadFactor * loadFactor * 0.85);
+      const cellV = (packV / (useBatt ? CRAFT_BATT.cells : 4)).toFixed(2);
 
       drawOsdSmall320(`A ${amps}`,          8,  176, WHITE);
       drawOsdSmall320(`MAH ${mah}`,         8,  188, WHITE);
       drawBatteryIcon320(8, 199);
       drawOsdSmall320(`${packV.toFixed(2)}V`, 16, 200, WHITE);
       drawBatteryIcon320(8, 211);
-      drawOsdSmall320(`${cellV}V`,          16, 212, WHITE);
+      drawOsdSmall320(`${cellV}V`,          16, 212, parseFloat(cellV) < 3.5 ? C565.RED : WHITE);
 
       // 7. COLUMNA DERECHA COMPACTA (Altitud Alt m, Variómetro m/s, Rumbo a Gate, Tiempo de Vuelo, Distancia)
       drawOsdSmall320(`ALT ${Math.round(altM)}M`, 270, 108, WHITE);
@@ -7115,10 +7116,10 @@
     // Basado en WebFPVSimulator + okalachev/flix (ESP32) + dRehmFlight + JSBSim
     // =========================================================================
     const DRONE_PRESETS = [
-      { name: 'FREESTYLE', rcRate: 520, yawRate: 260, centerSens: 150, expo: 0.48, massKg: 0.62, maxThrustAcc: 31.5, camTilt: 18, airMode: 1, propwash: 1.0 },
-      { name: 'RACING',    rcRate: 640, yawRate: 340, centerSens: 190, expo: 0.35, massKg: 0.48, maxThrustAcc: 39.0, camTilt: 28, airMode: 1, propwash: 0.7 },
-      { name: 'CINEMATIC', rcRate: 320, yawRate: 170, centerSens: 100, expo: 0.60, massKg: 0.78, maxThrustAcc: 25.5, camTilt: 12, airMode: 1, propwash: 0.6 },
-      { name: 'BANDO 6S',  rcRate: 780, yawRate: 400, centerSens: 180, expo: 0.52, massKg: 0.56, maxThrustAcc: 44.0, camTilt: 24, airMode: 1, propwash: 1.2 }
+      { name: 'FREESTYLE', cells: 6, capMah: 1300, rcRate: 520, yawRate: 260, centerSens: 150, expo: 0.48, massKg: 0.62, maxThrustAcc: 31.5, camTilt: 18, airMode: 1, propwash: 1.0 },
+      { name: 'RACING', cells: 6, capMah: 1100,    rcRate: 640, yawRate: 340, centerSens: 190, expo: 0.35, massKg: 0.48, maxThrustAcc: 39.0, camTilt: 28, airMode: 1, propwash: 0.7 },
+      { name: 'CINEMATIC', cells: 4, capMah: 1800, rcRate: 320, yawRate: 170, centerSens: 100, expo: 0.60, massKg: 0.78, maxThrustAcc: 25.5, camTilt: 12, airMode: 1, propwash: 0.6 },
+      { name: 'BANDO 6S', cells: 6, capMah: 1300,  rcRate: 780, yawRate: 400, centerSens: 180, expo: 0.52, massKg: 0.56, maxThrustAcc: 44.0, camTilt: 24, airMode: 1, propwash: 1.2 }
     ];
 
     const WING_PRESETS = [
@@ -7471,6 +7472,43 @@
      *    - Mezclador Betaflight Quad-X con AirMode + PID Cascada + I-term Relax
      *    - Ecuaciones de Euler 3D con Tensor de Inercia + Precesión Giroscópica
      ***************************************************************************/
+    // =========================================================================
+    // BATERÍA LiPo COMPARTIDA (dron y ala): curva de voltaje en reposo por % de carga,
+    // caída por resistencia interna con la corriente real y mAh consumidos.
+    // En el S3 son ~20 operaciones float por paso de física.
+    // =========================================================================
+    const LIPO_SOC = [0.00, 0.05, 0.10, 0.20, 0.40, 0.60, 0.80, 1.00];
+    const LIPO_OCV = [3.00, 3.30, 3.45, 3.60, 3.72, 3.82, 3.98, 4.20];
+    const CRAFT_BATT = { active: false, cells: 4, capMah: 1300, usedMah: 0, rIntCell: 0.006, amps: 0, vRest: 16.8, vLoad: 16.8, lowWarnT: -99 };
+    function lipoCellOcv(soc) {
+      if (soc <= 0) return LIPO_OCV[0];
+      for (let i = 1; i < LIPO_SOC.length; i++) {
+        if (soc <= LIPO_SOC[i]) {
+          const f = (soc - LIPO_SOC[i - 1]) / (LIPO_SOC[i] - LIPO_SOC[i - 1]);
+          return LIPO_OCV[i - 1] + (LIPO_OCV[i] - LIPO_OCV[i - 1]) * f;
+        }
+      }
+      return LIPO_OCV[LIPO_OCV.length - 1];
+    }
+    function battReset(cells, capMah, rIntCell) {
+      CRAFT_BATT.active = true; CRAFT_BATT.cells = cells; CRAFT_BATT.capMah = capMah; CRAFT_BATT.rIntCell = rIntCell;
+      CRAFT_BATT.usedMah = 0; CRAFT_BATT.amps = 0; CRAFT_BATT.vRest = cells * 4.2; CRAFT_BATT.vLoad = CRAFT_BATT.vRest; CRAFT_BATT.lowWarnT = -99;
+    }
+    // Consume 'amps' durante dt y devuelve la relación V_cargada / V_llena (el giro de los motores es ∝ voltaje)
+    function battStep(amps, dt) {
+      const B = CRAFT_BATT;
+      B.amps = amps;
+      B.usedMah += amps * dt / 3.6;
+      const soc = Math.max(0, 1.0 - B.usedMah / B.capMah);
+      B.vRest = lipoCellOcv(soc) * B.cells;
+      B.vLoad = Math.max(B.cells * 2.8, B.vRest - amps * B.rIntCell * B.cells);
+      if (B.vRest / B.cells < 3.5 && aeroEnv.time - B.lowWarnT > 6.0) {
+        B.lowWarnT = aeroEnv.time;
+        showToast(`BATERIA BAJA ${(B.vRest / B.cells).toFixed(2)}V/CELDA - X = RESET`);
+      }
+      return B.vLoad / (B.cells * 4.2);
+    }
+
     const fpvDroneSim = {
       px: 0, py: 2.2, pz: -10,
       vx: 0, vy: 0, vz: 0,
@@ -7487,6 +7525,8 @@
       mRpm: new Float32Array([0.36, 0.36, 0.36, 0.36]),
       mCmd: new Float32Array([0.36, 0.36, 0.36, 0.36]),
       iPitch: 0, iRoll: 0, iYaw: 0,
+      lastGyroP: 0, lastGyroR: 0, lastAmps: 0,
+      disarmed: false, crashT: 0, turtleT: 0, turtleDir: 1, turtleHintT: -1,
       flightTime: 0,
       totalDistKm: 0,
 
@@ -7521,6 +7561,9 @@
         this.mRpm[0] = 0.36; this.mRpm[1] = 0.36; this.mRpm[2] = 0.36; this.mRpm[3] = 0.36;
         this.mCmd[0] = 0.36; this.mCmd[1] = 0.36; this.mCmd[2] = 0.36; this.mCmd[3] = 0.36;
         this.iPitch = 0; this.iRoll = 0; this.iYaw = 0;
+        this.lastGyroP = 0; this.lastGyroR = 0; this.lastAmps = 0;
+        this.disarmed = false; this.crashT = 0; this.turtleT = 0; this.turtleHintT = -1;
+        battReset(fcProfile.drone.cells || 6, fcProfile.drone.capMah || 1300, 0.006);
         this.activeGate = 0;
         this.flightTime = 0;
         this.totalDistKm = 0;
@@ -7541,8 +7584,8 @@
         let thr = evalRcThrottle(baseThr);
         if (hwInput.btn.A) thr = Math.min(1.0, thr + 0.28);
         this.thrCmd = thr;
+        const armed = !this.disarmed;
 
-        // 2. Velocidad relativa al aire proyectada en el chasis (R=derecha, U=arriba, F=frente)
         const vAirX = this.vx - aeroEnv.windX;
         const vAirY = this.vy - aeroEnv.windY;
         const vAirZ = this.vz - aeroEnv.windZ;
@@ -7555,7 +7598,6 @@
         const vBodyF = vAirX * this.fx + vAirY * this.fy + vAirZ * this.fz;
         const horizAirSpd = Math.hypot(vBodyR, vBodyF);
 
-        // 3. Tasas objetivo con curva Betaflight Actual Rates (sensibilidad central + SuperExpo)
         const curPitch = Math.asin(Math.max(-0.99, Math.min(0.99, -this.fy)));
         const curRoll  = Math.atan2(-this.ry, Math.max(0.12, this.uy));
 
@@ -7565,7 +7607,6 @@
 
         let tPitch = ratePitchCmd, tRoll = rateRollCmd;
         if (aeroEnv.failsafeTimer > 0) {
-          // Failsafe en borde del mapa para el Dron: frena y regresa suavemente hacia el centro (0, 0)
           const toHomeX = -this.px, toHomeZ = -this.pz;
           const homeDist = Math.hypot(toHomeX, toHomeZ) || 1.0;
           const dirHomeF = (toHomeX * this.fx + toHomeZ * this.fz) / homeDist;
@@ -7573,120 +7614,111 @@
           tPitch = ((dirHomeF * 18.0 * DEG2RAD) - curPitch) * 4.5;
           tRoll  = ((dirHomeR * 22.0 * DEG2RAD) - curRoll)  * 4.5;
         } else if (this.mode !== 'ACRO') {
-          // Modo HOR (Auto-nivelado Betaflight Angle/Horizon limpio y estable, sin temblor)
+          // HORIZON/ANGLE: lazo externo de ángulo -> consigna de velocidad para el lazo de rate (como Betaflight)
           const targetPitchAng = Math.max(-42.0 * DEG2RAD, Math.min(42.0 * DEG2RAD, hwInput.ry * 40.0 * DEG2RAD));
           const targetRollAng  = Math.max(-52.0 * DEG2RAD, Math.min(52.0 * DEG2RAD, hwInput.rx * 50.0 * DEG2RAD));
-          const errP = targetPitchAng - curPitch;
-          const errR = targetRollAng  - curRoll;
-          const gainP = 4.20 + 1.80 * Math.min(1.0, Math.abs(errP) / 0.30);
-          const gainR = 4.50 + 2.00 * Math.min(1.0, Math.abs(errR) / 0.30);
-          tPitch = errP * gainP;
-          tRoll  = errR * gainR;
+          tPitch = (targetPitchAng - curPitch) * 7.0;
+          tRoll  = (targetRollAng  - curRoll)  * 7.5;
         }
 
-        // 4. Controlador PID Betaflight 4.5 (P + I con I-Term Relax + D-Term amortiguado para bloqueo firme sin vibración)
-        const prevPitchRate = this.pitchRate;
-        const prevRollRate  = this.rollRate;
-        const errPitch = tPitch - this.pitchRate;
-        const errRoll  = tRoll  - this.rollRate;
-        const errYaw   = tYaw   - this.yawRate;
-
-        const relaxPR = Math.max(0.1, 1.0 - Math.hypot(hwInput.rx, hwInput.ry) * 0.85);
-        this.iPitch = Math.max(-0.20, Math.min(0.20, this.iPitch + errPitch * 0.12 * relaxPR * dt));
-        this.iRoll  = Math.max(-0.20, Math.min(0.20, this.iRoll  + errRoll  * 0.12 * relaxPR * dt));
-        this.iYaw   = Math.max(-0.16, Math.min(0.16, this.iYaw   + errYaw   * 0.09 * dt));
-
-        const uPitch = Math.max(-0.65, Math.min(0.65, errPitch * 0.145 + this.iPitch));
-        const uRoll  = Math.max(-0.65, Math.min(0.65, errRoll  * 0.145 + this.iRoll));
-        const uYaw   = Math.max(-0.45, Math.min(0.45, errYaw   * 0.125 + this.iYaw));
-
-        // 5. Mezclador Betaflight Quad-X (M1=RR, M2=FR, M3=RL, M4=FL) + AirMode real
-        // Convención: Roll+ inclina a la derecha (sube M3,M4 izq); Pitch+ sube el morro (sube M2,M4 frontales)
-        const d1 = -uRoll - uPitch - uYaw; // M1: Rear-Right  (CCW)
-        const d2 = -uRoll + uPitch + uYaw; // M2: Front-Right (CW)
-        const d3 =  uRoll - uPitch + uYaw; // M3: Rear-Left   (CW)
-        const d4 =  uRoll + uPitch - uYaw; // M4: Front-Left  (CCW)
-
-        let dMin = Math.min(d1, d2, d3, d4);
-        let dMax = Math.max(d1, d2, d3, d4);
-        const span = dMax - dMin;
-        let mixScale = 1.0;
-        let thrMix = thr;
-
-        if (cfg.airMode) {
-          // AirMode: garantiza autoridad de giro completa incluso con acelerador al 0% en caída libre
-          if (span > 0.95) mixScale = 0.95 / span;
-          dMin *= mixScale; dMax *= mixScale;
-          if (thrMix + dMin < 0.05) thrMix = 0.05 - dMin;
-          if (thrMix + dMax > 1.00) thrMix = 1.00 - dMax;
-        } else {
-          // Sin AirMode: a bajo gas se recorta la autoridad diferencial de los motores
-          const authAtLowThr = Math.min(1.0, thr / 0.22);
-          mixScale = authAtLowThr;
-        }
-
-        // Sag dinámico de batería LiPo 4S (reduce el techo real de RPM al final del vuelo o en full-punch)
-        const sagFactor = Math.max(0.84, 1.0 - (thr * thr * 0.06) - Math.min(0.08, this.flightTime * 0.00025));
-
-        this.mCmd[0] = Math.max(0.04, Math.min(1.0, thrMix + d1 * mixScale)) * sagFactor;
-        this.mCmd[1] = Math.max(0.04, Math.min(1.0, thrMix + d2 * mixScale)) * sagFactor;
-        this.mCmd[2] = Math.max(0.04, Math.min(1.0, thrMix + d3 * mixScale)) * sagFactor;
-        this.mCmd[3] = Math.max(0.04, Math.min(1.0, thrMix + d4 * mixScale)) * sagFactor;
-
-        // 6. Dinámica de 4 Motores Brushless (spool-up rápido DShot600 + Damped Light)
-        let rpmSum = 0;
-        for (let i = 0; i < 4; i++) {
-          const prev = this.mRpm[i];
-          const cmd  = this.mCmd[i];
-          const tauRate = cmd >= prev ? 38.0 : 28.0;
-          this.mRpm[i] += (cmd - prev) * Math.min(1.0, tauRate * dt);
-          rpmSum += this.mRpm[i];
-        }
-        this.motorRpm = rpmSum * 0.25;
-
-        // 7. Pares Físicos 3D de los 4 Rotores + Amortiguación D-Term de Giroscopio 8kHz
-        const invInertia = 0.62 / Math.max(0.30, cfg.massKg);
-        const tauRoll  = ((this.mRpm[2] + this.mRpm[3]) - (this.mRpm[0] + this.mRpm[1])) * 44.0 * invInertia;
-        const tauPitch = ((this.mRpm[1] + this.mRpm[3]) - (this.mRpm[0] + this.mRpm[2])) * 42.0 * invInertia;
-        const tauYaw   = ((this.mRpm[1] + this.mRpm[2]) - (this.mRpm[0] + this.mRpm[3])) * 28.0 * invInertia;
-
-        // Acoplamiento giroscópico suave de las 4 hélices
-        const netPropOmega = (this.mRpm[1] + this.mRpm[2] - this.mRpm[0] - this.mRpm[3]) * 4.0;
-        const gyroPitch =  this.rollRate  * netPropOmega * 0.04;
-        const gyroRoll  = -this.pitchRate * netPropOmega * 0.04;
-
-        // Acoplamiento de Euler suavizado por el lazo D-Term
-        const eulerPitch = -0.18 * this.rollRate * this.yawRate;
-        const eulerRoll  =  0.18 * this.pitchRate * this.yawRate;
-
-        // Propwash suave solo en descensos verticales fuertes sobre la propia estela
+        // Turbulencia de propwash: perturbación de PAR que el PID tiene que combatir (al bajar dentro de tu propia estela)
         let propwashRoll = 0, propwashPitch = 0;
         if (vBodyU < -2.8 && horizAirSpd < 4.5) {
           const pwIntensity = Math.min(0.65, (-2.8 - vBodyU) * 0.16 * (1.0 - horizAirSpd / 4.5)) * cfg.propwash;
-          propwashRoll  = Math.sin(this.flightTime * 24.0) * 0.35 * pwIntensity;
-          propwashPitch = Math.cos(this.flightTime * 21.0) * 0.28 * pwIntensity;
+          propwashRoll  = Math.sin(this.flightTime * 24.0) * 20.0 * pwIntensity;
+          propwashPitch = Math.cos(this.flightTime * 21.0) * 16.0 * pwIntensity;
         }
 
-        // El lazo PID 8kHz de un quad 5" bloquea la actitud frente al viento (solo pasa un ~12% de ráfaga angular)
-        this.pitchRate += (tauPitch + gyroPitch + eulerPitch + aeroEnv.turbPitch * 0.28 + propwashPitch) * dt;
-        this.rollRate  += (tauRoll  + gyroRoll  + eulerRoll  + aeroEnv.turbRoll  * 0.32 + propwashRoll) * dt;
-        this.yawRate   += (tauYaw   + aeroEnv.turbYaw   * 0.22) * dt;
+        // Batería: el giro máximo del motor es ∝ voltaje con carga (sustituye la caída fija por tiempo)
+        const vRatio = battStep(this.lastAmps || 0.8, dt);
 
-        // Amortiguación D-Term directa hacia la tasa objetivo (elimina sobreimpulso y temblor de cámara)
-        const dLock = Math.min(1.0, 22.0 * dt);
-        this.pitchRate += (tPitch - this.pitchRate) * dLock + (prevPitchRate - this.pitchRate) * 0.18;
-        this.rollRate  += (tRoll  - this.rollRate)  * dLock + (prevRollRate  - this.rollRate)  * 0.18;
-        this.yawRate   += (tYaw   - this.yawRate)   * Math.min(1.0, 18.0 * dt);
+        // ===== LAZO INTERNO A 4x (960 Hz): PID de rate (P + I + D sobre gyro + FF) -> mezclador -> motores -> par -> inercia
+        const SUB = 4, h = dt / SUB;
+        const invInertia = 0.62 / Math.max(0.30, cfg.massKg);
+        const KP = 0.25, KI = 0.16, KD = 0.0060, KF = 0.015, KPY = 0.30, KIY = 0.12, KFY = 0.030;
+        const relaxPR = Math.max(0.1, 1.0 - Math.hypot(hwInput.rx, hwInput.ry) * 0.85);
+        let thrustSum = 0, ampSum = 0;
+        for (let k = 0; k < SUB; k++) {
+          let uPitch = 0, uRoll = 0, uYaw = 0;
+          if (armed) {
+            const errPitch = tPitch - this.pitchRate;
+            const errRoll  = tRoll  - this.rollRate;
+            const errYaw   = tYaw   - this.yawRate;
+            this.iPitch = Math.max(-0.20, Math.min(0.20, this.iPitch + errPitch * KI * relaxPR * h));
+            this.iRoll  = Math.max(-0.20, Math.min(0.20, this.iRoll  + errRoll  * KI * relaxPR * h));
+            this.iYaw   = Math.max(-0.16, Math.min(0.16, this.iYaw   + errYaw   * KIY * h));
+            // D sobre la medida del gyro (no sobre el error) para no patear con el stick
+            const dPitch = -KD * (this.pitchRate - this.lastGyroP) / h;
+            const dRoll  = -KD * (this.rollRate  - this.lastGyroR) / h;
+            uPitch = Math.max(-0.65, Math.min(0.65, errPitch * KP + this.iPitch + dPitch + tPitch * KF));
+            uRoll  = Math.max(-0.65, Math.min(0.65, errRoll  * KP + this.iRoll  + dRoll  + tRoll  * KF));
+            uYaw   = Math.max(-0.45, Math.min(0.45, errYaw   * KPY + this.iYaw + tYaw * KFY));
+          }
+          this.lastGyroP = this.pitchRate; this.lastGyroR = this.rollRate;
 
-        stepRotationSO3(this, dt);
+          const d1 = -uRoll - uPitch - uYaw; // M1: Rear-Right  (CCW)
+          const d2 = -uRoll + uPitch + uYaw; // M2: Front-Right (CW)
+          const d3 =  uRoll - uPitch + uYaw; // M3: Rear-Left   (CW)
+          const d4 =  uRoll + uPitch - uYaw; // M4: Front-Left  (CCW)
+          let dMin = Math.min(d1, d2, d3, d4), dMax = Math.max(d1, d2, d3, d4);
+          const span = dMax - dMin;
+          let mixScale = 1.0, thrMix = thr;
+          if (cfg.airMode) {
+            if (span > 0.95) mixScale = 0.95 / span;
+            dMin *= mixScale; dMax *= mixScale;
+            if (thrMix + dMin < 0.05) thrMix = 0.05 - dMin;
+            if (thrMix + dMax > 1.00) thrMix = 1.00 - dMax;
+          } else {
+            mixScale = Math.min(1.0, thr / 0.22);
+          }
+          if (armed) {
+            this.mCmd[0] = Math.max(0.04, Math.min(1.0, thrMix + d1 * mixScale)) * vRatio;
+            this.mCmd[1] = Math.max(0.04, Math.min(1.0, thrMix + d2 * mixScale)) * vRatio;
+            this.mCmd[2] = Math.max(0.04, Math.min(1.0, thrMix + d3 * mixScale)) * vRatio;
+            this.mCmd[3] = Math.max(0.04, Math.min(1.0, thrMix + d4 * mixScale)) * vRatio;
+          } else {
+            this.mCmd[0] = this.mCmd[1] = this.mCmd[2] = this.mCmd[3] = 0.0;
+          }
 
-        // 8. Aerodinámica de Elemento de Pala (BEM): Empuje no lineal + Efecto Suelo + Blade Drag Lateral
-        // Curva cuadrática/lineal de empuje de hélice 5" + pérdida por ratio de avance (J = V_axial / nD)
-        let thrustNorm = 0;
-        for (let i = 0; i < 4; i++) {
-          const r = this.mRpm[i];
-          thrustNorm += (0.35 * r + 0.65 * r * r) * 0.25;
+          // Motores de primer orden (subir es más rápido que frenar) y empuje por motor T = 0.35·rpm + 0.65·rpm²
+          let T0 = 0, T1 = 0, T2 = 0, T3 = 0;
+          for (let i = 0; i < 4; i++) {
+            const prev = this.mRpm[i], cmd = this.mCmd[i];
+            this.mRpm[i] += (cmd - prev) * Math.min(1.0, (cmd >= prev ? 38.0 : 28.0) * h);
+          }
+          T0 = 0.35 * this.mRpm[0] + 0.65 * this.mRpm[0] * this.mRpm[0];
+          T1 = 0.35 * this.mRpm[1] + 0.65 * this.mRpm[1] * this.mRpm[1];
+          T2 = 0.35 * this.mRpm[2] + 0.65 * this.mRpm[2] * this.mRpm[2];
+          T3 = 0.35 * this.mRpm[3] + 0.65 * this.mRpm[3] * this.mRpm[3];
+          thrustSum += (T0 + T1 + T2 + T3) * 0.25;
+          // Corriente: potencia ∝ T^1.5 por motor (~22 A en hover y ~130 A a fondo en un 5")
+          ampSum += 32.5 * (T0 * Math.sqrt(T0) + T1 * Math.sqrt(T1) + T2 * Math.sqrt(T2) + T3 * Math.sqrt(T3)) + 0.8;
+
+          // Pares por diferencia de EMPUJE (roll/pitch) y de arrastre de hélice (yaw); inercia ∝ masa
+          const tauRoll  = ((T2 + T3) - (T0 + T1)) * 50.0 * invInertia;
+          const tauPitch = ((T1 + T3) - (T0 + T2)) * 48.0 * invInertia;
+          const tauYaw   = ((T1 + T2) - (T0 + T3)) * 32.0 * invInertia;
+
+          const netPropOmega = (this.mRpm[1] + this.mRpm[2] - this.mRpm[0] - this.mRpm[3]) * 4.0;
+          const gyroPitch =  this.rollRate  * netPropOmega * 0.04;
+          const gyroRoll  = -this.pitchRate * netPropOmega * 0.04;
+          const eulerPitch = -0.18 * this.rollRate * this.yawRate;
+          const eulerRoll  =  0.18 * this.pitchRate * this.yawRate;
+          // Amortiguación aerodinámica de rotación (hélices en flujo cruzado)
+          const rotDampPR = 1.2 + 0.08 * airSpd, rotDampY = 2.0;
+
+          this.pitchRate += (tauPitch + gyroPitch + eulerPitch + aeroEnv.turbPitch * 0.28 * 4.0 + propwashPitch - rotDampPR * this.pitchRate) * h;
+          this.rollRate  += (tauRoll  + gyroRoll  + eulerRoll  + aeroEnv.turbRoll  * 0.32 * 4.0 + propwashRoll  - rotDampPR * this.rollRate) * h;
+          this.yawRate   += (tauYaw   + aeroEnv.turbYaw * 0.22 * 4.0 - rotDampY * this.yawRate) * h;
+          if (this.turtleT > 0) this.rollRate = this.turtleDir * 3.2; // modo tortuga: 2 hélices invertidas voltean el dron
+          stepRotationSO3(this, h);
         }
+        this.lastAmps = ampSum / SUB;
+        let rpmSum = 0;
+        for (let i = 0; i < 4; i++) rpmSum += this.mRpm[i];
+        this.motorRpm = rpmSum * 0.25;
+
+        const thrustNorm = thrustSum / SUB;
         const agl = Math.max(0.1, this.py - groundH);
         const groundEffect = agl < 1.6 ? 1.0 + (1.6 - agl) * 0.095 : 1.0;
         const transLift    = horizAirSpd > 2.0 ? 1.0 + Math.min(0.15, horizAirSpd * 0.013) : 1.0;
@@ -7694,10 +7726,11 @@
         const massScale    = 0.62 / Math.max(0.30, cfg.massKg);
         const thrustAcc    = thrustNorm * cfg.maxThrustAcc * massScale * groundEffect * transLift * inflowLoss;
 
-        // Arrastre de pala inducido por los rotores (H-force de Flightmare: da agarre en curvas al acelerar)
+        // Arrastre del cuerpo cuadrático por eje (½ρ·Cd·A_eje·v_eje·|v|: la cara superior es ~2.3x la frontal)
+        // + arrastre de rotor (fuerza H) lineal con velocidad y rpm
         const bladeDragCoeff = 0.095 * this.motorRpm;
         const dragFR = (0.11 + 0.0105 * airSpd + bladeDragCoeff) * massScale;
-        const dragU  = (0.28 + 0.024  * Math.abs(vBodyU)) * massScale;
+        const dragU  = (0.28 + 0.024  * airSpd) * massScale;
         const fDragR = -vBodyR * dragFR;
         const fDragU = -vBodyU * dragU;
         const fDragF = -vBodyF * dragFR;
@@ -7714,13 +7747,49 @@
         this.totalDistKm += (gndSpd * dt) / 1000.0;
 
         const prevX = this.px, prevY = this.py, prevZ = this.pz;
+        const preVx = this.vx, preVy = this.vy, preVz = this.vz;
         this.px += this.vx * dt; this.py += this.vy * dt; this.pz += this.vz * dt;
+        let onGround = false;
         if (this.py < groundH + 0.30) {
           this.py = groundH + 0.30;
+          onGround = true;
           if (this.vy < 0) this.vy = -this.vy * 0.22;
           this.vx *= 0.90; this.vz *= 0.90;
         }
         collideCraftWithWorld(this, prevX, prevY, prevZ);
+
+        // CHOQUE FUERTE -> desarme (como Betaflight con crash detection)
+        const impactDv = Math.hypot(this.vx - preVx, this.vy - preVy, this.vz - preVz);
+        if (armed && impactDv > 10.0) {
+          this.disarmed = true;
+          this.crashT = 0.0;
+          this.iPitch = this.iRoll = this.iYaw = 0;
+          showToast(`CRASH ${Math.round(impactDv * 3.6)} KM/H - DESARMADO`);
+          playTone(110, 0.25, 'sawtooth', 0.07);
+        }
+        if (this.disarmed) {
+          this.crashT += dt;
+          if (onGround) {
+            this.vx *= 0.85; this.vz *= 0.85;
+            if (this.turtleT <= 0) { this.pitchRate *= 0.80; this.rollRate *= 0.80; this.yawRate *= 0.80; }
+            const upright = this.uy > 0.5;
+            if (!upright) {
+              // Boca abajo o de lado: MODO TORTUGA con el stick de roll
+              if (Math.abs(hwInput.rx) > 0.5 && this.crashT > 0.6) {
+                this.turtleT = 0.12; this.turtleDir = hwInput.rx > 0 ? 1.0 : -1.0;
+              }
+              if (this.crashT > 0.6 && (Math.floor(this.crashT * 2) % 8) === 0 && this.turtleHintT !== Math.floor(this.crashT * 2)) {
+                this.turtleHintT = Math.floor(this.crashT * 2);
+                showToast('MODO TORTUGA: MUEVE ROLL PARA VOLTEAR');
+              }
+            } else if (this.crashT > 1.2) {
+              this.disarmed = false; this.turtleT = 0;
+              showToast('REARMADO');
+              playTone(660, 0.08);
+            }
+          }
+          if (this.turtleT > 0) this.turtleT -= dt;
+        }
 
         if (!isFreeFlightNoGates()) {
           const g = CIRCUIT_GATES[this.activeGate];
@@ -7832,6 +7901,7 @@
       elevL: 0,
       elevR: 0,
       lastAlpha: 0,
+      iQ: 0, onGround: false, crashT: 0,
       flightTime: 0,
       totalDistKm: 0,
 
@@ -7889,6 +7959,8 @@
         this.thrCmd   = 0.60;
         this.motorRpm = 0.58;
         this.elevL = 0; this.elevR = 0; this.lastAlpha = 0.02;
+        this.iQ = 0; this.onGround = false; this.crashT = 0;
+        battReset(fcProfile.wing.cells || 3, fcProfile.wing.capMah || 2200, 0.010);
         this.activeGate = 0;
         this.flightTime = 0;
         this.totalDistKm = 0;
@@ -7931,6 +8003,7 @@
           thr = Math.max(thr, 0.58); // Empuje automático durante lanzamiento a mano o Failsafe RTH
         }
         if (hwInput.btn.A) thr = Math.min(1.0, thr + 0.38);
+        if (this.crashT > 0) thr = 0.0; // tras un choque el motor queda cortado hasta reaparecer
         this.thrCmd = thr;
         this.motorRpm += (thr - this.motorRpm) * Math.min(1.0, 14.0 * dt);
 
@@ -7938,7 +8011,7 @@
         const vAirX = this.vx - aeroEnv.windX;
         const vAirY = this.vy - aeroEnv.windY;
         const vAirZ = this.vz - aeroEnv.windZ;
-        const Va = Math.max(2.0, Math.hypot(vAirX, vAirY, vAirZ));
+        const Va = Math.max(0.5, Math.hypot(vAirX, vAirY, vAirZ));
         aeroEnv.airSpd = Va;
 
         // Componentes de V_air en el sistema cuerpo (R = derecha, U = arriba, F = morro)
@@ -7947,8 +8020,8 @@
         const wBody = vAirX * this.ux + vAirY * this.uy + vAirZ * this.uz;
 
         // Ángulo de Ataque (alpha > 0 cuando el aire entra por debajo del ala: wBody < 0) y Resbalamiento (beta)
-        const alpha = Math.atan2(-wBody, Math.max(2.5, uBody));
-        const beta  = Math.atan2( vBody, Math.max(2.5, Math.hypot(uBody, wBody)));
+        const alpha = Math.atan2(-wBody, uBody); // ángulo real (incluye vuelo de espaldas y deslizamiento de cola)
+        const beta  = Math.atan2( vBody, Math.max(0.5, Math.hypot(uBody, wBody)));
         this.lastAlpha = alpha;
 
         // 3. Comandos RC con curva SuperExpo
@@ -7956,27 +8029,32 @@
         //   pitchRate > 0 baja el morro (-U); pitchRate < 0 sube el morro (+U).
         //   pullUpCmd > 0 cuando el piloto tira del stick hacia abajo (hwInput.ry < 0) para subir el morro.
         //   En Alas Volantes puras (!cfg.hasRudder || cfg.yawRate <= 0), el stick de Rudder (lx) NO actúa.
-        const hasRudder = !!(cfg.hasRudder && cfg.yawRate > 0);
-        const rcPitch   = applySuperExpo(hwInput.ry, 1.0, cfg.expo);
-        const rcRoll    = applySuperExpo(hwInput.rx, 1.0, cfg.expo);
-        const rcYaw     = hasRudder ? applySuperExpo(hwInput.lx, 1.0, cfg.expo * 0.75) : 0.0;
-        const pullUpCmd = -rcPitch;
+        const hasRudder   = !!(cfg.hasRudder && cfg.yawRate > 0);
+        const rcPitch     = applySuperExpo(hwInput.ry, 1.0, cfg.expo);
+        const rcRoll      = applySuperExpo(hwInput.rx, 1.0, cfg.expo);
+        const rcYaw       = hasRudder ? applySuperExpo(hwInput.lx, 1.0, cfg.expo * 0.75) : 0.0;
 
-        this.elevL = Math.max(-1.0, Math.min(1.0, pullUpCmd - rcRoll * 0.80));
-        this.elevR = Math.max(-1.0, Math.min(1.0, pullUpCmd + rcRoll * 0.80));
+        // ===== Derivadas aerodinámicas (por unidad de inercia), calibradas para que a crucero (19.4 m/s = 70 km/h)
+        //       el stick a fondo en MANU dé los °/s del preset. Todo es momento = control - amortiguación ± estabilidad.
+        const VA0  = 19.4;
+        const Lp   = 0.86;                                         // amortiguación de alabeo (τ ≈ 60 ms a crucero)
+        const Ld   = Lp * (cfg.rollRate * DEG2RAD) / VA0;          // potencia de alerón/elevón
+        const Lb   = 1.40 * Lp / VA0 * (hasRudder ? 1.3 : 1.0);    // efecto diedro / flecha (alabeo por derrape)
+        const Ma   = 0.17 * (1.0 + cfg.cgOffset * 6.0);           // estabilidad estática de cabeceo (margen estático)
+        const Md   = Ma * 0.38;                                    // potencia de profundidad: δe = 1 -> Δα ≈ 22° (puede entrar en pérdida)
+        const Mq   = 0.10;                                         // amortiguación de cabeceo
+        const Nr   = 0.515;                                        // amortiguación de guiñada
+        const Nb   = Nr * (hasRudder ? 4.2 : 3.4) / VA0;           // estabilidad de veleta (derrape)
+        const Ndr  = hasRudder ? Nr * (cfg.yawRate * DEG2RAD) / VA0 : 0.0;
+        const Ldr  = hasRudder ? (cfg.rudderRoll || 0.30) * 1.8 * Lp / VA0 : 0.0;
+        // Presión dinámica de control: Va² + soplo de la hélice sobre las superficies (más en colas, poco en alas pusher)
+        const Qc   = Va * Va + (hasRudder ? 60.0 : 25.0) * this.motorRpm * this.motorRpm;
+        const alphaTrim = (0.053 * cfg.wingLoad - 0.052) - cfg.cgOffset * 0.30; // α de compensación fijo (CG + réflex)
 
-        // 4. Aerodinámica de Semialas (alpha_L, alpha_R) y Pérdida Suave (Tip-Stall)
-        // Calibrado para ZOHD Dart 250G:
-        // - Pérdida (Stall): ~30 km/h (8.33 m/s) con wingLoad = 1.00
-        // - Crucero (60% gas): ~70 km/h (19.44 m/s) en vuelo nivelado
-        // - Velocidad Máxima (100% gas): ~120 km/h (33.33 m/s) en vuelo nivelado
         const halfSpan    = 0.45;
-        const dAlphaRoll  = (this.rollRate * halfSpan) / Math.max(5.0, Va);
+        const dAlphaRoll  = Math.max(-0.5, Math.min(0.5, (this.rollRate * halfSpan) / Math.max(5.0, Va)));
         const alpha0      = -0.052; // Sustentación a alfa cero del perfil réflex en crucero (70 km/h)
         const alphaEff    = alpha - alpha0;
-        const alphaEffL   = alphaEff - dAlphaRoll;
-        const alphaEffR   = alphaEff + dAlphaRoll;
-
         const invWingLoad = 1.0 / Math.max(0.55, cfg.wingLoad);
         const qDyn        = 0.110 * Va * Va * invWingLoad;
         const stallAngle  = 0.285 / Math.sqrt(Math.max(0.6, cfg.wingLoad));
@@ -7984,149 +8062,97 @@
         const isStalled   = (Math.abs(alphaEff) > stallAngle) || (Va < stallSpeed);
         aeroEnv.stallWarn = isStalled;
 
-        const CL_L = evalWingLiftCoeff(alphaEffL, stallAngle, this.elevL);
-        const CL_R = evalWingLiftCoeff(alphaEffR, stallAngle, this.elevR);
-        const CL   = 0.5 * (CL_L + CL_R);
-
-        // En régimen normal (sin pérdida), el ala que baja genera más sustentación y amortigua el roll;
-        // solo al entrar en pérdida (isStalled) aparece asimetría de tip-stall
-        let stallPitchRate = 0, stallRollRate = 0;
-        if (isStalled) {
-          const stallSev = Math.min(1.2, Math.max(0.15, (stallSpeed - Va) * 0.20 + Math.max(0, Math.abs(alphaEff) - stallAngle) * 2.4)) * cfg.tipStall;
-          // En pérdida el morro cae (pitchRate > 0 baja el morro en stepRotationSO3) para recuperar velocidad naturalmente
-          stallPitchRate = +1.35 * stallSev;
-          stallRollRate  = ((CL_L - CL_R) * 1.4 + Math.sin(this.flightTime * 19.0) * 0.85) * stallSev;
-        }
-
-        // Autoridad aerodinámica dependiente de la velocidad del aire Va:
-        // - A baja velocidad (cerca de pérdida Va < 10 m/s): cae cuadráticamente con la presión dinámica (mandos esponjosos)
-        // - A velocidad de crucero (~19.4 m/s = 70 km/h): autoridad óptima 1.0
-        // - A muy alta velocidad (Va > 25 m/s -> 120 km/h): endurecimiento aerodinámico progresivo (servo blowback)
-        const spdNorm = Va / 18.5;
-        const lowSpdAuth = spdNorm < 1.0 ? Math.max(0.06, spdNorm * spdNorm) : Math.min(1.28, 1.0 + (spdNorm - 1.0) * 0.38);
-        const stickMag   = Math.max(Math.abs(rcPitch), Math.abs(rcRoll));
-        const highSpdBlowback = Va > 24.0 ? (1.0 / (1.0 + 0.042 * (Va - 24.0) * stickMag * stickMag)) : 1.0;
-        const ctrlAuth   = lowSpdAuth * highSpdBlowback;
-
-        // 5. Cinemática de Giro Canteado Coordinado en 3D (Bank-to-Turn real proyectado en ejes cuerpo)
+        const noseDownAngle  = Math.asin(Math.max(-0.99, Math.min(0.99, -this.fy)));
+        const bankRightAngle = Math.atan2(-this.ry, Math.max(0.15, this.uy));
         const uyPos = Math.max(0.0, this.uy);
         const turnOmegaWorld = (9.81 * (-this.ry) * uyPos) / Math.max(8.3, Va);
-        const coordTurnYaw   = turnOmegaWorld * uyPos * 0.92;
-        const coordTurnPitch = turnOmegaWorld * this.ry * 0.82; // Negativo -> mantiene el morro en el horizonte durante el viraje
+        const coordTurnPitch = turnOmegaWorld * this.ry * 0.82; // asistencia de viraje de la FC (solo modos estabilizados)
 
-        // Trim longitudinal dinámico con la presión dinámica qDyn para mantener vuelo nivelado 1G tanto a 70 km/h como a 120 km/h sin inflarse
-        const alpha1G          = Math.min(stallAngle * 0.82, (9.81 / Math.max(7.8, qDyn)) / 4.50) + alpha0;
-        const alphaTrim        = alpha1G - cfg.cgOffset * 0.30;
-        const weathervanePitch = (alpha - alphaTrim) * (2.8 + cfg.cgOffset * 18.0) * ctrlAuth;
-        const weathervaneYaw   = beta * (hasRudder ? 4.2 : 3.4) * ctrlAuth;
-        const sweptDihedralRoll = -beta * (hasRudder ? 1.85 : 1.4) * ctrlAuth;
-        // En aviones con timón de cola, meter Rudder induce también alabeo pro-verso por diedro
-        const rudderCoupledRoll = hasRudder ? (rcYaw * (cfg.rudderRoll || 0.30) * 1.8 * ctrlAuth) : 0.0;
-
-        // Ángulos de actitud actuales para modos asistidos (LAUNCH y HORIZON)
-        // En convención stepRotationSO3 (+pitch = morro abajo), noseDownAngle = asin(-fy)
-        const noseDownAngle = Math.asin(Math.max(-0.99, Math.min(0.99, -this.fy)));
-        const bankRightAngle = Math.atan2(-this.ry, Math.max(0.15, this.uy));
-
+        // ===== CONTROLADOR DE VUELO: produce deflexiones δe (tirar +), δa (alabeo der +), δr. MANU = directo.
+        let dE = 0, dA = 0, dR = 0;
+        let wantP = null, wantQ = 0, wantR = 0; // consignas de velocidad angular para el lazo de rate (ACRO/HOR/RTH/LAUNCH)
         if (aeroEnv.failsafeTimer > 0) {
-          // Failsafe RTH INAV en el borde del mapa: vira automáticamente de regreso al centro (0, 0)
           const toHomeX = -this.px, toHomeZ = -this.pz;
           const homeCross = toHomeX * this.rx + toHomeZ * this.rz;
           const homeDot   = toHomeX * this.fx + toHomeZ * this.fz;
           const homeBearing = Math.atan2(homeCross, homeDot);
           const desiredBank = Math.max(-0.72, Math.min(0.72, homeBearing * 1.4));
           const desiredNoseDown = (this.py - groundH < 24.0 ? -12.0 : -4.0) * DEG2RAD;
-          const tPitch = (desiredNoseDown - noseDownAngle) * 4.2 + coordTurnPitch * 0.6;
-          const tRoll  = (desiredBank - bankRightAngle) * 4.8;
-          const tYaw   = coordTurnYaw + weathervaneYaw;
-          const gain   = Math.min(1.0, 12.0 * dt);
-          this.pitchRate += (tPitch - this.pitchRate) * gain;
-          this.rollRate  += (tRoll  - this.rollRate)  * gain;
-          this.yawRate   += (tYaw   - this.yawRate)   * gain;
+          wantQ = (desiredNoseDown - noseDownAngle) * 4.2 + coordTurnPitch * 0.6;
+          wantP = (desiredBank - bankRightAngle) * 4.8;
         } else if (this.launchTimer > 0) {
-          // Fase INAV NAV_LAUNCH: mantiene alas niveladas y ascenso limpio de +11° tras lanzarlo con la mano
-          const targetNoseDown = -11.0 * DEG2RAD;
-          const tPitch = (targetNoseDown - noseDownAngle) * 5.5;
-          const tRoll  = (0.0 - bankRightAngle) * 6.5;
-          const tYaw   = weathervaneYaw;
-          const gain   = Math.min(1.0, 14.0 * dt);
-          this.pitchRate += (tPitch - this.pitchRate) * gain;
-          this.rollRate  += (tRoll  - this.rollRate)  * gain;
-          this.yawRate   += (tYaw   - this.yawRate)   * gain;
+          wantQ = (-11.0 * DEG2RAD - noseDownAngle) * 5.5;
+          wantP = (0.0 - bankRightAngle) * 6.5;
         } else if (this.mode === 'MANU') {
-          // Modo MANU (Passthrough): elevones directos con amortiguación aerodinámica real (C_mq, C_lp, C_nr) sin oscilación
-          const cmdPitchRate = rcPitch * cfg.pitchRate * DEG2RAD * ctrlAuth;
-          const cmdRollRate  = rcRoll  * cfg.rollRate  * DEG2RAD * ctrlAuth + rudderCoupledRoll;
-          const cmdYawRate   = rcYaw   * cfg.yawRate   * DEG2RAD * ctrlAuth;
-
-          const targetPitch = cmdPitchRate + coordTurnPitch + weathervanePitch + stallPitchRate + aeroEnv.turbPitch * 0.80;
-          const targetRoll  = cmdRollRate  + sweptDihedralRoll + stallRollRate + aeroEnv.turbRoll * 0.95;
-          const targetYaw   = cmdYawRate   + coordTurnYaw + weathervaneYaw + aeroEnv.turbYaw * 0.66;
-
-          // Amortiguación aerodinámica de periodo corto (evita el cabeceo/rebote al soltar el stick)
-          this.pitchRate += (targetPitch - this.pitchRate) * Math.min(1.0, (11.5 + 0.25 * Va) * dt);
-          this.rollRate  += (targetRoll  - this.rollRate)  * Math.min(1.0, (14.0 + 0.30 * Va) * dt);
-          this.yawRate   += (targetYaw   - this.yawRate)   * Math.min(1.0, (9.5  + 0.20 * Va) * dt);
+          dE = -rcPitch; dA = rcRoll; dR = rcYaw;
         } else if (this.mode === 'ACRO') {
-          // Modo ACRO (INAV Rate): bloquea la actitud comandada y coordina el giro automáticamente
-          const cmdPitchRate = rcPitch * cfg.pitchRate * DEG2RAD * ctrlAuth;
-          const cmdRollRate  = rcRoll  * cfg.rollRate  * DEG2RAD * ctrlAuth + rudderCoupledRoll * 0.75;
-          const cmdYawRate   = rcYaw   * cfg.yawRate   * DEG2RAD * ctrlAuth;
-
-          const targetPitch = cmdPitchRate + coordTurnPitch + weathervanePitch * 0.45 + stallPitchRate + aeroEnv.turbPitch * 0.60;
-          const targetRoll  = cmdRollRate  + stallRollRate * 0.65 + aeroEnv.turbRoll * 0.74;
-          const targetYaw   = cmdYawRate   + coordTurnYaw + weathervaneYaw * 0.85 + aeroEnv.turbYaw * 0.52;
-
-          const rateGain = Math.min(1.0, 16.5 * dt);
-          this.pitchRate += (targetPitch - this.pitchRate) * rateGain;
-          this.rollRate  += (targetRoll  - this.rollRate)  * rateGain;
-          this.yawRate   += (targetYaw   - this.yawRate)   * rateGain;
+          wantQ = rcPitch * cfg.pitchRate * DEG2RAD;
+          wantP = rcRoll  * cfg.rollRate  * DEG2RAD;
+          wantR = rcYaw   * cfg.yawRate   * DEG2RAD;
         } else {
-          // Modo HOR (INAV Angle / Horizon con límite estricto de inclinación: NO permite hacer rolls ni invertirse):
-          // - Al empujar el stick al 100%, inclina hasta el ángulo máximo de banqueo (±52°) y mantiene un giro coordinado limpio.
-          // - Al soltar el stick, autonivela suavemente a 0° mientras acusa térmicas, ráfagas y turbulencia al 70%.
-          const cmdYawRate = rcYaw * cfg.yawRate * DEG2RAD * ctrlAuth;
-
-          // Ondulación atmosférica suave (térmicas lentas + trim exacto de equilibrio 1G + par sutil de hélice)
           const wVar = 0.38 + fcProfile.windScale * 0.35 + fcProfile.wind.turbPct * 0.52;
-          const speedTrimDeg = Math.max(-3.5, Math.min(4.5, -alpha1G * RAD2DEG));
           const ahrsDriftPitch = (1.15 * Math.sin(this.flightTime * 0.78 + this.px * 0.018)
                                 + 0.72 * Math.cos(this.flightTime * 1.55 - this.pz * 0.022)) * wVar * DEG2RAD;
-          const propTorqueDeg  = (this.motorRpm - 0.58) * 1.1;
-          const rudderBankDeg  = hasRudder ? (rcYaw * (cfg.rudderRoll || 0.30) * 18.0) : 0.0;
           const ahrsDriftRoll  = (1.95 * Math.sin(this.flightTime * 0.68 + this.pz * 0.018)
-                                + 1.15 * Math.cos(this.flightTime * 1.35 + this.px * 0.022)
-                                + propTorqueDeg + rudderBankDeg) * wVar * DEG2RAD;
-
-          const targetNoseDown = Math.max(-35.0 * DEG2RAD, Math.min(35.0 * DEG2RAD, (hwInput.ry * 34.0 - speedTrimDeg) * DEG2RAD + ahrsDriftPitch));
+                                + 1.15 * Math.cos(this.flightTime * 1.35 + this.px * 0.022)) * wVar * DEG2RAD;
+          const targetNoseDown = Math.max(-35.0 * DEG2RAD, Math.min(35.0 * DEG2RAD, (hwInput.ry * 34.0) * DEG2RAD + ahrsDriftPitch));
           const targetBank     = Math.max(-52.0 * DEG2RAD, Math.min(52.0 * DEG2RAD, (hwInput.rx * 50.0) * DEG2RAD + ahrsDriftRoll));
-
-          const errPitch = targetNoseDown - noseDownAngle;
-          const errRoll  = targetBank     - bankRightAngle;
-
-          // Ganancia proporcional de ángulo con tope firme (impide pasar de ±52° de alabeo incluso con stick a fondo)
-          const gainPitch = (3.10 + 2.20 * Math.min(1.0, Math.abs(errPitch) / (12.0 * DEG2RAD))) * ctrlAuth;
-          const gainRoll  = (3.40 + 2.50 * Math.min(1.0, Math.abs(errRoll)  / (15.0 * DEG2RAD))) * ctrlAuth;
-
-          const tPitch = errPitch * gainPitch + coordTurnPitch * 0.75 + weathervanePitch * 0.45 + stallPitchRate * 0.75 + aeroEnv.turbPitch * 0.62;
-          const tRoll  = errRoll  * gainRoll  + sweptDihedralRoll * 0.35 + stallRollRate * 0.65 + aeroEnv.turbRoll * 0.74;
-          const tYaw   = cmdYawRate * 0.90 + coordTurnYaw * 0.92 + weathervaneYaw * 0.85 + aeroEnv.turbYaw * 0.56;
-
-          // Amortiguación limpia y sin rebote
-          this.pitchRate += (tPitch - this.pitchRate) * Math.min(1.0, (11.5 + 0.22 * Va) * dt);
-          this.rollRate  += (tRoll  - this.rollRate)  * Math.min(1.0, (13.0 + 0.25 * Va) * dt);
-          this.yawRate   += (tYaw   - this.yawRate)   * Math.min(1.0, (9.5  + 0.18 * Va) * dt);
+          wantQ = (targetNoseDown - noseDownAngle) * 3.6 + coordTurnPitch * 0.75;
+          wantP = (targetBank - bankRightAngle) * 4.2;
+          wantR = rcYaw * cfg.yawRate * DEG2RAD * 0.9;
         }
+        if (wantP !== null) {
+          // Lazo de rate con FF + P + I y ganancia ∝ 1/Va² (TPA de INAV): a baja velocidad se satura -> pierdes autoridad real
+          const tpa = (VA0 * VA0) / Math.max(25.0, Qc);
+          const errQ = wantQ - this.pitchRate, errP = wantP - this.rollRate, errR = wantR - this.yawRate;
+          this.iQ = Math.max(-0.35, Math.min(0.35, (this.iQ || 0) + errQ * 0.9 * dt));
+          dE = -((wantQ * 0.25 + errQ * 0.55 + this.iQ) * tpa);
+          dA = (wantP * Lp / Ld / Math.max(6.0, Va) + errP * 0.12 * tpa);
+          dR = hasRudder ? (wantR * Nr / Math.max(1e-4, Ndr) / Math.max(6.0, Va) + errR * 0.15 * tpa) : 0.0;
+        } else {
+          this.iQ = 0;
+        }
+        dE = Math.max(-1.0, Math.min(1.0, dE));
+        dA = Math.max(-1.0, Math.min(1.0, dA));
+        dR = Math.max(-1.0, Math.min(1.0, dR));
 
-        // Vibración aerodinámica rápida calibrada al 70% (Buffeting / Flutter de semialas en turbulencia y ráfagas)
+        // Mezcla de elevones (saturan juntos: tirar + alabear a fondo limita ambos, como en el ala real)
+        this.elevL = Math.max(-1.0, Math.min(1.0, dE - dA * 0.80));
+        this.elevR = Math.max(-1.0, Math.min(1.0, dE + dA * 0.80));
+        const effE = 0.5 * (this.elevL + this.elevR);
+        const effA = (this.elevR - this.elevL) / 1.6;
+
+                const alphaEffL = alphaEff - dAlphaRoll;
+        const alphaEffR = alphaEff + dAlphaRoll;
+        const CL_L = evalWingLiftCoeff(alphaEffL, stallAngle, this.elevL);
+        const CL_R = evalWingLiftCoeff(alphaEffR, stallAngle, this.elevR);
+        const CL   = 0.5 * (CL_L + CL_R);
+        // Pequeña asimetría de construcción (0.7° en una semiala): su efecto NO lineal es cero antes de la pérdida y en pérdida tira un ala
+        const tipBias = 0.012 * cfg.tipStall;
+        const asymCL = (evalWingLiftCoeff(alphaEff + tipBias, stallAngle, 0) - evalWingLiftCoeff(alphaEff, stallAngle, 0)) - 4.50 * tipBias;
+        const Lst    = 4.50 * Lp * cfg.tipStall;
+        // La amortiguación de alabeo nace de la pendiente de sustentación: en pérdida casi desaparece -> la asimetría tira el ala
+        const slopeRatio = Math.max(0.08, (evalWingLiftCoeff(alphaEff + 0.03, stallAngle, 0) - evalWingLiftCoeff(alphaEff - 0.03, stallAngle, 0)) / (0.06 * 4.50));
+
+        // ===== ECUACIONES DE MOMENTO (convención: pitch + = morro abajo, roll + = derecha, yaw + = derecha)
+        const propTorque = -0.08 * this.motorRpm * cfg.maxThrustAcc * 0.06; // reacción del par del motor
+        const pAcc = Ld * Qc * effA - Lp * Va * this.rollRate * slopeRatio - Lb * Va * Va * beta + Ldr * Qc * dR
+                   + Lst * Va * asymCL + propTorque + aeroEnv.turbRoll * 0.95 * 12.0;
+        const qAcc = -Md * Qc * effE - Mq * Va * this.pitchRate + Ma * Va * Va * (alpha - alphaTrim) + aeroEnv.turbPitch * 0.80 * 12.0;
+        const rAcc = Ndr * Qc * dR - Nr * Va * this.yawRate + Nb * Va * Va * beta - 0.02 * Qc * effA * Ld / Lp + aeroEnv.turbYaw * 0.66 * 10.0;
+        this.rollRate  += pAcc * dt;
+        this.pitchRate += qAcc * dt;
+        this.yawRate   += rAcc * dt;
+        if (this.onGround) { this.pitchRate *= 0.6; this.rollRate *= 0.6; this.yawRate *= 0.6; }
+
         const savedWingP = this.pitchRate, savedWingR = this.rollRate, savedWingY = this.yawRate;
         this.pitchRate += aeroEnv.vibPitch * 0.40;
         this.rollRate  += aeroEnv.vibRoll  * 0.52;
         this.yawRate   += aeroEnv.vibYaw   * 0.31;
         stepRotationSO3(this, dt);
-        this.pitchRate = savedWingP + aeroEnv.vibPitch * 0.10;
-        this.rollRate  = savedWingR + aeroEnv.vibRoll  * 0.12;
-        this.yawRate   = savedWingY + aeroEnv.vibYaw   * 0.07;
+        this.pitchRate = savedWingP;
+        this.rollRate  = savedWingR;
+        this.yawRate   = savedWingY;
 
         // 6. Fuerzas Aerodinámicas 3D con Conservación Exacta de Energía (L _|_ V_air, D || -V_air)
         const invVa = 1.0 / Va;
@@ -8147,21 +8173,24 @@
         const CD       = 0.032 + 0.145 * CL * CL + elevDrag + 0.55 * beta * beta + (isStalled ? 0.28 * Math.sin(Math.abs(alphaEff)) : 0);
         const CY       = -1.85 * beta;
 
-        const liftAcc = Math.max(-30.0, Math.min(40.0, qDyn * CL));
+        const liftAcc = qDyn * CL; // sin topes: el límite lo pone la pérdida (CLmax)
         const dragAcc = qDyn * CD;
-        const sideAcc = Math.max(-16.0, Math.min(16.0, qDyn * CY));
+        const sideAcc = qDyn * CY;
 
         // Modelo de Hélice Pusher de Paso Fijo (Advance Ratio) + Freno de Molinete (Windmilling) al cortar gas:
         // - Con 60% de gas (motorRpm = 0.60): propTargetSpd = 21.7 m/s -> equilibrio thrustAcc = dragAcc a 19.44 m/s (70 km/h)
         // - Con 100% de gas (motorRpm = 1.00): propTargetSpd = 39.0 m/s -> equilibrio thrustAcc = dragAcc a 33.33 m/s (120 km/h)
+        // Batería 3S: corriente ~2 A + 38 A·rpm³ (≈10 A a crucero, ≈40 A a fondo); el giro de la hélice es ∝ voltaje con carga
+        const rpm3 = this.motorRpm * this.motorRpm * this.motorRpm;
+        const rpmEff = this.motorRpm * battStep(1.5 + 38.0 * rpm3, dt);
         const propPitchMaxSpd = 21.0 + cfg.maxThrustAcc * 1.00;
-        const propTargetSpd   = propPitchMaxSpd * this.motorRpm * (0.82 + 0.18 * this.motorRpm);
+        const propTargetSpd   = propPitchMaxSpd * rpmEff * (0.82 + 0.18 * rpmEff);
         let thrustAcc = 0;
         if (uBody < propTargetSpd && propTargetSpd > 0.5) {
           const slipRatio = (propTargetSpd - Math.max(0, uBody)) / Math.max(4.0, propTargetSpd);
-          thrustAcc = this.motorRpm * cfg.maxThrustAcc * invWingLoad * Math.min(1.0, 1.55 * slipRatio);
+          thrustAcc = rpmEff * cfg.maxThrustAcc * invWingLoad * Math.min(1.0, 1.55 * slipRatio);
         } else {
-          thrustAcc = -0.22 * (uBody - propTargetSpd) * (1.0 - 0.45 * this.motorRpm) * invWingLoad;
+          thrustAcc = -0.22 * (uBody - propTargetSpd) * (1.0 - 0.45 * rpmEff) * invWingLoad;
         }
 
         const ax = this.fx * thrustAcc + liftDirX * liftAcc - airDirX * dragAcc + this.rx * sideAcc + aeroEnv.joltX * invWingLoad;
@@ -8176,13 +8205,39 @@
         this.totalDistKm += (this.spd * dt) / 1000.0;
 
         const prevX = this.px, prevY = this.py, prevZ = this.pz;
+        const preVx = this.vx, preVy = this.vy, preVz = this.vz;
         this.px += this.vx * dt; this.py += this.vy * dt; this.pz += this.vz * dt;
+        this.onGround = false;
+        let crashNow = false;
         if (this.py < groundH + 0.35) {
+          const sinkSpd = -this.vy;
           this.py = groundH + 0.35;
-          if (this.vy < 0) this.vy = -this.vy * 0.2;
-          this.vx *= 0.96; this.vz *= 0.96;
+          this.onGround = true;
+          if (this.crashT <= 0 && this.launchTimer <= 0 && (sinkSpd > 6.0 || (this.fy < -0.45 && this.spd > 12.0))) {
+            crashNow = true; // clavada de morro o caída vertical fuerte
+          }
+          if (this.vy < 0) this.vy = 0;
+          // Aterrizaje de panza: roce μ ≈ 0.45 contra la hierba, sin rebotes
+          const hs = Math.hypot(this.vx, this.vz);
+          if (hs > 1e-3) {
+            const dec = Math.min(hs, 0.45 * 9.81 * dt);
+            this.vx -= (this.vx / hs) * dec; this.vz -= (this.vz / hs) * dec;
+          }
+          // El ala se asienta plana sobre el suelo
+          this.rollRate  = -bankRightAngle * 5.0;
+          this.pitchRate = noseDownAngle > 0.0 ? -noseDownAngle * 5.0 : this.pitchRate * 0.5;
         }
         collideCraftWithWorld(this, prevX, prevY, prevZ);
+        if (Math.hypot(this.vx - preVx, this.vy - preVy, this.vz - preVz) > 12.0) crashNow = true;
+        if (crashNow && this.crashT <= 0) {
+          this.crashT = 2.0;
+          showToast(`CRASH ${Math.round(this.spd * 3.6)} KM/H - REAPARECE EN 2 S`);
+          playTone(110, 0.25, 'sawtooth', 0.07);
+        }
+        if (this.crashT > 0) {
+          this.crashT -= dt;
+          if (this.crashT <= 0) { this.reset(); return; }
+        }
 
         if (!isFreeFlightNoGates()) {
           const g = CIRCUIT_GATES[this.activeGate];
