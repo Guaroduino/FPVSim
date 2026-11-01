@@ -642,7 +642,7 @@
         <button id="btnBleMp" class="pill-btn" title="Multijugador Bluetooth BLE / Pestaña Local (ESP32-S3 NimBLE)">📡 BLE</button>
         <a href="hardware.html" class="pill-btn" style="text-decoration:none;display:inline-flex;align-items:center;" title="Ver Guía y Diagrama de Conexiones ESP32-S3 N16R8">PINOUT</a>
         <button id="btnExportMap" class="pill-btn" title="Exportar el mapa activo como .fpvm (16 bits: altura + paleta de 256 colores) para cargarlo en el firmware ESP32-S3 (LittleFS /maps)">⬇ MAPA</button>
-        <button id="btnPalette" class="pill-btn" title="Cambiar Modo de Bus SPI ESP32-S3 (80MHz 60FPS / 60MHz 48FPS / 40MHz 32FPS / 1-Bit)">60MHz 48FPS</button>
+        <button id="btnPalette" class="pill-btn" title="Cambiar Modo de Pantalla: ESP32-S3 SPI (80MHz 60FPS / 60MHz 48FPS / 40MHz 32FPS / 1-Bit) o vista previa RadioMaster TX16S (240x136 30FPS)">60MHz 48FPS</button>
       </div>
     </header>
 
@@ -1004,7 +1004,7 @@
     // =========================================================================
     const S3COST = {
       raySteps: 0, skyPx: 0, spritePx: 0, triPx: 0, linePx: 0, objects: 0,
-      lastMs: 0, filtMs: 0,
+      lastMs: 0, filtMs: 0, filtTx16Ms: 0,
       CYC: { raySteps: 42, skyPx: 26, terrainPx: 4, blitPx: 14, spritePx: 11, triPx: 9, linePx: 9, objects: 400, fixed: 600000 },
       reset() { this.raySteps = 0; this.skyPx = 0; this.spritePx = 0; this.triPx = 0; this.linePx = 0; this.objects = 0; },
       // Raycast + cielo repartidos entre los 2 núcleos; blit, objetos y OSD en el Core 1
@@ -1015,8 +1015,25 @@
         const core1 = rayCycles * 0.5 + DISP_W * DISP_H * C.blitPx + this.spritePx * C.spritePx +
                       this.triPx * C.triPx + this.linePx * C.linePx + this.objects * C.objects + C.fixed;
         return core1 / 240000.0;
+      },
+      // Estimación para la RadioMaster TX16S (STM32F429, Cortex-M4F @ 180 MHz, 1 núcleo, mapas en SDRAM externa).
+      // Render nativo 240x136 = 0.425x los píxeles de 320x240; el duplicado 2x a 480x272 lo hace el DMA2D y la
+      // pantalla la refresca el LTDC desde SDRAM (sin cuello de bus como el SPI del S3).
+      estimateTx16Ms() {
+        const C = this.CYC;
+        const PX = TX16_W * TX16_H / (DISP_W * DISP_H);
+        const SDRAM = 1.35; // penalización por lecturas aleatorias del mapa en SDRAM (sin caché de datos en el F429)
+        const terrainPx = Math.max(0, VOX_W_COST * VOX_H_COST - this.skyPx);
+        const rayCycles = (this.raySteps * C.raySteps + this.skyPx * C.skyPx + terrainPx * C.terrainPx) * PX * SDRAM;
+        const core = rayCycles + TX16_W * TX16_H * C.blitPx +
+                     (this.spritePx * C.spritePx + this.triPx * C.triPx + this.linePx * C.linePx) * PX +
+                     this.objects * C.objects + C.fixed;
+        return core / 180000.0;
       }
     };
+    // TX16S: pantalla 480x272 RGB565 (LTDC), render a la mitad 240x136 y duplicado 2x2
+    const TX16_W = 240, TX16_H = 136;
+    const TX16_OUT_W = 480, TX16_OUT_H = 272;
     const VOX_W_COST = 256, VOX_H_COST = 256;
 
     // Coordenadas lógicas base (128x64 -> escaladas en hardware a 320x240 = x2.5, x3.75)
@@ -1081,7 +1098,12 @@
       { name: '80MHz DMA 60FPS', shortBtn: '80MHz 60FPS', spiMhz: 80, mono: false, targetFps: 60, dmaWireMs: 15.4 },
       { name: '60MHz DMA 48FPS', shortBtn: '60MHz 48FPS', spiMhz: 60, mono: false, targetFps: 48, dmaWireMs: 20.5 },
       { name: '40MHz SPI 32FPS', shortBtn: '40MHz 32FPS', spiMhz: 40, mono: false, targetFps: 32, dmaWireMs: 30.7 },
-      { name: '1-BIT MONO 60FPS',shortBtn: '1-BIT MONO',  spiMhz: 80, mono: true,  targetFps: 60, dmaWireMs: 15.4 }
+      { name: '1-BIT MONO 60FPS',shortBtn: '1-BIT MONO',  spiMhz: 80, mono: true,  targetFps: 60, dmaWireMs: 15.4 },
+      // RadioMaster TX16S (vista previa de un port en C): 240x136 duplicado a 480x272, 30 FPS.
+      //   tx16: 'crop' = vista 16:9 recortando arriba/abajo (densidad real de píxeles, escala 0.75)
+      //   tx16: 'fit'  = cuadro 4:3 completo dentro de la pantalla ancha (barras laterales, escala 0.57)
+      { name: 'TX16S 240x136 30FPS 16:9', shortBtn: 'TX16S 30FPS', spiMhz: 0, mono: false, targetFps: 30, dmaWireMs: 0, tx16: 'crop' },
+      { name: 'TX16S 240x136 30FPS 4:3',  shortBtn: 'TX16S 4:3',   spiMhz: 0, mono: false, targetFps: 30, dmaWireMs: 0, tx16: 'fit' }
     ];
     let paletteIdx = 1; // 60 MHz DMA = 48 FPS: objetivo por defecto de la consola real
 
@@ -1298,7 +1320,92 @@
       }
     }
 
+    // Tablas de muestreo de la vista TX16S (se construyen 1 vez por modo; -1 = barra negra)
+    const TX16_CROP_Y0 = 29, TX16_CROP_H = 182; // 320x182 centrales = 16:9 de la pantalla 480x272
+    const tx16SrcLut = new Int32Array(TX16_W * TX16_H);
+    let tx16LutMode = '';
+    let tx16ImgData = null;
+    function buildTx16Lut(mode) {
+      for (let dy = 0; dy < TX16_H; dy++) {
+        for (let dx = 0; dx < TX16_W; dx++) {
+          let src = -1;
+          if (mode === 'crop') {
+            const sx = Math.floor((dx + 0.5) * DISP_W / TX16_W);
+            const sy = TX16_CROP_Y0 + Math.floor((dy + 0.5) * TX16_CROP_H / TX16_H);
+            src = sy * DISP_W + sx;
+          } else {
+            const fitW = Math.round(DISP_W * TX16_H / DISP_H); // 181
+            const x0 = (TX16_W - fitW) >> 1;
+            const fx = dx - x0;
+            if (fx >= 0 && fx < fitW) {
+              const sx = Math.floor((fx + 0.5) * DISP_W / fitW);
+              const sy = Math.floor((dy + 0.5) * DISP_H / TX16_H);
+              src = sy * DISP_W + sx;
+            }
+          }
+          tx16SrcLut[dy * TX16_W + dx] = src;
+        }
+      }
+      tx16LutMode = mode;
+    }
+
+    // Ajusta el canvas y su marco a 480x272 (16:9) en modo TX16S, o a 320x240 (4:3) en los modos ESP32-S3
+    let canvasLayoutTx16 = null;
+    function syncCanvasLayout() {
+      const tx = SPI_MODES[paletteIdx].tx16 || '';
+      if (canvasLayoutTx16 === tx) return;
+      canvasLayoutTx16 = tx;
+      const cont = document.getElementById('oledContainer');
+      if (tx) {
+        oledCanvas.width = TX16_OUT_W; oledCanvas.height = TX16_OUT_H;
+        if (cont) cont.style.aspectRatio = `${TX16_OUT_W} / ${TX16_OUT_H}`;
+        tx16ImgData = oledCtx.createImageData(TX16_OUT_W, TX16_OUT_H);
+        const d = tx16ImgData.data;
+        for (let i = 3; i < d.length; i += 4) d[i] = 255;
+        if (tx16LutMode !== tx) buildTx16Lut(tx);
+      } else {
+        oledCanvas.width = DISP_W; oledCanvas.height = DISP_H;
+        if (cont) cont.style.aspectRatio = '';
+      }
+    }
+
+    // Convierte un toque en la pantalla (0..1) a coordenadas 320x240 del juego, deshaciendo la vista TX16S
+    function mapScreenToVram(nx, ny) {
+      const tx = SPI_MODES[paletteIdx].tx16;
+      if (tx === 'crop') {
+        return [nx, (TX16_CROP_Y0 + ny * TX16_CROP_H) / DISP_H];
+      }
+      if (tx === 'fit') {
+        const fitW = Math.round(DISP_W * TX16_H / DISP_H) / TX16_W;
+        return [Math.max(0, Math.min(1, (nx - (1 - fitW) * 0.5) / fitW)), ny];
+      }
+      return [nx, ny];
+    }
+
+    function fbPresentTx16() {
+      if (!tx16ImgData) return;
+      const d = tx16ImgData.data;
+      const rowB = TX16_OUT_W * 4;
+      for (let dy = 0; dy < TX16_H; dy++) {
+        let o = dy * 2 * rowB;
+        const lutRow = dy * TX16_W;
+        for (let dx = 0; dx < TX16_W; dx++) {
+          const src = tx16SrcLut[lutRow + dx];
+          let r = 0, g = 0, b = 0;
+          if (src >= 0) { const c = vram565[src]; r = LUT_R[c]; g = LUT_G[c]; b = LUT_B[c]; }
+          d[o] = r; d[o + 1] = g; d[o + 2] = b;
+          d[o + 4] = r; d[o + 5] = g; d[o + 6] = b;
+          d[o + rowB] = r; d[o + rowB + 1] = g; d[o + rowB + 2] = b;
+          d[o + rowB + 4] = r; d[o + rowB + 5] = g; d[o + rowB + 6] = b;
+          o += 8;
+        }
+      }
+      oledCtx.putImageData(tx16ImgData, 0, 0);
+    }
+
     function fbPresentToCanvas() {
+      syncCanvasLayout();
+      if (SPI_MODES[paletteIdx].tx16) { fbPresentTx16(); return; }
       let pIdx = 0;
       for (let i = 0; i < VRAM_PIXELS; i++) {
         const c = vram565[i];
@@ -11697,8 +11804,9 @@
 
     function handleOledTouchPoint(clientX, clientY, isStart) {
       const rect = oledCanvas.getBoundingClientRect();
-      const nx = Math.max(0, Math.min(1, (clientX - rect.left) / (rect.width || 1)));
-      const ny = Math.max(0, Math.min(1, (clientY - rect.top) / (rect.height || 1)));
+      const [nx, ny] = mapScreenToVram(
+        Math.max(0, Math.min(1, (clientX - rect.left) / (rect.width || 1))),
+        Math.max(0, Math.min(1, (clientY - rect.top) / (rect.height || 1))));
       capTouch.x320 = Math.round(nx * (DISP_W - 1));
       capTouch.y240 = Math.round(ny * (DISP_H - 1));
       capTouch.lx128 = nx * SCREEN_W;
@@ -12841,8 +12949,12 @@
       }
 
       const mode = SPI_MODES[paletteIdx];
-      const dmaMs = (1228800 / (mode.spiMhz * 1e6) * 1000).toFixed(1);
-      drawInavText320(`SPI: ${mode.spiMhz}MHZ (${dmaMs}MS)`, 104, 102, NIN565.GREEN);
+      if (mode.tx16) {
+        drawInavText320(`LCD: TX16S LTDC 240X136`, 104, 102, NIN565.GREEN);
+      } else {
+        const dmaMs = (1228800 / (mode.spiMhz * 1e6) * 1000).toFixed(1);
+        drawInavText320(`SPI: ${mode.spiMhz}MHZ (${dmaMs}MS)`, 104, 102, NIN565.GREEN);
+      }
       drawInavText320(`TOUCH: ${capTouch.x320},${capTouch.y240}`, 104, 118, capTouch.active ? NIN565.GOLD : NIN565.SILVER);
 
       fillRect320(0, 214, DISP_W, 26, NIN565.HEADER);
@@ -12892,7 +13004,7 @@
         paletteIdx = (paletteIdx + 1) % SPI_MODES.length;
         const m = SPI_MODES[paletteIdx];
         e.currentTarget.textContent = m.shortBtn || m.name;
-        showToast(`SPI: ${m.name}`);
+        showToast(m.tx16 ? m.name : `SPI: ${m.name}`);
       });
     }
     const btnSoundEl = document.getElementById('btnSound');
@@ -13029,6 +13141,8 @@
         const s3Ms = S3COST.estimateMs();
         S3COST.filtMs = S3COST.filtMs > 0 ? S3COST.filtMs * 0.9 + s3Ms * 0.1 : s3Ms;
         S3COST.lastMs = s3Ms;
+        const txMs = S3COST.estimateTx16Ms();
+        S3COST.filtTx16Ms = S3COST.filtTx16Ms > 0 ? S3COST.filtTx16Ms * 0.9 + txMs * 0.1 : txMs;
         capTouch.justTapped = false;
 
         fpsFrames++;
@@ -13038,15 +13152,22 @@
           const dispFps = Math.min(rawFps, mode.targetFps);
           const budgetMs = 1000.0 / mode.targetFps;
           const s3El = document.getElementById('uiFpsBattery');
-          s3El.textContent = `${dispFps}FPS | SPI ${mode.spiMhz}MHz | S3 est. ${S3COST.filtMs.toFixed(1)}/${budgetMs.toFixed(1)}ms`;
-          s3El.style.color = S3COST.filtMs > budgetMs ? '#ff5a5a' : (S3COST.filtMs > budgetMs * 0.85 ? '#ffc23d' : '');
+          const estMs = mode.tx16 ? S3COST.filtTx16Ms : S3COST.filtMs;
+          const estLbl = mode.tx16 ? 'TX16S' : 'S3';
+          s3El.textContent = mode.tx16
+            ? `${dispFps}FPS | TX16S 240x136 | TX16S est. ${estMs.toFixed(1)}/${budgetMs.toFixed(1)}ms`
+            : `${dispFps}FPS | SPI ${mode.spiMhz}MHz | S3 est. ${estMs.toFixed(1)}/${budgetMs.toFixed(1)}ms`;
+          s3El.style.color = estMs > budgetMs ? '#ff5a5a' : (estMs > budgetMs * 0.85 ? '#ffc23d' : '');
           // Visible en la píldora del modo SPI (la barra uiFpsBattery está oculta en el diseño actual)
           const palBtn = document.getElementById('btnPalette');
           if (palBtn && !mode.mono) {
-            palBtn.textContent = `${mode.shortBtn || mode.name} · S3 ${S3COST.filtMs.toFixed(1)}ms`;
+            palBtn.textContent = `${mode.shortBtn || mode.name} · ${estLbl} ${estMs.toFixed(1)}ms`;
             palBtn.style.color = s3El.style.color;
-            palBtn.title = `Modo SPI: ${mode.name}. Presupuesto ${budgetMs.toFixed(1)} ms/frame. ` +
-              `S3 est. = costo estimado de CPU en el ESP32-S3 (rojo = no llega). Toca para cambiar de modo.`;
+            palBtn.title = mode.tx16
+              ? `Modo ${mode.name}: vista previa de un port a la RadioMaster TX16S (STM32F429 180 MHz, 1 núcleo). ` +
+                `Presupuesto ${budgetMs.toFixed(1)} ms/frame. TX16S est. = costo estimado de CPU sin calibrar (rojo = no llega). Toca para cambiar de modo.`
+              : `Modo SPI: ${mode.name}. Presupuesto ${budgetMs.toFixed(1)} ms/frame. ` +
+                `S3 est. = costo estimado de CPU en el ESP32-S3 (rojo = no llega). Toca para cambiar de modo.`;
           }
           s3El.title = `Costo estimado de CPU por frame en el ESP32-S3 (Core 1, raycast repartido en 2 núcleos). ` +
                        `Pasos de rayo: ${S3COST.raySteps}, cielo: ${S3COST.skyPx}px, sprites: ${S3COST.spritePx}px, ` +
