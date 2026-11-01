@@ -5095,11 +5095,12 @@
       }
     }
 
-    // Buffers estáticos en SRAM para ordenar las 4 columnas de un edificio o toldo y los 8 vértices de un Silo (0 allocs por frame)
-    const BANDO_COL_WX  = new Float32Array(4);
-    const BANDO_COL_WZ  = new Float32Array(4);
-    const BANDO_COL_D2  = new Float32Array(4);
-    const BANDO_COL_ORD = new Uint8Array(4);
+    // Buffers estáticos en SRAM para ordenar hasta 8 columnas de un edificio o caney y los 8 vértices de un Silo (0 allocs por frame)
+    const BANDO_COL_WX  = new Float32Array(8);
+    const BANDO_COL_WZ  = new Float32Array(8);
+    const BANDO_COL_D2  = new Float32Array(8);
+    const BANDO_COL_ORD = new Uint8Array(8);
+    const CANOPY_STEPS4 = new Float32Array([-1.0, -0.3333, 0.3333, 1.0]);
     const SILO_COS8     = new Float32Array(8);
     const SILO_SIN8     = new Float32Array(8);
     const SILO_PT_BOT   = new Array(8);
@@ -5145,6 +5146,33 @@
         BANDO_COL_ORD[i] = i;
       }
       for (let i = 1; i < 4; i++) {
+        const kOrd = BANDO_COL_ORD[i];
+        const kD2  = BANDO_COL_D2[kOrd];
+        let j = i - 1;
+        while (j >= 0 && BANDO_COL_D2[BANDO_COL_ORD[j]] < kD2) {
+          BANDO_COL_ORD[j + 1] = BANDO_COL_ORD[j];
+          j--;
+        }
+        BANDO_COL_ORD[j + 1] = kOrd;
+      }
+    }
+
+    // Distribuye y ordena 8 columnas finas (4 por cada lado largo del caney) de atrás hacia adelante en SRAM
+    function sortCanopyPillars8(bx, bz, ox, oz, rx, rz, fx, fz, camX, camZ) {
+      const longAlongX = ox >= oz;
+      for (let i = 0; i < 8; i++) {
+        const side = (i >> 2) ? 1.0 : -1.0;
+        const step = CANOPY_STEPS4[i & 3];
+        const sx   = longAlongX ? (ox * step) : (ox * side);
+        const sz   = longAlongX ? (oz * side) : (oz * step);
+        const cx   = bx + rx * sx + fx * sz;
+        const cz   = bz + rz * sx + fz * sz;
+        BANDO_COL_WX[i]  = cx;
+        BANDO_COL_WZ[i]  = cz;
+        BANDO_COL_D2[i]  = (cx - camX) * (cx - camX) + (cz - camZ) * (cz - camZ);
+        BANDO_COL_ORD[i] = i;
+      }
+      for (let i = 1; i < 8; i++) {
         const kOrd = BANDO_COL_ORD[i];
         const kD2  = BANDO_COL_D2[kOrd];
         let j = i - 1;
@@ -5227,11 +5255,13 @@
         return;
       }
 
-      // Caso 3: Toldo / Caney Abierto de Pits A.I.A (4 columnas delgadas + techo a dos aguas sin paredes, atravesable en vuelo)
+      // Caso 3: Toldo / Caney Abierto de Pits A.I.A (8 columnas finas distribuidas en la dirección larga + techo a dos aguas sin paredes)
       if (b.kind === 'open_canopy') {
-        const pRad = 0.42;
-        sortFourBuildingPillars(b.x, b.z, hw - 0.6, hd - 0.6, rx, rz, fx, fz, camX, camZ);
-        for (let i = 0; i < 4; i++) {
+        const pRad = 0.13;
+        const ox = Math.max(0.35, hw - 0.25);
+        const oz = Math.max(0.30, hd - 0.22);
+        sortCanopyPillars8(b.x, b.z, ox, oz, rx, rz, fx, fz, camX, camZ);
+        for (let i = 0; i < 8; i++) {
           const ord = BANDO_COL_ORD[i];
           drawPillarBox320(BANDO_COL_WX[ord], BANDO_COL_WZ[ord], pRad, y0, y1, rx, rz, fx, fz, b.wallL, b.wallD, camX, camZ, projPoint320);
         }
@@ -5337,26 +5367,23 @@
         return;
       }
 
-      // Caso 6: Torre de Agua Elevada (4 patas altas atravesables + tanque superior)
+      // Caso 6: Torre de Agua Elevada (4 patas altas atravesables + tanque superior con techo recto plano)
       if (b.kind === 'water_tower') {
         const yTankBot = y0 + b.h * 0.65;
-        const pRad = 0.45;
+        const pRad = Math.min(0.26, Math.min(hw, hd) * 0.16);
         sortFourBuildingPillars(b.x, b.z, hw * 0.72, hd * 0.72, rx, rz, fx, fz, camX, camZ);
         for (let i = 0; i < 4; i++) {
           const ord = BANDO_COL_ORD[i];
           drawPillarBox320(BANDO_COL_WX[ord], BANDO_COL_WZ[ord], pRad, y0, yTankBot, rx, rz, fx, fz, b.wallD, b.wallD, camX, camZ, projPoint320);
         }
-        drawPillarBox320(b.x, b.z, Math.min(hw, hd) * 0.88, yTankBot, y1, rx, rz, fx, fz, b.wallL, b.wallD, camX, camZ, projPoint320);
-        const t00 = projPoint320(b.x - rx*hw - fx*hd, y1, b.z - rz*hw - fz*hd);
-        const t10 = projPoint320(b.x + rx*hw - fx*hd, y1, b.z + rz*hw - fz*hd);
-        const t11 = projPoint320(b.x + rx*hw + fx*hd, y1, b.z + rz*hw + fz*hd);
-        const t01 = projPoint320(b.x - rx*hw + fx*hd, y1, b.z - rz*hw + fz*hd);
-        const apex = projPoint320(b.x, y2, b.z);
-        if (t00 && t10 && t11 && t01 && apex) {
-          fillTri320(t00.sx, t00.sy, t10.sx, t10.sy, apex.sx, apex.sy, roofDark);
-          fillTri320(t10.sx, t10.sy, t11.sx, t11.sy, apex.sx, apex.sy, b.roofCol);
-          fillTri320(t11.sx, t11.sy, t01.sx, t01.sy, apex.sx, apex.sy, b.roofCol);
-          fillTri320(t01.sx, t01.sy, t00.sx, t00.sy, apex.sx, apex.sy, roofDark);
+        const tRad = Math.min(hw, hd) * 0.88;
+        drawPillarBox320(b.x, b.z, tRad, yTankBot, y1, rx, rz, fx, fz, b.wallL, b.wallD, camX, camZ, projPoint320);
+        const t00 = projPoint320(b.x - rx*tRad - fx*tRad, y1, b.z - rz*tRad - fz*tRad);
+        const t10 = projPoint320(b.x + rx*tRad - fx*tRad, y1, b.z + rz*tRad - fz*tRad);
+        const t11 = projPoint320(b.x + rx*tRad + fx*tRad, y1, b.z + rz*tRad + fz*tRad);
+        const t01 = projPoint320(b.x - rx*tRad + fx*tRad, y1, b.z - rz*tRad + fz*tRad);
+        if (t00 && t10 && t11 && t01) {
+          fillQuad320(t00, t10, t11, t01, b.roofCol);
         }
         return;
       }
