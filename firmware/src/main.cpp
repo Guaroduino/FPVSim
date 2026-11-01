@@ -4,6 +4,16 @@
 #include <freertos/task.h>
 #include <freertos/semphr.h>
 #include <esp_timer.h>
+#include <LittleFS.h>
+#include "fpvsim_audio.h"
+#include "fpvsim_netplay.h"
+
+#ifndef ENABLE_ESPNOW
+#define ENABLE_ESPNOW 1   // multijugador local; compílalo con -DENABLE_ESPNOW=0 para ahorrar ~50 KB de SRAM
+#endif
+#ifndef ENABLE_AUDIO
+#define ENABLE_AUDIO 1
+#endif
 
 // ============================================================================
 // 1. BUFFERS GLOBALES (SRAM INTERNA vs PSRAM OCTAL 8MB)
@@ -14,8 +24,8 @@ uint16_t* fbPsram[2] = { nullptr, nullptr }; // 2 x 150 KB en PSRAM (doble frame
 uint16_t* vram565    = nullptr;              // Apunta al buffer trasero del frame en curso
 uint16_t* dmaBand[2] = { nullptr, nullptr }; // 2 x 12.5 KB en SRAM DMA (bandas ping-pong)
 uint16_t* voxBuf     = nullptr; // 128 KB en SRAM Interna (Raycasting vertical)
-uint8_t*  voxHeight  = nullptr; // 2.0 MB en PSRAM Octal (Alturas 2048x1024, tiles 8x8)
-uint16_t* voxColor   = nullptr; // 4.0 MB en PSRAM Octal (Color RGB565 2048x1024, tiles 8x8)
+uint16_t* voxMap     = nullptr; // 4.0 MB en PSRAM Octal: (altura << 8) | índice de paleta, tiles 8x8
+uint16_t  voxPal[256];          // Paleta RGB565 del mapa activo (SRAM)
 uint16_t* voxSkyMap  = nullptr; // 0.5 MB en PSRAM Octal (Domo de Cielo 512x512)
 
 uint8_t OSD_SMALL_ROM[128 * OSD_SM_W * OSD_SM_H];
@@ -261,8 +271,7 @@ bool halInitConsole() {
   dmaBand[0] = (uint16_t*)heap_caps_malloc(DISP_W * DMA_BAND_H * sizeof(uint16_t), MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
   dmaBand[1] = (uint16_t*)heap_caps_malloc(DISP_W * DMA_BAND_H * sizeof(uint16_t), MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
   voxBuf     = (uint16_t*)heap_caps_malloc(VOX_W * VOX_H * sizeof(uint16_t),     MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-  voxHeight  = (uint8_t*) heap_caps_malloc(MAP_W * MAP_H * sizeof(uint8_t),      MALLOC_CAP_SPIRAM);
-  voxColor   = (uint16_t*)heap_caps_malloc(MAP_W * MAP_H * sizeof(uint16_t),     MALLOC_CAP_SPIRAM);
+  voxMap     = (uint16_t*)heap_caps_malloc(MAP_W * MAP_H * sizeof(uint16_t),     MALLOC_CAP_SPIRAM);
   voxSkyMap  = (uint16_t*)heap_caps_malloc(SKY_DIM * SKY_DIM * sizeof(uint16_t), MALLOC_CAP_SPIRAM);
 
   Serial.printf("[MEM] SRAM libre: %u B (bloque max %u B) | PSRAM libre: %u B\n",
@@ -271,7 +280,7 @@ bool halInitConsole() {
     (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
 
   if (!fbPsram[0] || !fbPsram[1] || !dmaBand[0] || !dmaBand[1] ||
-      !voxBuf || !voxHeight || !voxColor || !voxSkyMap) {
+      !voxBuf || !voxMap || !voxSkyMap) {
     return false;
   }
   memset(fbPsram[0], 0, DISP_W * DISP_H * sizeof(uint16_t));
@@ -373,13 +382,15 @@ static void halPresentFrame() {
 // 5. MOTOR VOXEL COMANCHE EN PUNTO FIJO (AGENTS.md Regla 2)
 //    Constantes alineadas con el simulador web (index.html → renderVoxelTerrainAndSky)
 // ============================================================================
-constexpr float WORLD_W_M    = 1500.0f;
-constexpr float WORLD_H_M    = 1000.0f;
-constexpr float MAP_SCALE_X  = (float)MAP_W / WORLD_W_M;
-constexpr float MAP_SCALE_Z  = (float)MAP_H / WORLD_H_M;
-constexpr float HEIGHT_SCALE = 0.125f;
-constexpr int   SPAWN_MX     = 1198;
-constexpr int   SPAWN_MZ     = 650;
+// Parámetros del mapa activo: los fija el mapa procedural o el archivo .fpvm exportado desde el simulador
+static float WORLD_W_M    = 1500.0f;
+static float WORLD_H_M    = 1000.0f;
+static float MAP_SCALE_X  = (float)MAP_W / 1500.0f;
+static float MAP_SCALE_Z  = (float)MAP_H / 1000.0f;
+static float HEIGHT_SCALE = 0.125f;
+static int   SPAWN_MX     = 1198;
+static int   SPAWN_MZ     = 650;
+static char  activeMapName[32] = "PROCEDURAL";
 
 constexpr float FOCAL_240    = 255.0f;
 constexpr float BLIT_SCALE   = 0.795f;   // = web
@@ -398,6 +409,11 @@ static float    sinLut512[512];
 static float lastRollAngle = 0.0f;
 static float cloudDriftX   = 0.0f;
 static uint16_t fogCol565  = rgb565(166, 198, 228);
+
+// Tabla de niebla por paleta (técnica colormap de Doom): FOG_LUT[nivel][índice] = mezcla ya calculada.
+// 24 niveles x 256 colores x 2 B = 12 KB en SRAM. Sustituye blend565Fog32 por píxel en el terreno.
+constexpr int FOG_LEVELS = 24;
+static uint16_t FOG_LUT[FOG_LEVELS][256];
 
 static inline uint16_t blend565Fog32(uint16_t col, uint16_t fog, int lvl) {
   if (lvl <= 0) return col;
@@ -436,7 +452,41 @@ static void initVoxelFixedPointLutsAndWorld() {
     }
   }
 
-  // 2. Terreno Voxel 2048x1024 en PSRAM Octal, en bloques tileados 8x8 (una línea de caché por bloque)
+}
+
+static void rebuildFogLut() {
+  for (int lvl = 0; lvl < FOG_LEVELS; lvl++) {
+    for (int i = 0; i < 256; i++) {
+      FOG_LUT[lvl][i] = blend565Fog32(voxPal[i], fogCol565, lvl);
+    }
+  }
+}
+
+static void setWorldParams(float worldW, float worldH, float hScale, int spawnMx, int spawnMz) {
+  WORLD_W_M    = worldW;
+  WORLD_H_M    = worldH;
+  MAP_SCALE_X  = (float)MAP_W / worldW;
+  MAP_SCALE_Z  = (float)MAP_H / worldH;
+  HEIGHT_SCALE = hScale;
+  SPAWN_MX     = spawnMx;
+  SPAWN_MZ     = spawnMz;
+}
+
+// Mapa procedural de respaldo (sin archivos en LittleFS), ya en formato de 16 bits con paleta:
+// índices 0..127 = pradera por altura (h>>1), 128..255 = parcela clara por altura, 255 = asfalto de la pista
+static void generateProceduralMap() {
+  setWorldParams(1500.0f, 1000.0f, 0.125f, 1198, 650);
+  fogCol565 = rgb565(166, 198, 228);
+  for (int i = 0; i < 128; i++) {
+    const int hRaw = i << 1;
+    const uint8_t r = (uint8_t)(46 + (hRaw >> 2));
+    const uint8_t g = (uint8_t)(94 + (hRaw >> 2));
+    const uint8_t b = (uint8_t)(42 + (hRaw >> 3));
+    voxPal[i]       = rgb565(r, g, b);
+    voxPal[128 + i] = rgb565((uint8_t)(r + 14), (uint8_t)(g + 8), b);
+  }
+  voxPal[255] = rgb565(82, 86, 94); // Pista principal
+
   for (int mz = 0; mz < MAP_H; mz++) {
     for (int mx = 0; mx < MAP_W; mx++) {
       const uint32_t tIdx = voxTileIdx((uint32_t)mx, (uint32_t)mz);
@@ -453,23 +503,93 @@ static void initVoxelFixedPointLutsAndWorld() {
         hRaw = 16.0f + (hRaw - 16.0f) * flatFactor;
       }
       if (hRaw < 4.0f) hRaw = 4.0f; else if (hRaw > 220.0f) hRaw = 220.0f;
-      voxHeight[tIdx] = (uint8_t)hRaw;
+      const int h = (int)hRaw;
 
-      uint8_t r = (uint8_t)(46 + ((int)hRaw >> 2));
-      uint8_t g = (uint8_t)(94 + ((int)hRaw >> 2));
-      uint8_t b = (uint8_t)(42 + ((int)hRaw >> 3));
-      if (abs(mx - SPAWN_MX) < 85 && abs(mz - SPAWN_MZ) < 12) {
-        r = 82; g = 86; b = 94; // Pista principal
-      } else if (((mx >> 6) + (mz >> 6)) & 1) {
-        r = (uint8_t)(r + 14); g = (uint8_t)(g + 8);
-      }
-      voxColor[tIdx] = rgb565(r, g, b);
+      int idx = (h >> 1) & 127;
+      if (abs(mx - SPAWN_MX) < 85 && abs(mz - SPAWN_MZ) < 12) idx = 255;
+      else if (((mx >> 6) + (mz >> 6)) & 1) idx = 128 + ((h >> 1) & 126);
+      voxMap[tIdx] = (uint16_t)((h << 8) | idx);
+    }
+  }
+  strncpy(activeMapName, "PROCEDURAL", sizeof(activeMapName));
+  rebuildFogLut();
+}
+
+// ---------------------------------------------------------------------------
+// Mapas .fpvm exportados desde el simulador web (botón "⬇ MAPA") en LittleFS:/maps
+// Formato descrito en index.html (exportActiveMapFpvm). Se suben con: pio run -t uploadfs
+// ---------------------------------------------------------------------------
+constexpr int MAX_MAP_FILES = 8;
+static char mapFiles[MAX_MAP_FILES][48];
+static int  mapFileCount = 0;
+static int  mapSelected  = 0;   // 0..mapFileCount-1 = archivo, mapFileCount = procedural
+static bool fsReady      = false;
+
+static void scanMapFiles() {
+  mapFileCount = 0;
+  fsReady = LittleFS.begin(false);
+  if (!fsReady) { Serial.println("[MAP] LittleFS no montado: solo mapa procedural"); return; }
+  File dir = LittleFS.open("/maps");
+  if (!dir || !dir.isDirectory()) return;
+  for (File f = dir.openNextFile(); f && mapFileCount < MAX_MAP_FILES; f = dir.openNextFile()) {
+    const char* nm = f.name();
+    const size_t n = strlen(nm);
+    if (n > 5 && strcmp(nm + n - 5, ".fpvm") == 0) {
+      snprintf(mapFiles[mapFileCount], sizeof(mapFiles[0]), "/maps/%s", nm[0] == '/' ? strrchr(nm, '/') + 1 : nm);
+      Serial.printf("[MAP] %s (%u B)\n", mapFiles[mapFileCount], (unsigned)f.size());
+      mapFileCount++;
     }
   }
 }
 
+static bool loadFpvmMap(const char* path) {
+  File f = LittleFS.open(path, "r");
+  if (!f) return false;
+  uint8_t hdr[32];
+  if (f.read(hdr, 32) != 32 || memcmp(hdr, "FPVM", 4) != 0) { f.close(); return false; }
+  uint16_t ver, w, h, smx, smz, fog;
+  float ww, wh, hs;
+  memcpy(&ver, hdr + 4, 2);  memcpy(&w, hdr + 6, 2);   memcpy(&h, hdr + 8, 2);
+  memcpy(&smx, hdr + 10, 2); memcpy(&smz, hdr + 12, 2); memcpy(&fog, hdr + 14, 2);
+  memcpy(&ww, hdr + 16, 4);  memcpy(&wh, hdr + 20, 4);  memcpy(&hs, hdr + 24, 4);
+  if (ver != 1 || w != MAP_W || h != MAP_H || !(ww > 1.0f) || !(wh > 1.0f) || !(hs > 0.0f)) { f.close(); return false; }
+  if (f.read((uint8_t*)voxPal, 512) != 512) { f.close(); return false; }
+  const size_t bytes = (size_t)MAP_W * MAP_H * 2;
+  size_t got = 0;
+  while (got < bytes) {
+    const size_t chunk = (bytes - got) > 32768 ? 32768 : (bytes - got);
+    const size_t r = f.read((uint8_t*)voxMap + got, chunk);
+    if (r == 0) break;
+    got += r;
+  }
+  f.close();
+  if (got != bytes) return false;
+  setWorldParams(ww, wh, hs, smx, smz);
+  fogCol565 = fog;
+  rebuildFogLut();
+  const char* base = strrchr(path, '/');
+  snprintf(activeMapName, sizeof(activeMapName), "%s", base ? base + 1 : path);
+  char* dot = strrchr(activeMapName, '.');
+  if (dot) *dot = 0;
+  for (char* c = activeMapName; *c; c++) if (*c >= 'a' && *c <= 'z') *c -= 32;
+  return true;
+}
+
+// Carga el mapa N (archivo) o el procedural si N == mapFileCount o si el archivo falla
+static void selectMap(int idx) {
+  mapSelected = idx;
+  const uint32_t t0 = millis();
+  if (idx < mapFileCount && fsReady && loadFpvmMap(mapFiles[idx])) {
+    Serial.printf("[MAP] Cargado %s en %u ms\n", activeMapName, (unsigned)(millis() - t0));
+    return;
+  }
+  if (idx < mapFileCount) Serial.printf("[MAP] Error leyendo %s, uso el procedural\n", mapFiles[idx]);
+  mapSelected = mapFileCount;
+  generateProceduralMap();
+}
+
 static inline float texelHeightM(int mx, int mz) {
-  return voxHeight[voxTileIdx((uint32_t)mx & MAP_MASK_X, (uint32_t)mz & MAP_MASK_Z)] * HEIGHT_SCALE;
+  return (voxMap[voxTileIdx((uint32_t)mx & MAP_MASK_X, (uint32_t)mz & MAP_MASK_Z)] >> 8) * HEIGHT_SCALE;
 }
 
 // Altura del terreno con interpolación bilineal (sin escalones de 0.125 m para la física)
@@ -526,13 +646,15 @@ static void raycastColumns(int firstCol) {
       const uint32_t zQ19 = colStartZ_Q19 + dirZ_Q11 * sQ8;
       const uint32_t mIdx = voxTileIdx((xQ19 >> 19) & MAP_MASK_X, (zQ19 >> 19) & MAP_MASK_Z);
 
-      const int rawDh = (int)voxHeight[mIdx] - rp.groundTex;
+      const uint32_t texel = voxMap[mIdx];               // 1 sola lectura PSRAM: altura + color
+      const int rawDh = (int)(texel >> 8) - rp.groundTex;
       const int dhTex = k < 16 ? ((rawDh * k) >> 4) : rawDh;
       const int v     = (BASE_V_Q8[k] - dhTex * PROJ_SCALE_Q8[k]) >> 8;
 
       if (v < yMax) {
         const int vTop = v < 0 ? 0 : v;
-        uint16_t col = voxColor[mIdx];
+        const uint32_t palIdx = texel & 255u;
+        uint16_t col = voxPal[palIdx];
         if (k < rp.microMaxK) {
           const int subIdx = (int)(((xQ19 >> 15) & 15) | (((zQ19 >> 15) & 15) << 4));
           const uint8_t mVal = MICRO_TEX_LUT[subIdx];
@@ -543,7 +665,7 @@ static void raycastColumns(int firstCol) {
           const int grazFog = dyTerr < 9 ? ((9 - (dyTerr < 0 ? 0 : dyTerr)) << 1) : 0;
           const int dFog = RAY_FOG_LVL[k];
           const int fog32 = (dFog > grazFog ? dFog : grazFog) + ((u ^ vTop) & 1);
-          if (fog32 > 1) col = blend565Fog32(col, fogCol565, fog32 > 22 ? 22 : fog32);
+          if (fog32 > 1) col = FOG_LUT[fog32 > 22 ? 22 : fog32][palIdx];
         }
         int ptr = (vTop << 8) | u;
         for (int y = vTop; y < yMax; y++, ptr += VOX_W) {
@@ -848,6 +970,7 @@ static void stepDronePhysics(float h) {
     const float gFloor = getTerrainHeightMeters(g.x, g.z);
     if (fabsf(cx - g.x) < g.w * 0.5f && drone.py > gFloor + 1.0f && drone.py < gFloor + g.y + g.h * 0.5f) {
       drone.activeGate = (drone.activeGate + 1) & 7;
+      audioBeep(880, 80, 0, 0.25f);
     }
   }
 }
@@ -856,6 +979,12 @@ static int updateDronePhysics(float dtFrame) {
   if (hwInput.x && !hwInput.prevX) resetDrone();
   if (hwInput.y && !hwInput.prevY) drone.horizonMode = !drone.horizonMode;
   if (hwInput.select && !hwInput.prevSelect) showHwDiagOverlay = !showHwDiagOverlay;
+  if (hwInput.menu && !hwInput.prevMenu) {
+    // MENU: siguiente mapa (archivos .fpvm y al final el procedural). Bloquea ~1-2 s mientras lee la flash.
+    selectMap((mapSelected + 1) % (mapFileCount + 1));
+    resetDrone();
+    audioBeep(660, 60, 1, 0.2f);
+  }
 
   physAccum += dtFrame;
   int steps = 0;
@@ -891,9 +1020,17 @@ void setup() {
   }
 
   initVoxelFixedPointLutsAndWorld();
+  scanMapFiles();
+  selectMap(0);                 // primer .fpvm de LittleFS:/maps, o el procedural
   resetDrone();
   halStartDisplayTask();
   startRayWorker();
+#if ENABLE_AUDIO
+  if (!audioBegin()) Serial.println("[AUDIO] I2S no disponible");
+#endif
+#if ENABLE_ESPNOW
+  if (!netplayBegin()) Serial.println("[NET] ESP-NOW no disponible");
+#endif
   lastFrameMicros = micros();
 }
 
@@ -991,11 +1128,55 @@ void loop() {
     }
   }
 
+  // Pares remotos por ESP-NOW: rombo magenta + etiqueta Pn y distancia
   char buf[64];
+#if ENABLE_ESPNOW
+  {
+    static uint32_t lastNetTxMs = 0;
+    const uint16_t mapId = netplayMapId(activeMapName);
+    if (millis() - lastNetTxMs >= 33) {
+      lastNetTxMs = millis();
+      netplaySendPose(drone.px, drone.py, drone.pz, drone.qw, drone.qx, drone.qy, drone.qz,
+                      (uint8_t)drone.activeGate, 0, mapId);
+    }
+    NetPeer peersNow[NETPLAY_MAX_PEERS];
+    const int np = netplayGetPeers(peersNow, NETPLAY_MAX_PEERS);
+    for (int i = 0; i < np; i++) {
+      const NetPeer& pr = peersNow[i];
+      if (pr.mapId != mapId) continue;
+      const float dx = pr.px - drone.px, dy = pr.py - drone.py, dz = pr.pz - drone.pz;
+      const float cz = dx * cFx + dy * cFy + dz * cFz;
+      if (cz < 0.5f || cz > 900.0f) continue;
+      const float invCz = FOCAL_240 / cz;
+      const float sx = 160.0f + (dx * rx + dy * ry + dz * rz) * invCz;
+      const float sy = 120.0f - (dx * cUx + dy * cUy + dz * cUz) * invCz;
+      const float r = fmaxf(3.0f, fminf(14.0f, 0.6f * invCz));
+      fbDrawLine320(sx, sy - r, sx + r, sy, C565::MAGENTA);
+      fbDrawLine320(sx + r, sy, sx, sy + r, C565::MAGENTA);
+      fbDrawLine320(sx, sy + r, sx - r, sy, C565::MAGENTA);
+      fbDrawLine320(sx - r, sy, sx, sy - r, C565::MAGENTA);
+      snprintf(buf, sizeof(buf), "P%d %dM", i + 2, (int)lroundf(sqrtf(dx * dx + dy * dy + dz * dz)));
+      drawInavSmallText320(buf, (int)sx + (int)r + 3, (int)sy - 3, C565::MAGENTA);
+    }
+  }
+#endif
+
   const float speedKmh = sqrtf(drone.vx * drone.vx + drone.vy * drone.vy + drone.vz * drone.vz) * 3.6f;
   const float aglM     = fmaxf(0.0f, drone.py - getTerrainHeightMeters(drone.px, drone.pz));
 
-  snprintf(buf, sizeof(buf), "S3 N16R8 %s", drone.horizonMode ? "HORIZON" : "ACRO");
+#if ENABLE_AUDIO
+  {
+    // Mismo mapeo que updatePhysicalSynthAudio('fpv_drone') del simulador web
+    float thr = hwInput.ly >= 0.0f ? (0.42f + hwInput.ly * 0.58f) : (0.42f * (1.0f + hwInput.ly));
+    if (hwInput.a) thr = fminf(1.0f, thr + 0.35f);
+    const float spd = speedKmh / 3.6f;
+    audioSetEngine(165.0f + thr * 640.0f, 0.022f + thr * 0.028f,
+                   172.0f + thr * 665.0f, 0.012f,
+                   520.0f + fminf(2200.0f, spd * 75.0f), fminf(0.032f, (spd / 32.0f) * 0.025f));
+  }
+#endif
+
+  snprintf(buf, sizeof(buf), "%s %s", activeMapName, drone.horizonMode ? "HORIZON" : "ACRO");
   drawInavSmallText320(buf, 8, 6, C565::GOLD);
 
   snprintf(buf, sizeof(buf), "FPS:%d", (int)lroundf(fpsFiltered));

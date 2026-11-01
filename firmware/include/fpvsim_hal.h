@@ -14,12 +14,19 @@
 
 // Pantalla IPS 2.8" ILI9341V (Bus SPI2 Nativo IOMUX @ 60-80 MHz DMA)
 #define PIN_TFT_MOSI    11
-#define PIN_TFT_MISO    13
+#define PIN_TFT_MISO    -1  // No se lee la pantalla: GPIO 13 queda libre para el audio I2S
 #define PIN_TFT_SCLK    12
 #define PIN_TFT_CS      10
 #define PIN_TFT_DC       9
 #define PIN_TFT_RST     14
 #define PIN_TFT_BL      21
+
+// Audio I2S -> amplificador MAX98357A (mono, 3 W). GPIO 43/44 = UART0 libre porque el
+// monitor serie va por el USB nativo (ARDUINO_USB_CDC_ON_BOOT=1). Al arrancar, la ROM
+// escribe su log por GPIO 43: es normal un chasquido corto en el altavoz al encender.
+#define PIN_I2S_BCLK    43
+#define PIN_I2S_LRCK    44
+#define PIN_I2S_DOUT    13
 
 // Panel Touch Capacitivo FT6336U (I2C @ 400 kHz)
 #define PIN_TOUCH_SDA    8
@@ -179,8 +186,8 @@ extern uint16_t* voxBuf;      // 256 * 256 * 2 = 131,072 B (128 KB SRAM)
 extern uint16_t* dmaBand[2];  // 2 * 320 * DMA_BAND_H * 2 B (ping-pong DMA en SRAM)
 
 // PSRAM Octal (MALLOC_CAP_SPIRAM): mapas en bloques tileados 8x8 (igual que el simulador web)
-extern uint8_t*  voxHeight; // 2048 * 1024 * 1 = 2.0 MB PSRAM
-extern uint16_t* voxColor;  // 2048 * 1024 * 2 = 4.0 MB PSRAM
+extern uint16_t* voxMap;    // 2048 * 1024 * 2 = 4.0 MB PSRAM: (altura << 8) | índice de paleta
+extern uint16_t  voxPal[256]; // paleta RGB565 del mapa activo (SRAM)
 extern uint16_t* voxSkyMap; //  512 *  512 * 2 = 0.5 MB PSRAM
 
 // Índice tileado 8x8 de los mapas PSRAM (idéntico a VOX_TILE_Z_LUT[mz] | VOX_TILE_X_LUT[mx] del web)

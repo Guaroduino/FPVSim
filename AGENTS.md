@@ -12,7 +12,7 @@ Todo el código desarrollado en este repositorio (tanto en el prototipo web como
      - Con Wi-Fi/ESP-NOW activo (40–60 KB) mover `vramDepth8` a PSRAM.
    - **PSRAM Octal (`MALLOC_CAP_SPIRAM`, 8 MB disponibles)**:
      - **Doble framebuffer** `2 × 320 × 240 × 2` (`300 KB`): el Core 1 dibuja uno mientras el Core 0 envía el otro por DMA en bandas.
-     - Mapas en bloques tileados 8×8: `voxHeight` (`2 MB`), `voxColor` (`4 MB`), `voxSkyMap` (`512 KB`).
+     - Mapas en bloques tileados 8×8: `voxMap` (`2 MB`, texel 16 bit = altura + índice de paleta), `voxSkyMap` (`512 KB`). Paleta `voxPal[256]` + `FOG_LUT[24][256]` en SRAM.
    - Prohibido crear objetos dinámicos, arrays temporales o asignaciones de memoria (`new` / `malloc`) dentro del bucle de renderizado por frame.
    - La física corre a **paso fijo de 1/240 s** con acumulador (`stepFixedPhysics` en web, `updateDronePhysics` en firmware). Prohibido integrar con el `dt` variable del frame.
    - El simulador muestra el costo estimado en el S3 en la píldora del modo SPI (`S3 est.`); si se pone en rojo, el cambio no cabe en el presupuesto.
