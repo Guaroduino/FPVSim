@@ -722,7 +722,7 @@
   <div id="mapEditorModal" class="map-editor-modal">
     <div class="me-header">
       <div class="me-title">
-        <span>🗺️ EDITOR SATELITAL CHOROBOBO (7.26×4.84 KM / 1.82×1.21 KM / 787×532 M)</span>
+        <span>🗺️ EDITOR SATELITAL CHOROBOBO (7.26×4.84 KM / 1.82×1.21 KM / 787×524 M)</span>
         <span id="meStatsBadge" style="font-size:11px;color:#98a4b8;font-weight:600;"></span>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
@@ -951,7 +951,7 @@
             <span>Mapa:</span>
             <select id="meSelMapTheme" style="flex:1;">
               <option value="0">CHOROBOBO HD (1.82×1.21km)</option>
-              <option value="5">CHORO PARK (787×532m)</option>
+              <option value="5">CHORO PARK (787×524m)</option>
               <option value="9">CHOROBOBO LR (7.26×4.84km)</option>
               <option value="1">BANDO EDIFICIO (500×360m)</option>
               <option value="2">COMANCHE 3 CANYON (2.8×2.0km)</option>
@@ -963,7 +963,7 @@
             </select>
           </div>
           <div style="display:flex;gap:4px;">
-            <button class="me-btn" data-me-scale="5" style="flex:1;">PARK 787×532m</button>
+            <button class="me-btn" data-me-scale="5" style="flex:1;">PARK 787×524m</button>
             <button class="me-btn active" data-me-scale="0" style="flex:1;">HD 1.82×1.21km</button>
             <button class="me-btn" data-me-scale="9" style="flex:1;">LR 7.26×4.84km</button>
           </div>
@@ -2824,7 +2824,7 @@
         name: 'CHORO PARK 787M',
         isChorobobo: true,
         worldW: 786.5,
-        worldH: 532.4,
+        worldH: 524.33,
         hScale: 0.125,
         skyZenith:  [38, 88, 182],
         skyHorizon: [162, 198, 230],
@@ -2958,14 +2958,18 @@
       MAP_SCALE_X  = MAP_W / WORLD_W_M;
       MAP_SCALE_Z  = MAP_H / WORLD_H_M;
 
-      // Si cambia entre las 3 escalas de Chorobobo (PARK 715x484m / HD 1.65x1.1km / LR 6.6x4.4km), escalar (px, pz) para mantener el mismo punto (u, v) sobre chorobobo.jpg
+      // Si cambia entre las 3 escalas de Chorobobo (PARK 786.5x524.3m / HD 1815x1210m / LR 7260x4840m), escalar (px, pz) y altura AGL para conservar exactamente la misma vista y proporción sobre chorobobo.jpg
       if (wasFpvMap && prevGroupKey === newGroupKey && prevWorldW !== WORLD_W_M && typeof fpvDroneSim !== 'undefined' && typeof fpvWingSim !== 'undefined') {
         const ratioX = WORLD_W_M / prevWorldW;
         const ratioZ = WORLD_H_M / prevWorldH;
+        const dAgl = Math.max(1.2, fpvDroneSim.py - getTerrainHeightMeters(fpvDroneSim.px, fpvDroneSim.pz));
+        const wAgl = Math.max(1.2, fpvWingSim.py  - getTerrainHeightMeters(fpvWingSim.px,  fpvWingSim.pz));
         fpvDroneSim.px *= ratioX;
         fpvDroneSim.pz *= ratioZ;
+        fpvDroneSim.py  = getTerrainHeightMeters(fpvDroneSim.px, fpvDroneSim.pz) + Math.max(1.8, dAgl * ratioX);
         fpvWingSim.px  *= ratioX;
         fpvWingSim.pz  *= ratioZ;
+        fpvWingSim.py   = getTerrainHeightMeters(fpvWingSim.px,  fpvWingSim.pz)  + Math.max(1.8, wAgl * ratioX);
       }
 
       // 1. Generar siempre el Domo de Cielo Azul + Nubes 512x512 para el tema activo
@@ -3335,6 +3339,8 @@
     const BLIT_SCALE = 0.795;               // Aprovecha 254x191 reales de voxBuf (+57% nitidez con 0 bytes extra de SRAM)
     const FOCAL_VOX  = FOCAL_240 * BLIT_SCALE; // 202.725
     let lastRollAngle = 0;
+    let lastCosR = 1.0;
+    let lastSinR = 0.0;
     let cloudDriftX = 0;
 
     // =========================================================================
@@ -3391,6 +3397,8 @@
       }
       const phi = lastRollAngle;
       const cosR = Math.cos(phi), sinR = Math.sin(phi);
+      lastCosR = cosR;
+      lastSinR = sinR;
 
       let R0x = cosR * cRx - sinR * cUx;
       let R0z = cosR * cRz - sinR * cUz;
@@ -4833,19 +4841,23 @@
       const curTheme = TERRAIN_THEMES[currentThemeIdx] || TERRAIN_THEMES[0];
       const tid = curTheme.id;
 
-      // 1. EDIFICIOS PROPIOS DEL MAPA ACTIVO (las 3 escalas de Chorobobo comparten su grupo 'chorobobo' escalado 1:1 a la ortofoto de 1650x1100m)
-      const choroFootprintScaleX = curTheme.isChorobobo ? (WORLD_W_M / 1650.0) : 1.0;
-      const choroFootprintScaleZ = curTheme.isChorobobo ? (WORLD_H_M / 1100.0) : 1.0;
+      // 1. EDIFICIOS Y SPRITES PROPIOS DEL MAPA ACTIVO:
+      //    En Chorobobo (PARK 786.5x524.33m / HD 1815x1210m / LR 7260x4840m), todos los objetos fueron diseñados en CHOROBOBO HD (1815x1210m = 1.0x).
+      //    Escalar uniformemente (w, d, h, roofH) de edificios y (w, h) de sprites por choroScale garantiza que en PARK y LR
+      //    tengan exactamente el mismo tamaño relativo a la ortofoto/pista y proporción 1:1 sin estirarse jamás.
+      const choroScaleX = curTheme.isChorobobo ? (WORLD_W_M / 1815.0) : 1.0;
+      const choroScaleZ = curTheme.isChorobobo ? (WORLD_H_M / 1210.0) : 1.0;
+      const choroScaleY = curTheme.isChorobobo ? choroScaleX : 1.0;
       if (Array.isArray(BUILDING_UV_DEFS)) {
         for (let i = 0; i < BUILDING_UV_DEFS.length; i++) {
           const b = BUILDING_UV_DEFS[i];
           const pos = uvToWorld(b.u, b.v);
           pushWorldBldg(
             pos.x, pos.z,
-            Math.max(2.0, b.w * choroFootprintScaleX),
-            Math.max(2.0, b.d * choroFootprintScaleZ),
-            Math.min(11.0, b.h),
-            Math.min(6.8, b.roofH),
+            Math.max(1.2 * choroScaleX, b.w * choroScaleX),
+            Math.max(1.2 * choroScaleZ, b.d * choroScaleZ),
+            Math.min(11.0 * choroScaleY, b.h * choroScaleY),
+            Math.min(6.8  * choroScaleY, b.roofH * choroScaleY),
             b.yaw || 0.0,
             b.kind || 'standard',
             b.wallL || rgb565(220, 218, 210),
@@ -4862,8 +4874,10 @@
           const pos = uvToWorld(ct.u, ct.v);
           const spType = Math.max(0, Math.min(NUM_TREE_SPRITE_TYPES - 1, ct.type | 0));
           const cat = TREE_TYPE_CATALOG[spType] || TREE_TYPE_CATALOG[0];
-          const hM = ct.h || cat.defH;
-          const wM = ct.w || (hM * cat.wMul);
+          const baseH = ct.h || cat.defH;
+          const baseW = ct.w || (baseH * cat.wMul);
+          const hM = baseH * choroScaleY;
+          const wM = baseW * choroScaleX;
           WORLD_TREES.push({
             x: pos.x,
             y: getTerrainHeightMeters(pos.x, pos.z),
@@ -4965,8 +4979,8 @@
           else if (mod === 4) spriteType = 9;  // Árbol seco
           else                spriteType = (i & 1); // Samán o Mango
           const cat = TREE_TYPE_CATALOG[spriteType] || TREE_TYPE_CATALOG[0];
-          heightM = cat.defH * (0.84 + r3 * 0.34);
-          widthM  = heightM * cat.wMul;
+          heightM = cat.defH * (0.84 + r3 * 0.34) * choroScaleY;
+          widthM  = (heightM * cat.wMul);
         }
 
         WORLD_TREES.push({
@@ -5036,29 +5050,33 @@
       }
     }
 
-    // Dibuja un sprite 24x28 anclado 100% perpendicular al terreno 3D (entre ptTop y ptBase) en punto fijo 16.16 con Z-Buffer por píxel + LOD Lejano hasta 1350m
-    function drawTreeBillboard320(ptBase, ptTop, wPx, type, objCzQ4) {
-      const vx = ptBase.sx - ptTop.sx;
-      const vy = ptBase.sy - ptTop.sy;
-      const hPx = Math.hypot(vx, vy);
+    // Dibuja un sprite 24x28 anclado en ptBase con proporción (hPx / wPx) 100% bloqueada y perpendicular al horizonte Voxel (lastCosR, lastSinR) en punto fijo 16.16
+    function drawTreeBillboard320(ptBase, wPx, hPx, type, objCzQ4) {
       if (hPx < 1.05 || wPx < 0.75) return;
 
       const safeType = ((type | 0) >= 0 && (type | 0) < NUM_TREE_SPRITE_TYPES) ? (type | 0) : 0;
 
-      // LOD 1 (Media y Larga Distancia ~340m..1350m): Silueta Micro-Billboard de 2 a 6 píxeles (0 parpadeo, <25 ciclos en ESP32-S3)
-      if (hPx < 4.2 || wPx < 3.4) {
+      // Vectores unitarios de pantalla alineados 100% con el horizonte del terreno Voxel (sin deformación por perspectiva en los bordes)
+      const downX  = -lastSinR;
+      const downY  =  lastCosR;
+      const rightX =  lastCosR;
+      const rightY =  lastSinR;
+
+      // LOD 1 (Media y Larga Distancia): Silueta Micro-Billboard compacta y proporcional sin píxeles sueltos (<25 ciclos en ESP32-S3)
+      if (hPx < 3.8 || wPx < 3.2) {
         const bx = Math.round(ptBase.sx);
         const by = Math.round(ptBase.sy);
-        const tx = Math.round(ptTop.sx);
-        const ty = Math.round(ptTop.sy);
+        const stepH = Math.min(2.6, Math.max(1.0, hPx * 0.85));
+        const tx = Math.round(ptBase.sx - downX * stepH);
+        const ty = Math.round(ptBase.sy - downY * stepH);
         if ((bx < -2 && tx < -2) || (bx >= DISP_W + 2 && tx >= DISP_W + 2) || (by < -2 && ty < -2) || (by >= DISP_H + 2 && ty >= DISP_H + 2)) return;
 
         let colTop   = TREE_LOD_TOP_565[safeType];
         let colShade = TREE_LOD_SHADE_565[safeType];
         const colTrk = TREE_LOD_TRUNK_565[safeType];
 
-        // Suavizado atmosférico con la niebla del horizonte a más de 850m (objCzQ4 > 13600)
-        if (objCzQ4 > 13600) {
+        // Suavizado atmosférico con la niebla del horizonte a gran distancia
+        if (objCzQ4 > 18000) {
           const fogCol = TERRAIN_THEMES[currentThemeIdx].fogCol;
           colTop   = blend565Half(colTop, fogCol);
           colShade = blend565Half(colShade, fogCol);
@@ -5068,17 +5086,16 @@
         setLodPx320(bx, by, colTrk, objCzQ4);
         setLodPx320(tx, ty, colTop, objCzQ4);
 
-        if (hPx >= 2.0) {
+        if (hPx >= 1.8) {
           const mx = (bx + tx) >> 1;
           const my = (by + ty) >> 1;
           setLodPx320(mx, my, colShade, objCzQ4);
-          if (wPx >= 1.8) {
-            // Ensanchar la copa perpendicularmente al tronco
-            const rx = vy >= 0 ? 1 : -1;
-            const ry = vx >= 0 ? -1 : 1;
+          if (wPx >= 1.6) {
+            const rx = Math.round(rightX);
+            const ry = Math.round(rightY);
             setLodPx320(tx + rx, ty + ry, colTop, objCzQ4);
             setLodPx320(mx - rx, my - ry, colShade, objCzQ4);
-            if (hPx >= 3.1) {
+            if (hPx >= 2.8) {
               setLodPx320(mx + rx, my + ry, colShade, objCzQ4);
             }
           }
@@ -5086,15 +5103,9 @@
         return;
       }
 
-      // Vector unitario en pantalla desde la copa (tv=0) hacia la base en el suelo (tv=TREE_SP_H)
-      const downX = vx / hPx;
-      const downY = vy / hPx;
-      // Vector unitario perpendicular hacia la derecha del árbol en el terreno (tu=0 -> tu=TREE_SP_W)
-      const rightX =  downY;
-      const rightY = -downX;
-
-      const cx = (ptBase.sx + ptTop.sx) * 0.5;
-      const cy = (ptBase.sy + ptTop.sy) * 0.5;
+      // Centro del sprite anclado con su base (tv = TREE_SP_H - 1) exactamente sobre ptBase en el terreno
+      const cx = ptBase.sx - downX * (hPx * 0.48);
+      const cy = ptBase.sy - downY * (hPx * 0.48);
 
       const rad = Math.ceil(Math.max(wPx, hPx) * 0.68);
       const x0 = Math.max(0, Math.floor(cx - rad));
@@ -5524,14 +5535,17 @@
     const _treePtBase = { sx: 0, sy: 0, cz: 1 };
     const _treePtTop  = { sx: 0, sy: 0, cz: 1 };
 
-    // Renderiza todos los Árboles Sprite (15,652 en Chorobobo) y Edificios Low-Poly visibles con oclusión Z-Buffer hasta 1,900m
+    // Renderiza todos los Árboles Sprite (412 en Chorobobo) y Edificios Low-Poly visibles con oclusión Z-Buffer
     function renderComancheWorldObjects(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz, projPoint320) {
       let count = 0;
       visMaxSlot = 0;
       visMaxCz   = 0.0;
-      const maxDistTree = 1900.0;
-      const maxDistBldg = 1900.0;
-      const sortCutoffTree = 340.0;
+      const distScale = WORLD_W_M > 2400.0 ? (WORLD_W_M / 1815.0) : 1.0;
+      const maxDistTree = 1900.0 * distScale;
+      const maxDistBldg = 1900.0 * distScale;
+      const sortCutoffTree = 340.0 * distScale;
+      const bldgCullPad = 28.0 * distScale;
+      const treeCullPad = 12.0 * distScale;
 
       // 1. Recolectar edificios dentro del frustum (corte cercano 0.8m para poder atravesar el interior de edificios/hangares/toldos abiertos)
       for (let i = 0; i < WORLD_BUILDINGS.length; i++) {
@@ -5540,20 +5554,20 @@
         const cz = dx * cFx + dz * cFz;
         if (cz < 0.8 || cz > maxDistBldg) continue;
         const cx = dx * cRx + dz * cRz;
-        if (Math.abs(cx) > cz * 1.25 + 28.0) continue;
+        if (Math.abs(cx) > cz * 1.25 + bldgCullPad) continue;
         count = insertVisibleWorldObj(1, i, cz, count);
       }
 
-      // 2. Recorrer árboles: los cercanos (<=340m) van al buffer ordenado Painter's+ZBuffer; los medios/lejanos (340m..1900m) se dibujan en O(1) directo con Z-Buffer hardware vramDepthQ4
+      // 2. Recorrer árboles: los cercanos van al buffer ordenado Painter's+ZBuffer; los medios/lejanos se dibujan en O(1) directo con Z-Buffer hardware vramDepthQ4
       const treeDensity = (typeof fcProfile !== 'undefined' && fcProfile.treeDensity !== undefined) ? fcProfile.treeDensity : 1.0;
       const activeTreeLimit = Math.round(WORLD_TREES.length * treeDensity);
       for (let i = 0; i < activeTreeLimit; i++) {
         const tr = WORLD_TREES[i];
         const dx = tr.x - camX, dz = tr.z - camZ;
         const czH = dx * cFx + dz * cFz;
-        if (czH < 2.2 || czH > maxDistTree) continue;
+        if (czH < 1.2 || czH > maxDistTree) continue;
         const cxH = dx * cRx + dz * cRz;
-        if (Math.abs(cxH) > czH * 0.98 + 10.0) continue;
+        if (Math.abs(cxH) > czH * 1.05 + treeCullPad) continue;
 
         if (czH <= sortCutoffTree && (count < MAX_VIS_OBJS || czH < visMaxCz)) {
           count = insertVisibleWorldObj(0, i, czH, count);
@@ -5561,23 +5575,19 @@
           const yFloor = tr.y !== undefined ? tr.y : getTerrainHeightMeters(tr.x, tr.z);
           const dy0 = yFloor - camY;
           const cz0 = czH + dy0 * cFy;
-          const cz1 = cz0 + tr.h * cFy;
-          if (cz0 > 0.5 && cz1 > 0.5) {
+          if (cz0 > 0.5) {
             const cx0 = cxH + dy0 * cRy;
             const cyH = dx * cUx + dz * cUz;
             const cy0 = cyH + dy0 * cUy;
-            const cx1 = cx0 + tr.h * cRy;
-            const cy1 = cy0 + tr.h * cUy;
-            _treePtBase.sx = 160 + (cx0 * FOCAL_240) / cz0;
-            _treePtBase.sy = 120 - (cy0 * FOCAL_240) / cz0;
+            const invCz = FOCAL_240 / cz0;
+            _treePtBase.sx = 160 + cx0 * invCz;
+            _treePtBase.sy = 120 - cy0 * invCz;
             _treePtBase.cz = cz0;
-            _treePtTop.sx  = 160 + (cx1 * FOCAL_240) / cz1;
-            _treePtTop.sy  = 120 - (cy1 * FOCAL_240) / cz1;
-            _treePtTop.cz  = cz1;
-            const wPx = (tr.w * FOCAL_240) / cz0;
+            const wPx = tr.w * invCz;
+            const hPx = tr.h * invCz;
             const tBiasQ4 = 24 + ((cz0 * 0.45) | 0);
-            const objCzQ4 = Math.max(1, Math.min(65534, Math.round(cz0 * 16.0) - tBiasQ4));
-            drawTreeBillboard320(_treePtBase, _treePtTop, wPx, tr.type, objCzQ4);
+            const objCzQ4 = Math.max(1, Math.min(65534, Math.round((cz0 / distScale) * 16.0) - tBiasQ4));
+            drawTreeBillboard320(_treePtBase, wPx, hPx, tr.type, objCzQ4);
           }
         }
       }
@@ -5607,12 +5617,13 @@
           const tr = WORLD_TREES[idx];
           const yFloor = tr.y !== undefined ? tr.y : getTerrainHeightMeters(tr.x, tr.z);
           const ptBase = projPoint320(tr.x, yFloor, tr.z);
-          const ptTop  = projPoint320(tr.x, yFloor + tr.h, tr.z);
-          if (ptBase && ptTop) {
-            const wPx = (tr.w * FOCAL_240) / ptBase.cz;
+          if (ptBase) {
+            const invCz = FOCAL_240 / ptBase.cz;
+            const wPx = tr.w * invCz;
+            const hPx = tr.h * invCz;
             const tBiasQ4 = 24 + ((ptBase.cz * 0.45) | 0);
             const objCzQ4 = Math.max(1, Math.min(65534, Math.round(ptBase.cz * 16.0) - tBiasQ4));
-            drawTreeBillboard320(ptBase, ptTop, wPx, tr.type, objCzQ4);
+            drawTreeBillboard320(ptBase, wPx, hPx, tr.type, objCzQ4);
           }
         }
       }
@@ -7201,9 +7212,10 @@
           const rad  = ((Number(CHOROBOBO_SPAWN_DEF.hdgDeg) || 0) * Math.PI) / 180.0;
           const fx0  = Math.cos(rad);
           const fz0  = -Math.sin(rad);
+          const choroAltScale = (TERRAIN_THEMES[currentThemeIdx] && TERRAIN_THEMES[currentThemeIdx].isChorobobo) ? (WORLD_W_M / 1815.0) : 1.0;
           this.px = wPos.x;
           this.pz = wPos.z;
-          this.py = getTerrainHeightMeters(this.px, this.pz) + Math.max(1.8, Number(CHOROBOBO_SPAWN_DEF.altM) || 12.0);
+          this.py = getTerrainHeightMeters(this.px, this.pz) + Math.max(1.8, (Number(CHOROBOBO_SPAWN_DEF.altM) || 12.0) * choroAltScale);
           this.vx = fx0 * 8.0; this.vy = 0; this.vz = fz0 * 8.0;
           this.fx = fx0; this.fy = 0; this.fz = fz0;
           this.ux = 0;   this.uy = 1; this.uz = 0;
@@ -7547,10 +7559,11 @@
           dirTz = -Math.sin(rad);
           dirNx = dirTz;
           dirNz = -dirTx;
+          const choroAltScale = (TERRAIN_THEMES[currentThemeIdx] && TERRAIN_THEMES[currentThemeIdx].isChorobobo) ? (WORLD_W_M / 1815.0) : 1.0;
           this.px = wPos.x;
           this.pz = wPos.z;
           const groundH = getTerrainHeightMeters(this.px, this.pz);
-          this.py = groundH + Math.max(1.75, Number(CHOROBOBO_SPAWN_DEF.altM) || 12.0);
+          this.py = groundH + Math.max(1.75, (Number(CHOROBOBO_SPAWN_DEF.altM) || 12.0) * choroAltScale);
         } else {
           const spawnBack = WORLD_W_M <= 2000.0 ? 28.0 : 42.0;
           this.px = g0.x - g0.tx * spawnBack;
@@ -12930,7 +12943,9 @@
           }
         }
 
-        // 3. Dibujar Árboles / Sprites personalizados puestos a mano (con Frustum Culling 2D y LOD rápido para soportar >15,000 sprites a 60 FPS)
+        // 3. Dibujar Árboles / Sprites personalizados puestos a mano (con Frustum Culling 2D y escala uniforme 1:1 en las 3 escalas de Chorobobo)
+        const choroMapScaleX = curTheme.isChorobobo ? (WORLD_W_M / 1815.0) : 1.0;
+        const choroMapScaleZ = curTheme.isChorobobo ? (WORLD_H_M / 1210.0) : 1.0;
         const uViewMin = (-8 - vb.ox) / vb.drawW;
         const uViewMax = (canvas.width + 8 - vb.ox) / vb.drawW;
         const vViewMin = (-8 - vb.oy) / vb.drawH;
@@ -12940,7 +12955,7 @@
           if (ct.u < uViewMin || ct.u > uViewMax || ct.v < vViewMin || ct.v > vViewMax) continue;
           const pt = uvToCanvas(ct.u, ct.v);
           const cat = TREE_TYPE_CATALOG[ct.type] || TREE_TYPE_CATALOG[0];
-          const radPx = Math.max(1.5, ((ct.h || cat.defH) * cat.wMul * 0.5) * pxPerMeterX);
+          const radPx = Math.max(1.5, ((ct.h || cat.defH) * cat.wMul * 0.5) * choroMapScaleX * pxPerMeterX);
           ctx.fillStyle = cat.color;
           if (radPx < 3.2) {
             ctx.fillRect(pt.x - radPx, pt.y - radPx, radPx * 2, radPx * 2);
@@ -12961,8 +12976,8 @@
         }
 
         // 4. Dibujar Edificios 3D con su huella en metros reales 1:1 sobre la ortofoto en las 3 escalas, orientación yaw y tipo
-        const bldgFootprintScaleX = curTheme.isChorobobo ? (WORLD_W_M / 1650.0) : 1.0;
-        const bldgFootprintScaleZ = curTheme.isChorobobo ? (WORLD_H_M / 1100.0) : 1.0;
+        const bldgFootprintScaleX = choroMapScaleX;
+        const bldgFootprintScaleZ = choroMapScaleZ;
         for (let i = 0; i < BUILDING_UV_DEFS.length; i++) {
           const b = BUILDING_UV_DEFS[i];
           const pt = uvToCanvas(b.u, b.v);
@@ -13321,7 +13336,8 @@
       function applySpawnDefToActiveCraft() {
         const wPos = uvToWorld(CHOROBOBO_SPAWN_DEF.u, CHOROBOBO_SPAWN_DEF.v);
         const hFloor = getTerrainHeightMeters(wPos.x, wPos.z);
-        const altRel = Math.max(1.8, Number(CHOROBOBO_SPAWN_DEF.altM) || 12.0);
+        const choroAltScale = (TERRAIN_THEMES[currentThemeIdx] && TERRAIN_THEMES[currentThemeIdx].isChorobobo) ? (WORLD_W_M / 1815.0) : 1.0;
+        const altRel = Math.max(1.8, (Number(CHOROBOBO_SPAWN_DEF.altM) || 12.0) * choroAltScale);
         const rad = ((Number(CHOROBOBO_SPAWN_DEF.hdgDeg) || 0) * Math.PI) / 180.0;
         const fx = Math.cos(rad);
         const fz = -Math.sin(rad);
@@ -13478,8 +13494,8 @@
             const rect = compute3PtBldgRect(p1, p2, { u: uv.u, v: uv.v, x: wPos.x, z: wPos.z });
             const kind = document.getElementById('meSelBldgKind').value || 'standard';
             const curTh = TERRAIN_THEMES[currentThemeIdx] || TERRAIN_THEMES[0];
-            const bScaleX = curTh.isChorobobo ? (WORLD_W_M / 1650.0) : 1.0;
-            const bScaleZ = curTh.isChorobobo ? (WORLD_H_M / 1100.0) : 1.0;
+            const bScaleX = curTh.isChorobobo ? (WORLD_W_M / 1815.0) : 1.0;
+            const bScaleZ = curTh.isChorobobo ? (WORLD_H_M / 1210.0) : 1.0;
             const w = Math.max(2, Math.min(120, Math.round(rect.wMeters / bScaleX)));
             const d = Math.max(2, Math.min(120, Math.round(rect.dMeters / bScaleZ)));
             const h = Number(document.getElementById('meRngBldgH').value) || 4.8;
