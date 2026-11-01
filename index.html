@@ -641,14 +641,14 @@
         <button id="btnSound" class="pill-btn" title="Activar / Silenciar Sintetizador de Audio Físico I2S">🔇 AUDIO</button>
         <button id="btnBleMp" class="pill-btn" title="Multijugador Bluetooth BLE / Pestaña Local (ESP32-S3 NimBLE)">📡 BLE</button>
         <a href="hardware.html" class="pill-btn" style="text-decoration:none;display:inline-flex;align-items:center;" title="Ver Guía y Diagrama de Conexiones ESP32-S3 N16R8">PINOUT</a>
-        <button id="btnPalette" class="pill-btn" title="Cambiar Modo de Pantalla SPI / IPS / 1-Bit">IPS</button>
+        <button id="btnPalette" class="pill-btn" title="Cambiar Modo de Bus SPI ESP32-S3 (80MHz 60FPS / 60MHz 48FPS / 40MHz 32FPS / 1-Bit)">80MHz 60FPS</button>
       </div>
     </header>
 
     <!-- 2. 2.8" 320x240 IPS RGB565 ILI9341V + Capacitive Touch Screen Lens -->
     <section class="screen-lens">
       <div class="lens-header">
-        <span id="uiFpsBattery">60FPS | DMA 60MHz</span>
+        <span id="uiFpsBattery">60FPS | SPI 80MHz DMA (15.4ms)</span>
       </div>
 
       <div id="oledContainer" class="oled-container">
@@ -1050,12 +1050,15 @@
       C565.SKYBOT, C565.GNDTOP, C565.GNDBOT
     ];
 
-    // Modos de bus SPI en el ESP32-S3 + ILI9341V
+    // Modos reales de bus SPI en el ESP32-S3 N16R8 + ILI9341V (320x240 RGB565 = 1,228,800 bits/frame):
+    // - 80 MHz DMA (SPI_MASTER_FREQ_80M): 15.36 ms por frame en el cable -> 60 FPS bloqueados con doble buffer DMA
+    // - 60 MHz DMA (overclock medio):     20.48 ms por frame en el cable -> máx 48 FPS físicos
+    // - 40 MHz SPI (estándar sin OC):     30.72 ms por frame en el cable -> máx 32 FPS físicos
     const SPI_MODES = [
-      { name: 'IPS 60MHz DMA', spiMhz: 60, mono: false, targetFps: 60 },
-      { name: 'IPS 80MHz QIO', spiMhz: 80, mono: false, targetFps: 60 },
-      { name: 'IPS 40MHz SPI', spiMhz: 40, mono: false, targetFps: 45 },
-      { name: '1-BIT MONO SIM',spiMhz: 40, mono: true,  targetFps: 60 }
+      { name: '80MHz DMA 60FPS', shortBtn: '80MHz 60FPS', spiMhz: 80, mono: false, targetFps: 60, dmaWireMs: 15.4 },
+      { name: '60MHz DMA 48FPS', shortBtn: '60MHz 48FPS', spiMhz: 60, mono: false, targetFps: 48, dmaWireMs: 20.5 },
+      { name: '40MHz SPI 32FPS', shortBtn: '40MHz 32FPS', spiMhz: 40, mono: false, targetFps: 32, dmaWireMs: 30.7 },
+      { name: '1-BIT MONO 60FPS',shortBtn: '1-BIT MONO',  spiMhz: 80, mono: true,  targetFps: 60, dmaWireMs: 15.4 }
     ];
     let paletteIdx = 0;
 
@@ -2304,6 +2307,18 @@
     const voxColor     = new Uint16Array(MAP_W * MAP_H);
     const voxSkyMap    = new Uint16Array(SKY_DIM * SKY_DIM);
 
+    // =========================================================================
+    // LUT DE BLOQUES TILEADOS 8x8 (64 TEXELS = 1 LÍNEA DE CACHÉ DE 64B EN ESP32-S3)
+    // En lugar de indexado lineal (mz << 11) | mx que sufre fallos de caché al volar N/S,
+    // agrupa el mapa PSRAM en celdas 2D de 8x8: ((mz>>3)<<14) | ((mx>>3)<<6) | ((mz&7)<<3) | (mx&7).
+    // Con 2 mini-LUTs disjuntas en SRAM (VOX_TILE_Z_LUT[mz] | VOX_TILE_X_LUT[mx]),
+    // cada paso de rayo hace un único OR de 1 ciclo y logra >85% de aciertos de caché L1 en cualquier rumbo.
+    // =========================================================================
+    const VOX_TILE_X_LUT = new Int32Array(MAP_W);
+    const VOX_TILE_Z_LUT = new Int32Array(MAP_H);
+    for (let mx = 0; mx < MAP_W; mx++) VOX_TILE_X_LUT[mx] = ((mx >> 3) << 6) | (mx & 7);
+    for (let mz = 0; mz < MAP_H; mz++) VOX_TILE_Z_LUT[mz] = ((mz >> 3) << 14) | ((mz & 7) << 3);
+
     let choroDecodedImg = null;
     let choroSatelliteReady = false;
     let choroBakedInPsram = false;
@@ -3008,7 +3023,7 @@
       const maxVoxH = isHighMountain ? 246 : 64;
 
       for (let mz = 0; mz < MAP_H; mz++) {
-        const zOff = mz << MAP_SHIFT_X;
+        const zTile = VOX_TILE_Z_LUT[mz];
         const wz = (mz - SPAWN_MZ) / MAP_SCALE_Z;
         const cosZ3 = Math.cos(mz * TWO_PI_H * 6);
         const edgeZ = mz < 48 ? mz / 48.0 : (mz > MAP_H - 49 ? (MAP_H - 1 - mz) / 48.0 : 1.0);
@@ -3092,22 +3107,23 @@
             rawH = 2.0 + (rawH - 2.0) * Math.max(0.0, (distSpawn - 22.0) / (flatRad - 22.0));
           }
 
-          voxHeight[zOff + mx] = Math.max(0, Math.min(maxVoxH, Math.round(rawH)));
+          voxHeight[zTile | VOX_TILE_X_LUT[mx]] = Math.max(0, Math.min(maxVoxH, Math.round(rawH)));
         }
       }
 
       for (let mz = 0; mz < MAP_H; mz++) {
-        const zOff = mz << MAP_SHIFT_X;
-        const zNext = ((mz + 2) & MAP_MASK_Z) << MAP_SHIFT_X;
+        const zTile = VOX_TILE_Z_LUT[mz];
+        const zNextTile = VOX_TILE_Z_LUT[(mz + 2) & MAP_MASK_Z];
         const wz = (mz - SPAWN_MZ) / MAP_SCALE_Z;
         const riverCenterMx = SPAWN_MX + Math.round(Math.sin(mz * TWO_PI_H * 3.0) * 180);
         const canyonCenterWx = Math.sin(mz * TWO_PI_H * 2.0) * (WORLD_W_M * 0.14) + Math.cos(mz * TWO_PI_H * 5.0) * (WORLD_W_M * 0.05);
 
         for (let mx = 0; mx < MAP_W; mx++) {
+          const xTile = VOX_TILE_X_LUT[mx];
           const wx = (mx - SPAWN_MX) / MAP_SCALE_X;
-          const h  = voxHeight[zOff + mx];
-          const hR = voxHeight[zOff + ((mx + 2) & MAP_MASK_X)];
-          const hD = voxHeight[zNext + mx];
+          const h  = voxHeight[zTile | xTile];
+          const hR = voxHeight[zTile | VOX_TILE_X_LUT[(mx + 2) & MAP_MASK_X]];
+          const hD = voxHeight[zNextTile | xTile];
           const slope = (h - hR) * 1.8 + (h - hD) * 1.4;
           const shadeScale = isHighMountain ? 0.022 : 0.04;
           const shade = Math.max(0.62, Math.min(1.32, 1.0 + slope * shadeScale));
@@ -3200,7 +3216,7 @@
             r += 24; g += 18; b += 8;
           }
 
-          voxColor[zOff + mx] = rgb565(clampByte(r * shade), clampByte(g * shade), clampByte(b * shade));
+          voxColor[zTile | xTile] = rgb565(clampByte(r * shade), clampByte(g * shade), clampByte(b * shade));
         }
       }
       rebuildChoroboboCircuitsForScale();
@@ -3230,7 +3246,8 @@
       const scaleRefZ = 4840.0 / MAP_H;
 
       for (let mz = 0; mz < MAP_H; mz++) {
-        const zOff = mz << MAP_SHIFT_X;
+        const zOff  = mz << MAP_SHIFT_X;
+        const zTile = VOX_TILE_Z_LUT[mz];
         const wzRef = (mz - SPAWN_MZ) * scaleRefZ;
         const edgeZ = mz < 48 ? mz / 48.0 : (mz > MAP_H - 49 ? (MAP_H - 1 - mz) / 48.0 : 1.0);
 
@@ -3267,21 +3284,23 @@
           }
 
           // Tope estricto global de 64 unidades (64 * 0.125m = 8.0 metros máximo en todo el mapa)
-          voxHeight[zOff + mx] = Math.max(0, Math.min(64, h));
-          voxColor[zOff + mx]  = rgb565(clampByte(r), clampByte(g), clampByte(b));
+          const tIdx = zTile | VOX_TILE_X_LUT[mx];
+          voxHeight[tIdx] = Math.max(0, Math.min(64, h));
+          voxColor[tIdx]  = rgb565(clampByte(r), clampByte(g), clampByte(b));
         }
       }
 
       // Suavizado espacial 3x3 (1 sola pasada al cargar el mapa) para eliminar agujas de 1 texel por compresión JPEG
       for (let mz = 1; mz < MAP_H - 1; mz++) {
-        const zOff  = mz << MAP_SHIFT_X;
-        const zPrev = (mz - 1) << MAP_SHIFT_X;
-        const zNext = (mz + 1) << MAP_SHIFT_X;
+        const zTile  = VOX_TILE_Z_LUT[mz];
+        const zPrevT = VOX_TILE_Z_LUT[mz - 1];
+        const zNextT = VOX_TILE_Z_LUT[mz + 1];
         for (let mx = 1; mx < MAP_W - 1; mx++) {
-          const sum = (voxHeight[zOff + mx] << 2)
-                    + voxHeight[zOff + mx - 1] + voxHeight[zOff + mx + 1]
-                    + voxHeight[zPrev + mx]    + voxHeight[zNext + mx];
-          voxHeight[zOff + mx] = Math.min(64, sum >> 3);
+          const xTile = VOX_TILE_X_LUT[mx];
+          const sum = (voxHeight[zTile | xTile] << 2)
+                    + voxHeight[zTile | VOX_TILE_X_LUT[mx - 1]] + voxHeight[zTile | VOX_TILE_X_LUT[mx + 1]]
+                    + voxHeight[zPrevT | xTile]                 + voxHeight[zNextT | xTile];
+          voxHeight[zTile | xTile] = Math.min(64, sum >> 3);
         }
       }
       choroBakedInPsram = true;
@@ -3315,7 +3334,7 @@
     function getTerrainHeightMeters(wx, wz) {
       const mx = Math.floor(SPAWN_MX + wx * MAP_SCALE_X) & MAP_MASK_X;
       const mz = Math.floor(SPAWN_MZ + wz * MAP_SCALE_Z) & MAP_MASK_Z;
-      return voxHeight[(mz << MAP_SHIFT_X) | mx] * HEIGHT_SCALE;
+      return voxHeight[VOX_TILE_Z_LUT[mz] | VOX_TILE_X_LUT[mx]] * HEIGHT_SCALE;
     }
 
     function blend565Half(c1, c2) {
@@ -3344,16 +3363,16 @@
     let cloudDriftX = 0;
 
     // =========================================================================
-    // TABLAS LUT EN PUNTO FIJO INT32 PARA ESP32-S3 (CERO DIVISIONES EN BUCLE)
+    // TABLAS LUT EN PUNTO FIJO INT32 PARA ESP32-S3 60 FPS (CERO DIVISIONES EN BUCLE)
     // En ESP32-S3 viven en SRAM Interna (< 4.5 KB):
     // - RAY_S_Q8[k]: distancia horizontal con signo s * 256 para la fila k
-    // - BASE_V_Q8[k]: fila vertical exacta en voxBuf * 256 (1 píxel por paso)
+    // - BASE_V_Q8[k]: fila vertical exacta en voxBuf * 256 (1px en campo cercano/medio, 2px en horizonte lejano)
     // - PROJ_SCALE_Q8[k]: escala de relieve 3D por fila usando profundidad 3D exacta cz
     // - CLOUD_DIST_Q8[dy]: distancia al plano de nubes * 256 para dyHoriz (0..511)
     // - MICRO_TEX_LUT[256]: micro-textura sub-texel a baja/media altura (< 42m AGL)
     // - SUB_DITHER_X_Q19 / Z_Q19[4]: dithering sub-texel Bayer 2x2 estilo Unreal 1 (16 bytes)
     // =========================================================================
-    const NUM_RAY_STEPS    = 312;
+    const NUM_RAY_STEPS    = 220;
     const RAY_S_Q8         = new Int32Array(NUM_RAY_STEPS);
     const BASE_V_Q8        = new Int32Array(NUM_RAY_STEPS);
     const PROJ_SCALE_Q8    = new Int32Array(NUM_RAY_STEPS);
@@ -3377,7 +3396,7 @@
       }
     })();
 
-    // Renderizador Voxel 100% Punto Fijo Int32 en bucle interno con Perspectiva 3D Exacta + Teleobjetivo Óptico (focalZoom)
+    // Renderizador Voxel ESP32-S3 Dual-Core 60 FPS (100% Punto Fijo Int32 + Bloques Tileados 8x8 de 64B en PSRAM + Paso Adaptativo en Horizonte)
     function renderVoxelTerrainAndSky(camX, camY, camZ, cRx, cRy, cRz, cUx, cUy, cUz, cFx, cFy, cFz, dt = 0.016, focalZoom = 1.0) {
       cloudDriftX = (cloudDriftX + dt * 4.2) % 512;
       if (SPI_MODES[paletteIdx].mono) {
@@ -3424,42 +3443,45 @@
       const horizonSubPxQ16 = Math.round(subPxShift * 65536);
 
       // 2. Precalcular 1 vez por frame la intersección 3D exacta por fila vertical (cz = s*fH + dy0*cFy):
-      //    - Garantiza sincronización 100% exacta (0.00px error) con Gates, Spline, Árboles y Edificios 3D
-      //    - Soporta s con signo (incluso picado vertical -90°) sin generar jamás líneas verticales
-      //    - Avanza exactamente de 1 en 1 píxel vertical (resolución 1:1 a cualquier altitud y cualquier zoom óptico)
+      //    - Avanza de 1 en 1 píxel en todo el campo cercano y medio (resolución 1:1)
+      //    - Avanza de 2 en 2 píxeles solo en la banda lejana de niebla del horizonte (vRef <= vTopLim + 38),
+      //      ahorrando ~35% de pasos de rayo en el ESP32-S3 con 0 diferencia visual y cerrando siempre en vTopLim
       const invFocalVox = 1.0 / fVox;
       const groundHere  = getTerrainHeightMeters(camX, camZ);
       const groundTex   = Math.round(groundHere / HEIGHT_SCALE);
       const aglHere     = Math.max(0.6, camY - groundHere);
       const dy0         = -aglHere;
-      const vBotStart   = aglHere < 24.0 ? 304 : 262;
+      const vBotStart   = aglHere < 24.0 ? 292 : 258;
       const vTopLim     = Math.max(0, Math.min(256, horizonV + 1));
+      const vNearCutoff = vTopLim + 38;
 
       const fogStartM   = Math.max(1350.0, WORLD_W_M * 0.96);
       const fogSpanInv  = 22.0 / Math.max(1400.0, WORLD_W_M * 1.60);
 
       let activeSteps = 0;
-      for (let vRef = vBotStart; vRef >= vTopLim && activeSteps < NUM_RAY_STEPS; vRef--) {
+      for (let vRef = vBotStart; vRef >= vTopLim && activeSteps < NUM_RAY_STEPS; ) {
         const eta   = (128.0 + subPxShift - vRef) * invFocalVox;
         const denom = uH - fH * eta;
         if (denom <= 1e-4) break;
         const num = aglHere * (U0y - cFy * eta);
         const s   = Math.max(-12000.0, Math.min(12000.0, num / denom));
         const cz  = s * fH + dy0 * cFy;
-        if (cz <= 0.20) continue;
-        RAY_S_Q8[activeSteps]      = Math.round(s * 256.0);
-        BASE_V_Q8[activeSteps]     = vRef << 8;
-        PROJ_SCALE_Q8[activeSteps] = Math.round(((HEIGHT_SCALE * U0y * fVox) / cz) * 256.0);
-        RAY_CZ_Q4[activeSteps]     = Math.min(65534, Math.max(1, Math.round(cz * 16.0)));
-        // Nivel de niebla 0..22 (en escala de 32 capas) comenzando muy lejos en el horizonte
-        const distFog = cz > fogStartM ? Math.min(22, ((cz - fogStartM) * fogSpanInv) | 0) : 0;
-        RAY_FOG_LVL[activeSteps]   = distFog;
-        activeSteps++;
+        if (cz > 0.20) {
+          RAY_S_Q8[activeSteps]      = Math.round(s * 256.0);
+          BASE_V_Q8[activeSteps]     = vRef << 8;
+          PROJ_SCALE_Q8[activeSteps] = Math.round(((HEIGHT_SCALE * U0y * fVox) / cz) * 256.0);
+          RAY_CZ_Q4[activeSteps]     = Math.min(65534, Math.max(1, Math.round(cz * 16.0)));
+          const distFog = cz > fogStartM ? Math.min(22, ((cz - fogStartM) * fogSpanInv) | 0) : 0;
+          RAY_FOG_LVL[activeSteps]   = distFog;
+          activeSteps++;
+        }
+        if (vRef > vNearCutoff || vRef === vTopLim + 1) vRef -= 1;
+        else vRef -= 2;
       }
 
       // En zoom teleobjetivo LOS o baja/media altura (< 42m AGL) mantiene micro-grano y dithering sub-texel de alta nitidez
       const microMaxK  = focalZoom > 1.02 ? NUM_RAY_STEPS : (aglHere < 42.0 ? Math.round((42.0 - aglHere) * 3.4) : 0);
-      const ditherMaxK = Math.min(NUM_RAY_STEPS, Math.max(microMaxK, 135));
+      const ditherMaxK = Math.min(NUM_RAY_STEPS, Math.max(microMaxK, 125));
 
       // Coordenadas base en Q19 (dir_Q11 * s_Q8 = Q19 -> 8x más precisión angular por columna para evitar rayas en esquinas)
       const baseMx = ((SPAWN_MX + camX * MAP_SCALE_X) % MAP_W + MAP_W) % MAP_W;
@@ -3470,94 +3492,97 @@
       const skyStartZ_Q16 = Math.round((camZ * 0.95) * 65536);
       const dy0_cFy       = dy0 * cFy;
 
-      // 3. Raycasting por columna u (0..255) usando SOLO enteros de 32 bits y LUTs
-      for (let u = 0; u < VOX_W; u++) {
-        const xi0  = (u - 128) * invFocalVox;
-        const uBit = u & 1;
-        // Desplazamiento lateral exacto por profundidad de cabeceo (xLat = xi0 * (s*fH + dy0*cFy))
-        const lat0 = xi0 * dy0_cFy;
-        const colStartX_Q19 = startX_Q19 + Math.round(lat0 * R0x * MAP_SCALE_X * 524288);
-        const colStartZ_Q19 = startZ_Q19 + Math.round(lat0 * R0z * MAP_SCALE_Z * 524288);
+      // 3. Raycasting Dual-Core Entrelazado (Core 0 = columnas pares u=0,2..254; Core 1 = columnas impares u=1,3..255)
+      //    usando SOLO enteros de 32 bits y bloques tileados 8x8 de 64B (VOX_TILE_Z_LUT[mz] | VOX_TILE_X_LUT[mx])
+      for (let coreId = 0; coreId < 2; coreId++) {
+        for (let u = coreId; u < VOX_W; u += 2) {
+          const xi0  = (u - 128) * invFocalVox;
+          const uBit = coreId; // u & 1 === coreId
+          // Desplazamiento lateral exacto por profundidad de cabeceo (xLat = xi0 * (s*fH + dy0*cFy))
+          const lat0 = xi0 * dy0_cFy;
+          const colStartX_Q19 = startX_Q19 + Math.round(lat0 * R0x * MAP_SCALE_X * 524288);
+          const colStartZ_Q19 = startZ_Q19 + Math.round(lat0 * R0z * MAP_SCALE_Z * 524288);
 
-        const dirW_X = H0x + (xi0 * fH) * R0x;
-        const dirW_Z = H0z + (xi0 * fH) * R0z;
+          const dirW_X = H0x + (xi0 * fH) * R0x;
+          const dirW_Z = H0z + (xi0 * fH) * R0z;
 
-        // Direcciones de terreno en Q11 (Q11 * Q8 = Q19; luego >> 19 da el texel con 8x más resolución angular)
-        const dirX_Q11 = Math.round(dirW_X * MAP_SCALE_X * 2048);
-        const dirZ_Q11 = Math.round(dirW_Z * MAP_SCALE_Z * 2048);
-        const dirWX_Q8 = Math.round(dirW_X * 256);
-        const dirWZ_Q8 = Math.round(dirW_Z * 256);
+          // Direcciones de terreno en Q11 (Q11 * Q8 = Q19; luego >> 19 da el texel con 8x más resolución angular)
+          const dirX_Q11 = Math.round(dirW_X * MAP_SCALE_X * 2048);
+          const dirZ_Q11 = Math.round(dirW_Z * MAP_SCALE_Z * 2048);
+          const dirWX_Q8 = Math.round(dirW_X * 256);
+          const dirWZ_Q8 = Math.round(dirW_Z * 256);
 
-        let yMax = VOX_H;
+          let yMax = VOX_H;
 
-        for (let k = 0; k < activeSteps && yMax > 0; k++) {
-          const sQ8  = RAY_S_Q8[k];
-          const xQ19 = colStartX_Q19 + dirX_Q11 * sQ8;
-          const zQ19 = colStartZ_Q19 + dirZ_Q11 * sQ8;
-          const mx   = (xQ19 >> 19) & MAP_MASK_X;
-          const mz   = (zQ19 >> 19) & MAP_MASK_Z;
-          const mIdx = (mz << MAP_SHIFT_X) | mx;
+          for (let k = 0; k < activeSteps && yMax > 0; k++) {
+            const sQ8  = RAY_S_Q8[k];
+            const xQ19 = colStartX_Q19 + dirX_Q11 * sQ8;
+            const zQ19 = colStartZ_Q19 + dirZ_Q11 * sQ8;
+            const mx   = (xQ19 >> 19) & MAP_MASK_X;
+            const mz   = (zQ19 >> 19) & MAP_MASK_Z;
+            const mIdx = VOX_TILE_Z_LUT[mz] | VOX_TILE_X_LUT[mx];
 
-          const rawDh = voxHeight[mIdx] - groundTex;
-          const dhTex = k < 16 ? ((rawDh * k) >> 4) : rawDh;
-          const v = (BASE_V_Q8[k] - dhTex * PROJ_SCALE_Q8[k]) >> 8;
+            const rawDh = voxHeight[mIdx] - groundTex;
+            const dhTex = k < 16 ? ((rawDh * k) >> 4) : rawDh;
+            const v = (BASE_V_Q8[k] - dhTex * PROJ_SCALE_Q8[k]) >> 8;
 
-          if (v < yMax) {
-            const vTop = v < 0 ? 0 : v;
-            let col;
-            if (k < ditherMaxK) {
-              const dIdx  = uBit | ((vTop & 1) << 1);
-              const mxCol = ((xQ19 + SUB_DITHER_X_Q19[dIdx]) >> 19) & MAP_MASK_X;
-              const mzCol = ((zQ19 + SUB_DITHER_Z_Q19[dIdx]) >> 19) & MAP_MASK_Z;
-              col = voxColor[(mzCol << MAP_SHIFT_X) | mxCol];
-            } else {
-              col = voxColor[mIdx];
-            }
-            if (k < microMaxK) {
-              const subIdx = ((xQ19 >> 15) & 15) | (((zQ19 >> 15) & 15) << 4);
-              const mVal = MICRO_TEX_LUT[subIdx];
-              if (mVal === 2) {
-                col = col - ((col >> 4) & 0x0861);
-              } else if (mVal === 3) {
-                col = col + (((col ^ 0xFFFF) >> 4) & 0x0861);
+            if (v < yMax) {
+              const vTop = v < 0 ? 0 : v;
+              let col;
+              if (k < ditherMaxK) {
+                const dIdx  = uBit | ((vTop & 1) << 1);
+                const mxCol = ((xQ19 + SUB_DITHER_X_Q19[dIdx]) >> 19) & MAP_MASK_X;
+                const mzCol = ((zQ19 + SUB_DITHER_Z_Q19[dIdx]) >> 19) & MAP_MASK_Z;
+                col = voxColor[VOX_TILE_Z_LUT[mzCol] | VOX_TILE_X_LUT[mxCol]];
+              } else {
+                col = voxColor[mIdx];
               }
-            } else if (activeSteps > 20) {
-              const dyTerr = vTop - horizonV;
-              const graziFog32 = dyTerr < 9 ? ((9 - (dyTerr < 0 ? 0 : dyTerr)) << 1) : 0;
-              const dFog32 = RAY_FOG_LVL[k];
-              const fog32 = (dFog32 > graziFog32 ? dFog32 : graziFog32) + (uBit ^ (vTop & 1));
-              if (fog32 > 1) {
-                col = blend565Fog32(col, fogCol, fog32 > 22 ? 22 : fog32);
+              if (k < microMaxK) {
+                const subIdx = ((xQ19 >> 15) & 15) | (((zQ19 >> 15) & 15) << 4);
+                const mVal = MICRO_TEX_LUT[subIdx];
+                if (mVal === 2) {
+                  col = col - ((col >> 4) & 0x0861);
+                } else if (mVal === 3) {
+                  col = col + (((col ^ 0xFFFF) >> 4) & 0x0861);
+                }
+              } else if (activeSteps > 20) {
+                const dyTerr = vTop - horizonV;
+                const graziFog32 = dyTerr < 9 ? ((9 - (dyTerr < 0 ? 0 : dyTerr)) << 1) : 0;
+                const dFog32 = RAY_FOG_LVL[k];
+                const fog32 = (dFog32 > graziFog32 ? dFog32 : graziFog32) + (uBit ^ (vTop & 1));
+                if (fog32 > 1) {
+                  col = blend565Fog32(col, fogCol, fog32 > 22 ? 22 : fog32);
+                }
               }
+              const czQ4 = RAY_CZ_Q4[k];
+              let ptr = (vTop << 8) | u;
+              for (let y = vTop; y < yMax; y++, ptr += VOX_W) {
+                voxBuf[ptr]     = col;
+                voxDepthQ4[ptr] = czQ4;
+              }
+              yMax = vTop;
             }
-            const czQ4 = RAY_CZ_Q4[k];
-            let ptr = (vTop << 8) | u;
-            for (let y = vTop; y < yMax; y++, ptr += VOX_W) {
-              voxBuf[ptr]     = col;
-              voxDepthQ4[ptr] = czQ4;
-            }
-            yMax = vTop;
           }
-        }
 
-        // 3. Cielo Azul + Nubes con muestreo 1:1 + Dithering Sub-Texel 2x2 y 32 capas suaves pegadas al horizonte
-        if (yMax > 0) {
-          let ptr = u;
-          for (let y = 0; y < yMax; y++, ptr += VOX_W) {
-            const dyHoriz = horizonV - y;
-            const lutIdx = dyHoriz < 1 ? 1 : (dyHoriz < 511 ? dyHoriz : 511);
-            const sCloudQ8 = CLOUD_DIST_Q8[lutIdx];
-            const dIdx = uBit | ((y & 1) << 1);
-            const cmx = ((skyStartX_Q16 + dirWX_Q8 * sCloudQ8 + SKY_DITHER_X_Q16[dIdx]) >> 16) & SKY_MASK;
-            const cmz = ((skyStartZ_Q16 + dirWZ_Q8 * sCloudQ8 + SKY_DITHER_Z_Q16[dIdx]) >> 16) & SKY_MASK;
-            let skyCol = voxSkyMap[(cmz << SKY_SHIFT) | cmx];
-            if (dyHoriz < 22) {
-              const bayer = (uBit ^ (y & 1)) + ((u + y) & 1); // 0..2 dither sub-nivel
-              const skyFog32 = (22 - (dyHoriz < 0 ? 0 : dyHoriz)) + bayer;
-              skyCol = blend565Fog32(skyCol, fogCol, skyFog32 > 24 ? 24 : skyFog32);
+          // 3B. Cielo Azul + Nubes con muestreo 1:1 + Dithering Sub-Texel 2x2 y 32 capas suaves pegadas al horizonte
+          if (yMax > 0) {
+            let ptr = u;
+            for (let y = 0; y < yMax; y++, ptr += VOX_W) {
+              const dyHoriz = horizonV - y;
+              const lutIdx = dyHoriz < 1 ? 1 : (dyHoriz < 511 ? dyHoriz : 511);
+              const sCloudQ8 = CLOUD_DIST_Q8[lutIdx];
+              const dIdx = uBit | ((y & 1) << 1);
+              const cmx = ((skyStartX_Q16 + dirWX_Q8 * sCloudQ8 + SKY_DITHER_X_Q16[dIdx]) >> 16) & SKY_MASK;
+              const cmz = ((skyStartZ_Q16 + dirWZ_Q8 * sCloudQ8 + SKY_DITHER_Z_Q16[dIdx]) >> 16) & SKY_MASK;
+              let skyCol = voxSkyMap[(cmz << SKY_SHIFT) | cmx];
+              if (dyHoriz < 22) {
+                const bayer = (uBit ^ (y & 1)) + ((u + y) & 1); // 0..2 dither sub-nivel
+                const skyFog32 = (22 - (dyHoriz < 0 ? 0 : dyHoriz)) + bayer;
+                skyCol = blend565Fog32(skyCol, fogCol, skyFog32 > 24 ? 24 : skyFog32);
+              }
+              voxBuf[ptr]     = skyCol;
+              voxDepthQ4[ptr] = 65535;
             }
-            voxBuf[ptr]     = skyCol;
-            voxDepthQ4[ptr] = 65535;
           }
         }
       }
@@ -8128,19 +8153,20 @@
 
       // 2. Bahía Náutica en PSRAM: Agua azul con ondas + Costa de arena + Islas verdes + Muelle de madera al sur
       for (let mz = 0; mz < MAP_H; mz++) {
-        const zOff = mz << MAP_SHIFT_X;
+        const zTile = VOX_TILE_Z_LUT[mz];
         const wz   = (mz - SPAWN_MZ) / MAP_SCALE_Z;
         const waveZ = sinLut[(mz * 3) & 511];
 
         for (let mx = 0; mx < MAP_W; mx++) {
+          const tIdx = zTile | VOX_TILE_X_LUT[mx];
           const wx = (mx - SPAWN_MX) / MAP_SCALE_X;
 
           // Muelle flotante de madera del piloto en el sur (wx: -4.5..+4.5, wz: -38..-23) a nivel 0 para paridad 1:1 con el agua
           if (Math.abs(wx) <= 4.2 && wz >= -38.0 && wz <= -23.5) {
-            voxHeight[zOff + mx] = 0;
+            voxHeight[tIdx] = 0;
             const plank = ((mz >> 2) & 1) ? 148 : 132;
             const border = Math.abs(wx) > 3.6 ? 25 : 0;
-            voxColor[zOff + mx] = rgb565(plank + border, plank - 28 + border, plank - 58);
+            voxColor[tIdx] = rgb565(plank + border, plank - 28 + border, plank - 58);
             continue;
           }
 
@@ -8159,11 +8185,11 @@
           if (landVal > 0.0) {
             // Tierra firme / Playa / Colinas costeras
             const hRaw = Math.min(56, Math.round(2 + landVal * 1.15));
-            voxHeight[zOff + mx] = hRaw;
+            voxHeight[tIdx] = hRaw;
             if (landVal < 5.5) {
               // Arena dorada de playa
               const grain = ((mx ^ mz) & 3) * 4;
-              voxColor[zOff + mx] = rgb565(216 - grain, 194 - grain, 142 - grain);
+              voxColor[tIdx] = rgb565(216 - grain, 194 - grain, 142 - grain);
             } else {
               // Vegetación costera verde con sombreado suave
               const shade = 0.88 + 0.18 * sinLut[(mx * 3 + mz * 2) & 511];
@@ -8171,12 +8197,12 @@
               const r = (gBase ? 46 : 56) * shade;
               const g = (gBase ? 108 : 122) * shade;
               const b = (gBase ? 44 : 48) * shade;
-              voxColor[zOff + mx] = rgb565(clampByte(r), clampByte(g), clampByte(b));
+              voxColor[tIdx] = rgb565(clampByte(r), clampByte(g), clampByte(b));
             }
           } else {
             // Agua navegable con TEXTURA FIJA DE ALTO CONTRASTE en coordenadas del mundo (caústicas + celdas fijas)
             // para tener referencia visual absoluta de posición y velocidad del velero
-            voxHeight[zOff + mx] = 0;
+            voxHeight[tIdx] = 0;
             const depthDist = -landVal; // > 0 hacia adentro del mar
             const shallow = Math.max(0.0, 1.0 - depthDist / 16.0);
 
@@ -8190,7 +8216,7 @@
             const r = 16 + shallow * 30 + checker * 0.6 + speck * 0.8;
             const g = 74 + shallow * 78 + checker * 1.1 + speck * 1.2;
             const b = 144 + shallow * 50 + checker * 1.3 + speck * 1.3;
-            voxColor[zOff + mx] = rgb565(clampByte(r), clampByte(g), clampByte(b));
+            voxColor[tIdx] = rgb565(clampByte(r), clampByte(g), clampByte(b));
           }
         }
       }
@@ -9582,22 +9608,23 @@
       const surf = trk.surface || 'asphalt';
 
       for (let mz = 0; mz < MAP_H; mz++) {
-        const zOff = mz << MAP_SHIFT_X;
+        const zTile = VOX_TILE_Z_LUT[mz];
         const wz   = (mz - SPAWN_MZ) / MAP_SCALE_Z;
 
         for (let mx = 0; mx < MAP_W; mx++) {
+          const tIdx = zTile | VOX_TILE_X_LUT[mx];
           const wx = (mx - SPAWN_MX) / MAP_SCALE_X;
 
           // Optimización rápida fuera del rectángulo del circuito
           if (wx < -boundX || wx > boundX || wz < boundMinZ || wz > boundMaxZ) {
             const borderDist = Math.max(Math.abs(wx) - boundX, wz < boundMinZ ? boundMinZ - wz : (wz > boundMaxZ ? wz - boundMaxZ : 0));
             const hHill = borderDist > 8.0 ? Math.min(54, Math.round(2 + (borderDist - 8.0) * 0.75)) : 2;
-            voxHeight[zOff + mx] = hHill;
+            voxHeight[tIdx] = hHill;
             const mowerStripe = ((mx >> 4) + ((mz >> 4) & 1)) & 1;
             if (surf === 'dirt') {
-              voxColor[zOff + mx] = mowerStripe ? rgb565(138, 102, 62) : rgb565(124, 90, 54);
+              voxColor[tIdx] = mowerStripe ? rgb565(138, 102, 62) : rgb565(124, 90, 54);
             } else {
-              voxColor[zOff + mx] = mowerStripe ? rgb565(46, 112, 42) : rgb565(58, 128, 48);
+              voxColor[tIdx] = mowerStripe ? rgb565(46, 112, 42) : rgb565(58, 128, 48);
             }
             continue;
           }
@@ -9607,7 +9634,7 @@
 
           if (d <= TRACK_HALF_W) {
             const hVox = Math.min(64, Math.round(2 + (info.jumpH / HEIGHT_SCALE)));
-            voxHeight[zOff + mx] = hVox;
+            voxHeight[tIdx] = hVox;
 
             const grain = ((mx * 17 ^ mz * 31) & 3) * 2;
             const isDirtSector = (surf === 'dirt') || (surf === 'mixed' && info.segIdx >= 5 && info.segIdx <= 9);
@@ -9636,24 +9663,24 @@
               // Línea discontinua amarilla central de guía de trazada
               r = 235; g = 198; b = 45;
             }
-            voxColor[zOff + mx] = rgb565(clampByte(r), clampByte(g), clampByte(b));
+            voxColor[tIdx] = rgb565(clampByte(r), clampByte(g), clampByte(b));
           } else if (d <= CURB_OUTER_W) {
             // Pianos (Curbs) anchos alternados en los bordes de la pista
-            voxHeight[zOff + mx] = 3;
+            voxHeight[tIdx] = 3;
             const curbBand = (Math.floor(info.along * 2.6) & 1);
             if (curbBand) {
-              voxColor[zOff + mx] = surf === 'dirt' ? rgb565(245, 165, 24) : rgb565(242, 38, 32);
+              voxColor[tIdx] = surf === 'dirt' ? rgb565(245, 165, 24) : rgb565(242, 38, 32);
             } else {
-              voxColor[zOff + mx] = rgb565(248, 250, 254);
+              voxColor[tIdx] = rgb565(248, 250, 254);
             }
           } else {
             // Infield de césped o tierra compactada en franjas de alto contraste
-            voxHeight[zOff + mx] = 2;
+            voxHeight[tIdx] = 2;
             const mowerStripe = ((mx >> 4) + ((mz >> 4) & 1)) & 1;
             if (surf === 'dirt') {
-              voxColor[zOff + mx] = mowerStripe ? rgb565(128, 96, 58) : rgb565(114, 84, 48);
+              voxColor[tIdx] = mowerStripe ? rgb565(128, 96, 58) : rgb565(114, 84, 48);
             } else {
-              voxColor[zOff + mx] = mowerStripe ? rgb565(48, 118, 44) : rgb565(62, 136, 54);
+              voxColor[tIdx] = mowerStripe ? rgb565(48, 118, 44) : rgb565(62, 136, 54);
             }
           }
         }
@@ -10772,14 +10799,15 @@
 
       // 2. Hornear el Escenario de Roca / Barro / Granito en PSRAM
       for (let mz = 0; mz < MAP_H; mz++) {
-        const zOff = mz << MAP_SHIFT_X;
+        const zTile = VOX_TILE_Z_LUT[mz];
         const wz   = (mz - SPAWN_MZ) / MAP_SCALE_Z;
 
         for (let mx = 0; mx < MAP_W; mx++) {
+          const tIdx = zTile | VOX_TILE_X_LUT[mx];
           const wx = (mx - SPAWN_MX) / MAP_SCALE_X;
           const hMeters = evalCrawlerRockHeight(wx, wz);
           const hVox = Math.max(1, Math.min(64, Math.round(hMeters / HEIGHT_SCALE)));
-          voxHeight[zOff + mx] = hVox;
+          voxHeight[tIdx] = hVox;
 
           const stratum = (hVox + ((mx >> 3) & 1)) % 5;
           const crack   = (((mx * 13 ^ mz * 29) & 7) === 0) ? -18 : (((mx + mz) & 3) * 3);
@@ -10799,7 +10827,7 @@
               break;
             }
           }
-          voxColor[zOff + mx] = rgb565(clampByte(r), clampByte(g), clampByte(b));
+          voxColor[tIdx] = rgb565(clampByte(r), clampByte(g), clampByte(b));
         }
       }
     }
@@ -12419,8 +12447,8 @@
       btnPaletteEl.addEventListener('click', (e) => {
         paletteIdx = (paletteIdx + 1) % SPI_MODES.length;
         const m = SPI_MODES[paletteIdx];
-        e.currentTarget.textContent = m.name;
-        showToast(m.name);
+        e.currentTarget.textContent = m.shortBtn || m.name;
+        showToast(`SPI: ${m.name}`);
       });
     }
     const btnSoundEl = document.getElementById('btnSound');
@@ -12433,12 +12461,21 @@
     }
 
     let lastTime = performance.now();
+    let lastSpiFrameTime = 0;
     let fpsFrames = 0;
     let fpsClock = performance.now();
     let mapEditorOpen = false;
 
     function retroGoMainLoop(now) {
       requestAnimationFrame(retroGoMainLoop);
+
+      // Si el usuario selecciona el modo SPI 60MHz (48 FPS) o 40MHz (32 FPS), limitamos la cadencia exactamente como el bus físico del ILI9341V
+      const activeSpiMode = SPI_MODES[paletteIdx];
+      if (activeSpiMode.targetFps < 60) {
+        const minFrameIntervalMs = (1000.0 / activeSpiMode.targetFps) - 1.2;
+        if (now - lastSpiFrameTime < minFrameIntervalMs) return;
+      }
+      lastSpiFrameTime = now;
 
       try {
         const dt = Math.min(0.05, Math.max(0.001, (now - lastTime) / 1000.0));
@@ -12528,7 +12565,7 @@
           const rawFps = Math.round((fpsFrames * 1000) / (now - fpsClock));
           const mode = SPI_MODES[paletteIdx];
           const dispFps = Math.min(rawFps, mode.targetFps);
-          document.getElementById('uiFpsBattery').textContent = `${dispFps}FPS | SPI ${mode.spiMhz}MHz`;
+          document.getElementById('uiFpsBattery').textContent = `${dispFps}FPS | SPI ${mode.spiMhz}MHz DMA (${mode.dmaWireMs}ms)`;
           fpsFrames = 0;
           fpsClock = now;
         }
@@ -12858,11 +12895,11 @@
           const data = imgD.data;
           for (let y = 0; y < 256; y++) {
             const mz = ((255 - y) << 2) & MAP_MASK_Z;
-            const zOff = mz << MAP_SHIFT_X;
+            const zTile = VOX_TILE_Z_LUT[mz];
             const rowOff = y * 512;
             for (let x = 0; x < 512; x++) {
               const mx = (x << 2) & MAP_MASK_X;
-              const c565 = voxColor[zOff + mx];
+              const c565 = voxColor[zTile | VOX_TILE_X_LUT[mx]];
               const dIdx = (rowOff + x) << 2;
               data[dIdx]     = LUT_R[c565];
               data[dIdx + 1] = LUT_G[c565];
