@@ -2787,6 +2787,92 @@
       return absLat <= (hw + craftPad) && cy >= (yBot - craftPad) && cy <= (yTop + craftPad);
     }
 
+    // =========================================================================
+    // COLISIONES DEL DRON / ALA CON ÁRBOLES, EDIFICIOS Y MARCOS DE PUERTA
+    // Formas simples y baratas (ESP32-S3: < 0.05 ms por paso de física):
+    // - Árbol: cilindro vertical (radio = 30% del ancho del sprite, alto = h)
+    // - Edificio sólido: caja orientada (OBB) w x d x (h + techo); los abiertos (hangar, toldo,
+    //   bando) se pueden atravesar como antes
+    // - Puerta: postes laterales y travesaño superior del marco (solo fuera de la ventana de paso)
+    // Respuesta: se devuelve el aparato al punto previo y se refleja la velocidad con pérdida.
+    // Un golpe a más de CRASH_SPEED_MS cuenta como choque (toast + tono grave).
+    // =========================================================================
+    const CRAFT_RADIUS_M   = 0.35;
+    const CRASH_SPEED_MS   = 7.0;
+    const OPEN_BLDG_KINDS  = { open_bando: 1, open_canopy: 1, open_hangar: 1, bando_arch: 1 };
+    let   collisionsEnabled = true;
+    let   lastCrashToastT   = 0;
+
+    function worldHitAt(px, py, pz) {
+      let hit = false;
+
+      // 1. Árboles (cilindros)
+      for (let i = 0; i < WORLD_TREES.length && !hit; i++) {
+        const tr = WORLD_TREES[i];
+        const dx = px - tr.x, dz = pz - tr.z;
+        const r = tr.w * 0.30 + CRAFT_RADIUS_M;
+        if (dx * dx + dz * dz > r * r) continue;
+        const yBase = tr.y !== undefined ? tr.y : getTerrainHeightMeters(tr.x, tr.z);
+        if (py > yBase + tr.h) continue;
+        hit = true;
+      }
+
+      // 2. Edificios sólidos (OBB en el plano horizontal + altura hasta la cumbrera)
+      for (let i = 0; i < WORLD_BUILDINGS.length && !hit; i++) {
+        const b = WORLD_BUILDINGS[i];
+        if (OPEN_BLDG_KINDS[b.kind]) continue;
+        const dx = px - b.x, dz = pz - b.z;
+        const reach = (b.w + b.d) * 0.5 + CRAFT_RADIUS_M;
+        if (Math.abs(dx) > reach || Math.abs(dz) > reach) continue;
+        const lx = dx * b.cosY + dz * b.sinY;    // eje del ancho (w)
+        const lz = -dx * b.sinY + dz * b.cosY;   // eje del fondo (d)
+        if (Math.abs(lx) > b.w * 0.5 + CRAFT_RADIUS_M || Math.abs(lz) > b.d * 0.5 + CRAFT_RADIUS_M) continue;
+        const y0 = getTerrainHeightMeters(b.x, b.z);
+        if (py > y0 + b.h + b.roofH * 0.6) continue;
+        hit = true;
+      }
+
+      // 3. Marcos de puerta (postes y travesaño), solo puertas cercanas
+      if (!hit && !isFreeFlightNoGates()) {
+        for (let i = 0; i < CIRCUIT_GATES.length && !hit; i++) {
+          const g = CIRCUIT_GATES[i];
+          if (!g || g.type === 'flag_L' || g.type === 'flag_R' || g.type === 'diamond') continue;
+          const dx = px - g.x, dz = pz - g.z;
+          if (dx * dx + dz * dz > (g.w + 4.0) * (g.w + 4.0)) continue;
+          const d   = dx * g.tx + dz * g.tz;           // distancia al plano de la puerta
+          const frameHalfD = g.type === 'dive_cube' ? Math.max(2.6, g.w * 0.34) : 0.35;
+          if (Math.abs(d) > frameHalfD + CRAFT_RADIUS_M) continue;
+          const lat = Math.abs(dx * g.nx + dz * g.nz);
+          const hw = g.w * 0.5, hh = g.h * 0.5;
+          const gFloor = getTerrainHeightMeters(g.x, g.z);
+          const yTop = gFloor + g.y + hh;
+          const postIn  = hw + 0.45;                   // borde interior: la ventana de paso conserva su margen
+          const postOut = hw + 0.45 + 0.30 + CRAFT_RADIUS_M;
+          const onPost = lat > postIn && lat < postOut && py < yTop + 0.75;
+          const onBar  = lat < postOut && py > yTop + 0.45 && py < yTop + 0.45 + 0.30 + CRAFT_RADIUS_M;
+          if (onPost || onBar) hit = true;
+        }
+      }
+      return hit;
+    }
+
+    function collideCraftWithWorld(sim, prevX, prevY, prevZ) {
+      if (!collisionsEnabled) return false;
+      if (!worldHitAt(sim.px, sim.py, sim.pz)) return false;
+      // Si ya estaba dentro (p. ej. reaparición sobre un árbol) se deja salir sin bloquear
+      if (worldHitAt(prevX, prevY, prevZ)) return false;
+
+      const impact = Math.hypot(sim.vx, sim.vy, sim.vz);
+      sim.px = prevX; sim.py = prevY; sim.pz = prevZ;
+      sim.vx *= -0.30; sim.vy *= -0.20; sim.vz *= -0.30;
+      if (impact > CRASH_SPEED_MS && aeroEnv.time - lastCrashToastT > 1.0) {
+        lastCrashToastT = aeroEnv.time;
+        showToast(`CHOQUE ${Math.round(impact * 3.6)} KM/H`);
+        playTone(140, 0.18, 'sawtooth', 0.06);
+      }
+      return true;
+    }
+
     // 10 Mapas / Escenarios para Drones FPV y Alas (incluyendo Bando Edificio Abierto, Cañón Comanche 3, Cumbres Alpinas, Isla Volcánica y Chorobobo):
     var TERRAIN_THEMES = [
       {
@@ -7533,6 +7619,7 @@
           if (this.vy < 0) this.vy = -this.vy * 0.22;
           this.vx *= 0.90; this.vz *= 0.90;
         }
+        collideCraftWithWorld(this, prevX, prevY, prevZ);
 
         if (!isFreeFlightNoGates()) {
           const g = CIRCUIT_GATES[this.activeGate];
@@ -7994,6 +8081,7 @@
           if (this.vy < 0) this.vy = -this.vy * 0.2;
           this.vx *= 0.96; this.vz *= 0.96;
         }
+        collideCraftWithWorld(this, prevX, prevY, prevZ);
 
         if (!isFreeFlightNoGates()) {
           const g = CIRCUIT_GATES[this.activeGate];
