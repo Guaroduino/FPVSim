@@ -8275,8 +8275,13 @@
       const jSinSh = Math.sin(jAngSh), jCosSh = Math.cos(jAngSh);
       function wpShadow(r, u, f) {
         const sr = r * S, su = u * S, sf = f * S;
-        const wx = px + rx * sr + fx * sf - su * 0.48;
-        const wz = pz + rz * sr + fz * sf - su * 0.34;
+        const vx = px + rx * sr + ux * su + fx * sf;
+        const vy = py + ry * sr + uy * su + fy * sf;
+        const vz = pz + rz * sr + uz * su + fz * sf;
+        const dh = Math.max(0.0, vy - py);
+        // Proyección vertical exacta del mástil/velas escorados + ligera inclinación solar cenital
+        const wx = vx + (rx * 0.28 - fx * 0.12) * dh;
+        const wz = vz + (rz * 0.28 - fz * 0.12) * dh;
         return projPoint320(wx, py - 0.02, wz);
       }
       const shBow     = wpShadow(0.0, 0.1,  1.52);
@@ -8498,69 +8503,84 @@
         }
       }
 
-      // 1A. Líneas de Wake Laterales en V a ambos costados del casco (Olas de proa, bigotes medios y brazos Kelvin exteriores)
+      // 1A. Líneas de Wake Laterales en V a ambos costados del casco (alineadas con el vector real de avance sobre el agua y ángulo Kelvin real ~16°..19°)
       const hFLen = Math.hypot(sim.fx, sim.fz) || 1.0;
       const hFx   = sim.fx / hFLen, hFz = sim.fz / hFLen;
-      const hRx   = hFz,            hRz = -hFx;
+      // Dirección real de desplazamiento sobre el agua (combina proa + abatimiento/velocidad real vx,vz)
+      const vWaterLen = Math.hypot(sim.vx, sim.vz);
+      const wFx = vWaterLen > 0.25 ? (sim.vx / vWaterLen) : hFx;
+      const wFz = vWaterLen > 0.25 ? (sim.vz / vWaterLen) : hFz;
+      const wRx = wFz, wRz = -wFx;
       if (sim.spd > 0.18) {
-        const spdK = Math.min(1.45, 0.55 + sim.spd * 0.18);
+        const spdK = Math.min(1.18, 0.72 + sim.spd * 0.12);
         const wyS  = 0.05;
+        // Desfase angular suave en popa cuando el velero está virando (yawRate) para que los bigotes curven con la estela
+        const turnSwp = Math.max(-0.45, Math.min(0.45, (sim.yawRate || 0.0) * 0.28));
         function wakeSideLine(f0, r0, f1, r1, dashed, colIdx) {
-          const xA = sim.px + hFx * f0, zA = sim.pz + hFz * f0;
-          const xB = sim.px + hFx * f1, zB = sim.pz + hFz * f1;
-          projLine(xA - hRx * r0, wyS, zA - hRz * r0, xB - hRx * r1, wyS, zB - hRz * r1, dashed, colIdx);
-          projLine(xA + hRx * r0, wyS, zA + hRz * r0, xB + hRx * r1, wyS, zB + hRz * r1, dashed, colIdx);
+          const sw0 = f0 < 0.0 ? (-f0 * turnSwp) : 0.0;
+          const sw1 = f1 < 0.0 ? (-f1 * turnSwp) : 0.0;
+          const xAL = sim.px + wFx * f0 + wRx * (sw0 - r0), zA_L = sim.pz + wFz * f0 + wRz * (sw0 - r0);
+          const xBL = sim.px + wFx * f1 + wRx * (sw1 - r1), zB_L = sim.pz + wFz * f1 + wRz * (sw1 - r1);
+          const xAR = sim.px + wFx * f0 + wRx * (sw0 + r0), zA_R = sim.pz + wFz * f0 + wRz * (sw0 + r0);
+          const xBR = sim.px + wFx * f1 + wRx * (sw1 + r1), zB_R = sim.pz + wFz * f1 + wRz * (sw1 + r1);
+          projLine(xAL, wyS, zA_L, xBL, wyS, zB_L, dashed, colIdx);
+          projLine(xAR, wyS, zA_R, xBR, wyS, zB_R, dashed, colIdx);
         }
-        // Capa 1 (Interna blanca): Bigote de espuma pegado a la proa y costados babor/estribor
-        wakeSideLine( 2.12, 0.06,          0.25, 0.62 * spdK, 0, 1);
-        wakeSideLine( 0.25, 0.62 * spdK,  -1.85, 1.08 * spdK, 0, 1);
-        // Capa 2 (Media): Segunda línea de ola lateral abriéndose a los lados del casco
-        wakeSideLine( 1.55, 0.28 * spdK,  -0.25, 1.08 * spdK, 0, 1);
-        wakeSideLine(-0.25, 1.08 * spdK,  -2.25, 1.72 * spdK, 1, 5);
-        // Capa 3 (Externa Kelvin cian): Tercera línea de estela ancha a los lados del velero
-        wakeSideLine( 0.88, 0.56 * spdK,  -0.90, 1.56 * spdK, 0, 5);
-        wakeSideLine(-0.90, 1.56 * spdK,  -2.75, 2.38 * spdK, 1, 5);
-        // Capa 4 (Crestas escalonadas / Echelon waves a ambos lados del casco)
-        wakeSideLine( 1.15, 0.42 * spdK,   0.35, 0.96 * spdK, 0, 5);
-        wakeSideLine( 0.05, 0.72 * spdK,  -0.85, 1.38 * spdK, 0, 5);
-        wakeSideLine(-1.05, 0.98 * spdK,  -2.05, 1.76 * spdK, 1, 5);
+        // Línea 1 (Bigote de proa pegado al casco: nace en la roda f=+2.05m y bordea la manga máxima hasta popa en ángulo estrecho ~14°)
+        wakeSideLine( 2.05, 0.05,          0.25, 0.54 * spdK, 0, 1);
+        wakeSideLine( 0.25, 0.54 * spdK,  -1.45, 0.74 * spdK, 0, 1);
+        wakeSideLine(-1.45, 0.74 * spdK,  -2.75, 1.02 * spdK, 1, 5);
+        // Línea 2 (Ola de amura media: nace en f=+1.35m y corre paralela en V cerrada ~16° a ambos lados)
+        wakeSideLine( 1.35, 0.32 * spdK,  -0.35, 0.78 * spdK, 0, 1);
+        wakeSideLine(-0.35, 0.78 * spdK,  -2.35, 1.26 * spdK, 1, 5);
+        // Línea 3 (Brazo Kelvin exterior: nace a media eslora f=+0.50m y abre a ~19° hacia popa)
+        wakeSideLine( 0.50, 0.60 * spdK,  -1.15, 1.08 * spdK, 0, 5);
+        wakeSideLine(-1.15, 1.08 * spdK,  -2.85, 1.58 * spdK, 1, 5);
+        // Línea 4 (Estela de aleta de popa que conecta el espejo del casco con la estela interior)
+        wakeSideLine(-0.55, 0.42 * spdK,  -1.85, 0.62 * spdK, 0, 1);
       }
 
-      // 1B. Estela en V persistente detrás de la popa (doble línea lateral por banda + turbulencia central del timón)
+      // 1B. Estela en V persistente detrás de la popa (orientada según la tangente real de cada tramo recorrido por el barco)
       for (let i = 0; i < MAX_WAKE_PTS - 1; i++) {
         const idx0 = (wakeHeadIdx - 1 - i + MAX_WAKE_PTS) % MAX_WAKE_PTS;
         const idx1 = (wakeHeadIdx - 2 - i + MAX_WAKE_PTS) % MAX_WAKE_PTS;
         const x0 = WAKE_RING_X[idx0], z0 = WAKE_RING_Z[idx0], w0 = WAKE_RING_W[idx0];
         const x1 = WAKE_RING_X[idx1], z1 = WAKE_RING_Z[idx1], w1 = WAKE_RING_W[idx1];
         if (w0 <= 0.01 || w1 <= 0.01) continue;
-        if (Math.hypot(x1 - x0, z1 - z0) > 6.0) continue;
+        const segDx = x0 - x1, segDz = z0 - z1;
+        const segLen = Math.hypot(segDx, segDz);
+        if (segLen < 0.02 || segLen > 6.0) continue;
 
-        const spreadIn0  = 0.20 + i * 0.085;
-        const spreadIn1  = 0.20 + (i + 1) * 0.085;
-        const spreadOut0 = 0.62 + i * 0.155;
-        const spreadOut1 = 0.62 + (i + 1) * 0.155;
+        // Normal horizontal perpendicular a la trayectoria real de ese segmento de estela
+        const nRx = segDz / segLen;
+        const nRz = -segDx / segLen;
+
+        const spreadIn0  = 0.34 + i * 0.085;
+        const spreadIn1  = 0.34 + (i + 1) * 0.085;
+        const spreadOut0 = 0.74 + i * 0.145;
+        const spreadOut1 = 0.74 + (i + 1) * 0.145;
         const colIdx     = i < 6 ? 1 : 5; // Blanco brillante cerca de la popa -> Cian espuma lejos
         const isDash     = i > 8 ? 1 : 0;
         // Par interno de estela
         projLine(
-          x0 - hRx * spreadIn0, 0.05, z0 - hRz * spreadIn0,
-          x1 - hRx * spreadIn1, 0.04, z1 - hRz * spreadIn1,
+          x0 - nRx * spreadIn0, 0.05, z0 - nRz * spreadIn0,
+          x1 - nRx * spreadIn1, 0.04, z1 - nRz * spreadIn1,
           isDash, colIdx
         );
         projLine(
-          x0 + hRx * spreadIn0, 0.05, z0 + hRz * spreadIn0,
-          x1 + hRx * spreadIn1, 0.04, z1 + hRz * spreadIn1,
+          x0 + nRx * spreadIn0, 0.05, z0 + nRz * spreadIn0,
+          x1 + nRx * spreadIn1, 0.04, z1 + nRz * spreadIn1,
           isDash, colIdx
         );
         // Par externo de estela Kelvin
         projLine(
-          x0 - hRx * spreadOut0, 0.05, z0 - hRz * spreadOut0,
-          x1 - hRx * spreadOut1, 0.04, z1 - hRz * spreadOut1,
+          x0 - nRx * spreadOut0, 0.05, z0 - nRz * spreadOut0,
+          x1 - nRx * spreadOut1, 0.04, z1 - nRz * spreadOut1,
           1, 5
         );
         projLine(
-          x0 + hRx * spreadOut0, 0.05, z0 + hRz * spreadOut0,
-          x1 + hRx * spreadOut1, 0.04, z1 + hRz * spreadOut1,
+          x0 + nRx * spreadOut0, 0.05, z0 + nRz * spreadOut0,
+          x1 + nRx * spreadOut1, 0.04, z1 + nRz * spreadOut1,
           1, 5
         );
         // Espuma central del timón/quilla en los primeros tramos tras la popa
