@@ -4,15 +4,18 @@ Todo el código desarrollado en este repositorio (tanto en el prototipo web como
 
 ## Restricciones Obligatorias en Todo Desarrollo
 
-1. **Presupuesto Estricto de Memoria (SRAM Interna vs. PSRAM Octal)**:
-   - **SRAM Interna (`MALLOC_CAP_INTERNAL`, máx ~340 KB para gráficos)**:
-     - Reservada exclusivamente para buffers de acceso aleatorio por columna o transferencia DMA:
-       - `vram565`: `320 × 240 × 2` bytes (`150 KB`, o buffers ping-pong DMA).
-       - `voxBuf`: `256 × 256 × 2` bytes (`128 KB`, buffer de raycasting vertical des-rotado).
-       - Tablas LUT críticas de ciclo interno (`rayStepS`, `cloudDistLut`, glifos OSD 2-bit: `< 8 KB`).
+1. **Presupuesto Estricto de Memoria (SRAM Interna vs. PSRAM Octal)** — objetivo **48 FPS (SPI 60 MHz, 20.8 ms/frame)**:
+   - **SRAM Interna (`MALLOC_CAP_INTERNAL`, ~320 KB libres sin Wi-Fi)**:
+     - `voxBuf`: `256 × 256 × 2` bytes (`128 KB`, buffer de raycasting vertical des-rotado).
+     - `voxDepth8`: `256 × 256 × 1` (`64 KB`) y `vramDepth8`: `320 × 240 × 1` (`75 KB`): Z-Buffers de **8 bits** con código pseudo-logarítmico (`depthCode8`). Prohibido volver a Z-Buffers de 16 bits (sumaban 278 KB y no caben).
+     - Bandas DMA ping-pong `2 × 320 × 40 × 2` bytes (`50 KB`) y LUTs críticas (`< 16 KB`).
+     - Con Wi-Fi/ESP-NOW activo (40–60 KB) mover `vramDepth8` a PSRAM.
    - **PSRAM Octal (`MALLOC_CAP_SPIRAM`, 8 MB disponibles)**:
-     - Reservada para mapas de lectura secuencial/espacial: `voxHeight` (`256 KB`), `voxColor` (`512 KB`), `voxSkyMap` (`512 KB`).
+     - **Doble framebuffer** `2 × 320 × 240 × 2` (`300 KB`): el Core 1 dibuja uno mientras el Core 0 envía el otro por DMA en bandas.
+     - Mapas en bloques tileados 8×8: `voxHeight` (`2 MB`), `voxColor` (`4 MB`), `voxSkyMap` (`512 KB`).
    - Prohibido crear objetos dinámicos, arrays temporales o asignaciones de memoria (`new` / `malloc`) dentro del bucle de renderizado por frame.
+   - La física corre a **paso fijo de 1/240 s** con acumulador (`stepFixedPhysics` en web, `updateDronePhysics` en firmware). Prohibido integrar con el `dt` variable del frame.
+   - El simulador muestra el costo estimado en el S3 en la píldora del modo SPI (`S3 est.`); si se pone en rojo, el cambio no cabe en el presupuesto.
 
 2. **Prohibido usar Divisiones Flotantes o Funciones Trascendentales en Bucles de Píxeles / Rayos**:
    - Dentro de los bucles por columna (`256` columnas), pasos de rayo (`~96` pasos) o píxeles (`320×240`):

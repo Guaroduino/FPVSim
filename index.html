@@ -641,14 +641,14 @@
         <button id="btnSound" class="pill-btn" title="Activar / Silenciar Sintetizador de Audio Físico I2S">🔇 AUDIO</button>
         <button id="btnBleMp" class="pill-btn" title="Multijugador Bluetooth BLE / Pestaña Local (ESP32-S3 NimBLE)">📡 BLE</button>
         <a href="hardware.html" class="pill-btn" style="text-decoration:none;display:inline-flex;align-items:center;" title="Ver Guía y Diagrama de Conexiones ESP32-S3 N16R8">PINOUT</a>
-        <button id="btnPalette" class="pill-btn" title="Cambiar Modo de Bus SPI ESP32-S3 (80MHz 60FPS / 60MHz 48FPS / 40MHz 32FPS / 1-Bit)">80MHz 60FPS</button>
+        <button id="btnPalette" class="pill-btn" title="Cambiar Modo de Bus SPI ESP32-S3 (80MHz 60FPS / 60MHz 48FPS / 40MHz 32FPS / 1-Bit)">60MHz 48FPS</button>
       </div>
     </header>
 
     <!-- 2. 2.8" 320x240 IPS RGB565 ILI9341V + Capacitive Touch Screen Lens -->
     <section class="screen-lens">
       <div class="lens-header">
-        <span id="uiFpsBattery">60FPS | SPI 80MHz DMA (15.4ms)</span>
+        <span id="uiFpsBattery">48FPS | SPI 60MHz</span>
       </div>
 
       <div id="oledContainer" class="oled-container">
@@ -996,6 +996,28 @@
     const VRAM_BYTES  = VRAM_PIXELS * 2; // 153,600 bytes (150 KB RGB565)
     const vram565 = new Uint16Array(VRAM_PIXELS);
 
+    // =========================================================================
+    // MEDIDOR DE COSTO ESTIMADO EN ESP32-S3 (contadores por frame x ciclos por operación)
+    // Los ciclos son estimaciones a 240 MHz (incluyen fallos de caché PSRAM promedio).
+    // Calibrar con los tiempos reales del firmware (SELECT -> panel de diagnóstico).
+    // =========================================================================
+    const S3COST = {
+      raySteps: 0, skyPx: 0, spritePx: 0, triPx: 0, linePx: 0, objects: 0,
+      lastMs: 0, filtMs: 0,
+      CYC: { raySteps: 42, skyPx: 26, terrainPx: 4, blitPx: 14, spritePx: 11, triPx: 9, linePx: 9, objects: 400, fixed: 600000 },
+      reset() { this.raySteps = 0; this.skyPx = 0; this.spritePx = 0; this.triPx = 0; this.linePx = 0; this.objects = 0; },
+      // Raycast + cielo repartidos entre los 2 núcleos; blit, objetos y OSD en el Core 1
+      estimateMs() {
+        const C = this.CYC;
+        const terrainPx = Math.max(0, VOX_W_COST * VOX_H_COST - this.skyPx);
+        const rayCycles = this.raySteps * C.raySteps + this.skyPx * C.skyPx + terrainPx * C.terrainPx;
+        const core1 = rayCycles * 0.5 + DISP_W * DISP_H * C.blitPx + this.spritePx * C.spritePx +
+                      this.triPx * C.triPx + this.linePx * C.linePx + this.objects * C.objects + C.fixed;
+        return core1 / 240000.0;
+      }
+    };
+    const VOX_W_COST = 256, VOX_H_COST = 256;
+
     // Coordenadas lógicas base (128x64 -> escaladas en hardware a 320x240 = x2.5, x3.75)
     const SCREEN_W = 128;
     const SCREEN_H = 64;
@@ -1060,7 +1082,7 @@
       { name: '40MHz SPI 32FPS', shortBtn: '40MHz 32FPS', spiMhz: 40, mono: false, targetFps: 32, dmaWireMs: 30.7 },
       { name: '1-BIT MONO 60FPS',shortBtn: '1-BIT MONO',  spiMhz: 80, mono: true,  targetFps: 60, dmaWireMs: 15.4 }
     ];
-    let paletteIdx = 0;
+    let paletteIdx = 1; // 60 MHz DMA = 48 FPS: objetivo por defecto de la consola real
 
     function resolveColor565(color) {
       if (SPI_MODES[paletteIdx].mono) {
@@ -1232,10 +1254,11 @@
       const dy = -Math.abs(iy1 - iy0), sy = iy0 < iy1 ? 1 : -1;
       let err = dx + dy, step = 0;
       const czTest = activeObjCzQ4;
+      const czCode = czTest > 0 ? depthCode8(czTest) : 0;
 
       while (step < 640) {
         if (!dashedMask || ((step >> 1) & dashedMask) === 0) {
-          if (czTest <= 0 || czTest <= vramDepthQ4[iy0 * DISP_W + ix0]) {
+          if (czTest <= 0 || czCode <= vramDepth8[iy0 * DISP_W + ix0]) {
             fbSetPixel320(ix0, iy0, c);
             if (ix0 + 1 < DISP_W) fbSetPixel320(ix0 + 1, iy0, c);
           }
@@ -2328,8 +2351,19 @@
     const VOX_W = 256;
     const VOX_H = 256;
     const voxBuf      = new Uint16Array(VOX_W * VOX_H);
-    const voxDepthQ4  = new Uint16Array(VOX_W * VOX_H);
-    const vramDepthQ4 = new Uint16Array(DISP_W * DISP_H);
+    // Z-Buffers de 8 bits (64 KB + 75 KB en SRAM del ESP32-S3, antes 128 KB + 150 KB en Uint16).
+    // Guardan un código pseudo-logarítmico de la profundidad Q4 (4 bits de exponente + 4 de mantisa):
+    // monótono, solo enteros (clz + shift en el S3) y ~4% de resolución relativa en cualquier distancia.
+    // 255 = cielo / infinito.
+    const voxDepth8  = new Uint8Array(VOX_W * VOX_H);
+    const vramDepth8 = new Uint8Array(DISP_W * DISP_H);
+    const DEPTH8_SKY = 255;
+    function depthCode8(q4) {
+      if (q4 >= 65535) return DEPTH8_SKY;
+      if (q4 < 16) return q4 < 0 ? 0 : (q4 | 0);
+      const e = 31 - Math.clz32(q4);                  // 4..15
+      return ((e - 3) << 4) | ((q4 >> (e - 4)) & 15); // 16..207
+    }
     let   activeObjCzQ4 = 0; // > 0 durante el renderizado de objetos 3D (árboles, edificios, gates) para oclusión exacta tras montañas
 
     // Conversión exacta de coordenada normalizada (u, v) sobre el mapa activo a metros reales (wx, wz) en escala WORLD_W_M x WORLD_H_M
@@ -3377,6 +3411,7 @@
     const BASE_V_Q8        = new Int32Array(NUM_RAY_STEPS);
     const PROJ_SCALE_Q8    = new Int32Array(NUM_RAY_STEPS);
     const RAY_CZ_Q4        = new Uint16Array(NUM_RAY_STEPS);
+    const RAY_CZ_CODE8     = new Uint8Array(NUM_RAY_STEPS);
     const RAY_FOG_LVL      = new Uint8Array(NUM_RAY_STEPS);
     const CLOUD_DIST_Q8    = new Int32Array(512);
     const MICRO_TEX_LUT    = new Uint8Array(256);
@@ -3401,7 +3436,7 @@
       cloudDriftX = (cloudDriftX + dt * 4.2) % 512;
       if (SPI_MODES[paletteIdx].mono) {
         fbClear(0);
-        vramDepthQ4.fill(65535);
+        vramDepth8.fill(DEPTH8_SKY);
         return;
       }
 
@@ -3471,6 +3506,7 @@
           BASE_V_Q8[activeSteps]     = vRef << 8;
           PROJ_SCALE_Q8[activeSteps] = Math.round(((HEIGHT_SCALE * U0y * fVox) / cz) * 256.0);
           RAY_CZ_Q4[activeSteps]     = Math.min(65534, Math.max(1, Math.round(cz * 16.0)));
+          RAY_CZ_CODE8[activeSteps]  = depthCode8(RAY_CZ_Q4[activeSteps]);
           const distFog = cz > fogStartM ? Math.min(22, ((cz - fogStartM) * fogSpanInv) | 0) : 0;
           RAY_FOG_LVL[activeSteps]   = distFog;
           activeSteps++;
@@ -3513,8 +3549,9 @@
           const dirWZ_Q8 = Math.round(dirW_Z * 256);
 
           let yMax = VOX_H;
+          let k = 0;
 
-          for (let k = 0; k < activeSteps && yMax > 0; k++) {
+          for (; k < activeSteps && yMax > 0; k++) {
             const sQ8  = RAY_S_Q8[k];
             const xQ19 = colStartX_Q19 + dirX_Q11 * sQ8;
             const zQ19 = colStartZ_Q19 + dirZ_Q11 * sQ8;
@@ -3554,15 +3591,18 @@
                   col = blend565Fog32(col, fogCol, fog32 > 22 ? 22 : fog32);
                 }
               }
-              const czQ4 = RAY_CZ_Q4[k];
+              const czCode = RAY_CZ_CODE8[k];
               let ptr = (vTop << 8) | u;
               for (let y = vTop; y < yMax; y++, ptr += VOX_W) {
-                voxBuf[ptr]     = col;
-                voxDepthQ4[ptr] = czQ4;
+                voxBuf[ptr]    = col;
+                voxDepth8[ptr] = czCode;
               }
               yMax = vTop;
             }
           }
+
+          S3COST.raySteps += k;
+          S3COST.skyPx += yMax;
 
           // 3B. Cielo Azul + Nubes con muestreo 1:1 + Dithering Sub-Texel 2x2 y 32 capas suaves pegadas al horizonte
           if (yMax > 0) {
@@ -3580,8 +3620,8 @@
                 const skyFog32 = (22 - (dyHoriz < 0 ? 0 : dyHoriz)) + bayer;
                 skyCol = blend565Fog32(skyCol, fogCol, skyFog32 > 24 ? 24 : skyFog32);
               }
-              voxBuf[ptr]     = skyCol;
-              voxDepthQ4[ptr] = 65535;
+              voxBuf[ptr]    = skyCol;
+              voxDepth8[ptr] = DEPTH8_SKY;
             }
           }
         }
@@ -3610,7 +3650,7 @@
           const vv = vRaw < 0 ? 0 : (vRaw > 255 ? 255 : vRaw);
           const voxIdx = (vv << 8) | uu;
           vram565[dstIdx]     = voxBuf[voxIdx];
-          vramDepthQ4[dstIdx] = voxDepthQ4[voxIdx];
+          vramDepth8[dstIdx] = voxDepth8[voxIdx];
           dstIdx++;
           uFP += du_dx;
           vFP += dv_dx;
@@ -3708,7 +3748,7 @@
             const pt = projPoint320(sp.x, yFloor, sp.z);
             if (pt && pt.cz <= 420 && pt.sx >= 2 && pt.sx < DISP_W - 2 && pt.sy >= 2 && pt.sy < DISP_H - 2) {
               const dotCzQ4 = Math.max(1, Math.round(pt.cz * 16.0) - 32);
-              if (dotCzQ4 <= vramDepthQ4[Math.round(pt.sy) * DISP_W + Math.round(pt.sx)]) {
+              if (depthCode8(dotCzQ4) <= vramDepth8[Math.round(pt.sy) * DISP_W + Math.round(pt.sx)]) {
                 let dotCol = circuit.lineCol565;
                 let dotRad = pt.cz < 75 ? 2 : 1;
                 if (isApproachSeg) {
@@ -3730,7 +3770,7 @@
               const ptAir = projPoint320(sp.x, yAir, sp.z);
               if (ptAir && ptAir.cz <= 360 && ptAir.sx >= 2 && ptAir.sx < DISP_W - 2 && ptAir.sy >= 2 && ptAir.sy < DISP_H - 2) {
                 const airCzQ4 = Math.max(1, Math.round(ptAir.cz * 16.0) - 28);
-                if (airCzQ4 <= vramDepthQ4[Math.round(ptAir.sy) * DISP_W + Math.round(ptAir.sx)]) {
+                if (depthCode8(airCzQ4) <= vramDepth8[Math.round(ptAir.sy) * DISP_W + Math.round(ptAir.sx)]) {
                   const airCol = isApproachSeg
                     ? ((sp.stepIdx === pulseStep || sp.stepIdx === pulseStep - 1) ? 0xFFFF : AIR_DOT)
                     : (isNextSeg ? GOLD_DOT : CYAN_DOT);
@@ -3992,6 +4032,7 @@
       const stepBC = hBC > 0 ? Math.round(((cx - bx) * 65536) / hBC) : 0;
 
       const czTest = activeObjCzQ4;
+      const czCode = czTest > 0 ? depthCode8(czTest) : 0;
       for (let y = yStart; y <= yEnd; y++) {
         const xA = (ax * 65536 + (y - ay) * stepAC) >> 16;
         const xB = y < by
@@ -4002,13 +4043,14 @@
         if (xr < 0 || xl >= DISP_W) continue;
         if (xl < 0) xl = 0;
         if (xr >= DISP_W) xr = DISP_W - 1;
+        S3COST.triPx += xr - xl + 1;
         if (czTest > 0) {
           const rowOff = y * DISP_W;
           for (let x = xl; x <= xr; x++) {
             const pIdx = rowOff + x;
-            if (czTest <= vramDepthQ4[pIdx]) {
+            if (czCode <= vramDepth8[pIdx]) {
               vram565[pIdx] = col565;
-              vramDepthQ4[pIdx] = czTest;
+              vramDepth8[pIdx] = czCode;
             }
           }
         } else {
@@ -4028,6 +4070,7 @@
     // 6: Chaguaramo, 7: Bambuzal Río Turbio, 8: Arbusto/Matorral, 9: Árbol Seco, 10: Manga de Viento A.I.A, 11: Araguaney Amarillo
     const TREE_SP_W = 24;
     const TREE_SP_H = 28;
+    const TREE_MAX_PX = 240; // alto máximo en pantalla de un sprite de árbol (más cerca = se omite)
     const NUM_TREE_SPRITE_TYPES = 12;
     const TREE_SPRITE_ROM = new Uint16Array(NUM_TREE_SPRITE_TYPES * TREE_SP_W * TREE_SP_H);
 
@@ -5067,9 +5110,10 @@
     function setLodPx320(sx, sy, col, objCzQ4) {
       if ((sx >>> 0) < DISP_W && (sy >>> 0) < DISP_H) {
         const pIdx = sy * DISP_W + sx;
-        if (objCzQ4 <= vramDepthQ4[pIdx]) {
+        const objCode = depthCode8(objCzQ4);
+        if (objCode <= vramDepth8[pIdx]) {
           vram565[pIdx] = col;
-          vramDepthQ4[pIdx] = objCzQ4;
+          vramDepth8[pIdx] = objCode;
         }
       }
     }
@@ -5127,6 +5171,11 @@
         return;
       }
 
+      // Límite de tamaño: un árbol más alto que la pantalla (cámara casi dentro de la copa) se omite.
+      // Evita que 1 solo árbol cercano cueste más que todo el blit en el ESP32-S3.
+      if (hPx > TREE_MAX_PX) return;
+      S3COST.objects++;
+
       // Centro del sprite anclado con su base (tv = TREE_SP_H - 1) exactamente sobre ptBase en el terreno
       const cx = ptBase.sx - downX * (hPx * 0.48);
       const cy = ptBase.sy - downY * (hPx * 0.48);
@@ -5153,28 +5202,47 @@
       let rowV = centerV_Q16 + Math.round(dx0 * dv_dx + dy0 * dv_dy);
 
       const romOff = safeType * (TREE_SP_W * TREE_SP_H);
-      for (let sy = y0; sy <= y1; sy++) {
-        let uFP = rowU;
-        let vFP = rowV;
+      const objCode = depthCode8(objCzQ4);
+      const spanW = x1 - x0;
+      for (let sy = y0; sy <= y1; sy++, rowU += du_dy, rowV += dv_dy) {
+        // Rango exacto de columnas de esta fila donde (tu, tv) cae dentro del sprite (4 divisiones por fila,
+        // ninguna por píxel): recorta el cuadrado envolvente rotado y elimina ~60% de iteraciones vacías.
+        let iLo = 0, iHi = spanW;
+        if (du_dx !== 0) {
+          const a = -rowU / du_dx, b = (TREE_SP_W * 65536 - rowU) / du_dx;
+          const lo = Math.ceil(Math.min(a, b)), hi = Math.floor(Math.max(a, b));
+          if (lo > iLo) iLo = lo;
+          if (hi < iHi) iHi = hi;
+        } else if ((rowU >> 16) >>> 0 >= TREE_SP_W) continue;
+        if (dv_dx !== 0) {
+          const a = -rowV / dv_dx, b = (TREE_SP_H * 65536 - rowV) / dv_dx;
+          const lo = Math.ceil(Math.min(a, b)), hi = Math.floor(Math.max(a, b));
+          if (lo > iLo) iLo = lo;
+          if (hi < iHi) iHi = hi;
+        } else if ((rowV >> 16) >>> 0 >= TREE_SP_H) continue;
+        if (iLo > iHi) continue;
+        S3COST.spritePx += iHi - iLo + 1;
+
+        let uFP = rowU + iLo * du_dx;
+        let vFP = rowV + iLo * dv_dx;
         const dstRow = sy * DISP_W;
-        for (let sx = x0; sx <= x1; sx++) {
+        const sxEnd = x0 + iHi;
+        for (let sx = x0 + iLo; sx <= sxEnd; sx++) {
           const tu = uFP >> 16;
           const tv = vFP >> 16;
           if ((tu >>> 0) < TREE_SP_W && (tv >>> 0) < TREE_SP_H) {
             const col = TREE_SPRITE_ROM[romOff + tv * TREE_SP_W + tu];
             if (col !== 0) {
               const pIdx = dstRow + sx;
-              if (objCzQ4 <= vramDepthQ4[pIdx]) {
+              if (objCode <= vramDepth8[pIdx]) {
                 vram565[pIdx] = col;
-                vramDepthQ4[pIdx] = objCzQ4;
+                vramDepth8[pIdx] = objCode;
               }
             }
           }
           uFP += du_dx;
           vFP += dv_dx;
         }
-        rowU += du_dy;
-        rowV += dv_dy;
       }
     }
 
@@ -5582,7 +5650,7 @@
         count = insertVisibleWorldObj(1, i, cz, count);
       }
 
-      // 2. Recorrer árboles: los cercanos van al buffer ordenado Painter's+ZBuffer; los medios/lejanos se dibujan en O(1) directo con Z-Buffer hardware vramDepthQ4
+      // 2. Recorrer árboles: los cercanos van al buffer ordenado Painter's+ZBuffer; los medios/lejanos se dibujan en O(1) directo con Z-Buffer de 8 bits vramDepth8
       const treeDensity = (typeof fcProfile !== 'undefined' && fcProfile.treeDensity !== undefined) ? fcProfile.treeDensity : 1.0;
       const activeTreeLimit = Math.round(WORLD_TREES.length * treeDensity);
       for (let i = 0; i < activeTreeLimit; i++) {
@@ -6130,24 +6198,31 @@
     }
 
     // Línea nativa en 320x240 con borde negro de 1px
+    // Línea entera Bresenham sin divisiones (AGENTS.md Regla 2)
+    function bresenhamLine320(ix0, iy0, ix1, iy1, col565) {
+      const dx = Math.abs(ix1 - ix0), sx = ix0 < ix1 ? 1 : -1;
+      const dy = -Math.abs(iy1 - iy0), sy = iy0 < iy1 ? 1 : -1;
+      S3COST.linePx += dx - dy + 1;
+      let err = dx + dy;
+      for (let guard = 0; guard < 1024; guard++) {
+        if ((ix0 >>> 0) < DISP_W && (iy0 >>> 0) < DISP_H) vram565[iy0 * DISP_W + ix0] = col565;
+        if (ix0 === ix1 && iy0 === iy1) break;
+        const e2 = err << 1;
+        if (e2 >= dy) { err += dy; ix0 += sx; }
+        if (e2 <= dx) { err += dx; iy0 += sy; }
+      }
+    }
+
+    // Línea OSD con borde negro de 1 px: 4 pasadas Bresenham desplazadas (borde) + 1 de color.
+    // Sustituye la versión anterior con división por paso y bucle de 8 vecinos (AGENTS.md Reglas 2 y 3).
     function drawOutlinedLine320(x0, y0, x1, y1, fg565 = 0xFFFF) {
-      const steps = Math.max(1, Math.round(Math.hypot(x1 - x0, y1 - y0)));
-      for (let i = 0; i <= steps; i++) {
-        const t = i / steps;
-        const x = Math.round(x0 + (x1 - x0) * t);
-        const y = Math.round(y0 + (y1 - y0) * t);
-        for (let dy = -1; dy <= 1; dy++) {
-          for (let dx = -1; dx <= 1; dx++) {
-            if (dx !== 0 || dy !== 0) setPx320(x + dx, y + dy, 0x0000);
-          }
-        }
-      }
-      for (let i = 0; i <= steps; i++) {
-        const t = i / steps;
-        const x = Math.round(x0 + (x1 - x0) * t);
-        const y = Math.round(y0 + (y1 - y0) * t);
-        setPx320(x, y, fg565);
-      }
+      const ax = Math.round(x0), ay = Math.round(y0);
+      const bx = Math.round(x1), by = Math.round(y1);
+      bresenhamLine320(ax - 1, ay, bx - 1, by, 0x0000);
+      bresenhamLine320(ax + 1, ay, bx + 1, by, 0x0000);
+      bresenhamLine320(ax, ay - 1, bx, by - 1, 0x0000);
+      bresenhamLine320(ax, ay + 1, bx, by + 1, 0x0000);
+      bresenhamLine320(ax, ay, bx, by, fg565);
     }
 
     // =========================================================================
@@ -8255,7 +8330,7 @@
 
       // 0. Sombra 3D semitransparente proyectada de las 2 velas y el casco sobre la superficie del agua (50% alpha bitwise RGB565 sin doble oscurecimiento)
       const C_WATER_SHAD_HALF = (rgb565(6, 28, 64) & 0xF7DE) >> 1;
-      const SHAD_STAMP_Q4     = 65533;
+      const SHAD_STAMP_8      = 254; // marca de sombra en el Z-Buffer de 8 bits (más lejos que cualquier objeto)
       function fillTranslucentShadowTri320(p0, p1, p2) {
         if (!p0 || !p1 || !p2) return;
         let ax = Math.round(p0.sx), ay = Math.round(p0.sy);
@@ -8287,8 +8362,8 @@
           const rowOff = y * DISP_W;
           for (let x = xl; x <= xr; x++) {
             const pIdx = rowOff + x;
-            if (vramDepthQ4[pIdx] !== SHAD_STAMP_Q4) {
-              vramDepthQ4[pIdx] = SHAD_STAMP_Q4;
+            if (vramDepth8[pIdx] !== SHAD_STAMP_8) {
+              vramDepth8[pIdx] = SHAD_STAMP_8;
               const p = vram565[pIdx];
               vram565[pIdx] = ((p & 0xF7DE) >> 1) + C_WATER_SHAD_HALF;
             }
@@ -12466,16 +12541,39 @@
     let fpsClock = performance.now();
     let mapEditorOpen = false;
 
+    // =========================================================================
+    // FÍSICA A PASO FIJO 240 Hz (idéntica al firmware: PHYS_DT = 1/240 s)
+    // Antes: 4 sub-pasos de dt/4 -> la física corría a 4 x fps (192 Hz a 48 FPS, 240 Hz a 60 FPS)
+    // y el vuelo se sentía distinto según los fps. Ahora el resultado no depende de los fps.
+    // =========================================================================
+    const PHYS_DT        = 1.0 / 240.0;
+    const PHYS_MAX_STEPS = 12;           // evita la espiral si un frame se atrasa mucho
+    let   physAccum      = 0.0;
+    let   physLastSim    = null;
+    let   physStepsLast  = 0;
+    function stepFixedPhysics(sim, dtFrame) {
+      if (sim !== physLastSim) { physLastSim = sim; physAccum = 0.0; }
+      physAccum += dtFrame;
+      let n = 0;
+      while (physAccum >= PHYS_DT && n < PHYS_MAX_STEPS) {
+        sim.step(PHYS_DT);
+        physAccum -= PHYS_DT;
+        n++;
+      }
+      if (n === PHYS_MAX_STEPS) physAccum = 0.0;
+      physStepsLast = n;
+    }
+
     function retroGoMainLoop(now) {
       requestAnimationFrame(retroGoMainLoop);
 
-      // Si el usuario selecciona el modo SPI 60MHz (48 FPS) o 40MHz (32 FPS), limitamos la cadencia exactamente como el bus físico del ILI9341V
+      // Cadencia limitada al bus físico del ILI9341V en todos los modos (60MHz = 48 FPS por defecto).
+      // También limita a 60 FPS en monitores de 120/144 Hz para que el simulador no vaya más rápido que la consola.
       const activeSpiMode = SPI_MODES[paletteIdx];
-      if (activeSpiMode.targetFps < 60) {
-        const minFrameIntervalMs = (1000.0 / activeSpiMode.targetFps) - 1.2;
-        if (now - lastSpiFrameTime < minFrameIntervalMs) return;
-      }
+      const minFrameIntervalMs = (1000.0 / activeSpiMode.targetFps) - 1.2;
+      if (now - lastSpiFrameTime < minFrameIntervalMs) return;
       lastSpiFrameTime = now;
+      S3COST.reset();
 
       try {
         const dt = Math.min(0.05, Math.max(0.001, (now - lastTime) / 1000.0));
@@ -12502,32 +12600,32 @@
           if (!rgOverlayOpen && !mapEditorOpen) {
             if (activeRomId === 'fpv_drone') {
               if (!handleInFlightShortcuts(fpvDroneSim)) {
-                for (let s = 0; s < 4; s++) fpvDroneSim.step(dt * 0.25);
+                stepFixedPhysics(fpvDroneSim, dt);
               }
               fpvDroneSim.render();
             } else if (activeRomId === 'fpv_wing') {
               if (!handleInFlightShortcuts(fpvWingSim)) {
-                for (let s = 0; s < 4; s++) fpvWingSim.step(dt * 0.25);
+                stepFixedPhysics(fpvWingSim, dt);
               }
               fpvWingSim.render();
             } else if (activeRomId === 'rc_sailboat') {
               if (!handleInFlightShortcuts(rcSailboatSim)) {
-                for (let s = 0; s < 4; s++) rcSailboatSim.step(dt * 0.25);
+                stepFixedPhysics(rcSailboatSim, dt);
               }
               rcSailboatSim.render();
             } else if (activeRomId === 'rc_boat') {
               if (!handleInFlightShortcuts(rcBoatSim)) {
-                for (let s = 0; s < 4; s++) rcBoatSim.step(dt * 0.25);
+                stepFixedPhysics(rcBoatSim, dt);
               }
               rcBoatSim.render();
             } else if (activeRomId === 'rc_car') {
               if (!handleInFlightShortcuts(rcCarSim)) {
-                for (let s = 0; s < 4; s++) rcCarSim.step(dt * 0.25);
+                stepFixedPhysics(rcCarSim, dt);
               }
               rcCarSim.render();
             } else if (activeRomId === 'rc_crawler') {
               if (!handleInFlightShortcuts(rcCrawlerSim)) {
-                for (let s = 0; s < 4; s++) rcCrawlerSim.step(dt * 0.25);
+                stepFixedPhysics(rcCrawlerSim, dt);
               }
               rcCrawlerSim.render();
             } else if (activeRomId === 'hwtest') {
@@ -12558,6 +12656,10 @@
 
         fbPresentToCanvas();
         snapshotPrevButtons();
+
+        const s3Ms = S3COST.estimateMs();
+        S3COST.filtMs = S3COST.filtMs > 0 ? S3COST.filtMs * 0.9 + s3Ms * 0.1 : s3Ms;
+        S3COST.lastMs = s3Ms;
         capTouch.justTapped = false;
 
         fpsFrames++;
@@ -12565,7 +12667,22 @@
           const rawFps = Math.round((fpsFrames * 1000) / (now - fpsClock));
           const mode = SPI_MODES[paletteIdx];
           const dispFps = Math.min(rawFps, mode.targetFps);
-          document.getElementById('uiFpsBattery').textContent = `${dispFps}FPS | SPI ${mode.spiMhz}MHz DMA (${mode.dmaWireMs}ms)`;
+          const budgetMs = 1000.0 / mode.targetFps;
+          const s3El = document.getElementById('uiFpsBattery');
+          s3El.textContent = `${dispFps}FPS | SPI ${mode.spiMhz}MHz | S3 est. ${S3COST.filtMs.toFixed(1)}/${budgetMs.toFixed(1)}ms`;
+          s3El.style.color = S3COST.filtMs > budgetMs ? '#ff5a5a' : (S3COST.filtMs > budgetMs * 0.85 ? '#ffc23d' : '');
+          // Visible en la píldora del modo SPI (la barra uiFpsBattery está oculta en el diseño actual)
+          const palBtn = document.getElementById('btnPalette');
+          if (palBtn && !mode.mono) {
+            palBtn.textContent = `${mode.shortBtn || mode.name} · S3 ${S3COST.filtMs.toFixed(1)}ms`;
+            palBtn.style.color = s3El.style.color;
+            palBtn.title = `Modo SPI: ${mode.name}. Presupuesto ${budgetMs.toFixed(1)} ms/frame. ` +
+              `S3 est. = costo estimado de CPU en el ESP32-S3 (rojo = no llega). Toca para cambiar de modo.`;
+          }
+          s3El.title = `Costo estimado de CPU por frame en el ESP32-S3 (Core 1, raycast repartido en 2 núcleos). ` +
+                       `Pasos de rayo: ${S3COST.raySteps}, cielo: ${S3COST.skyPx}px, sprites: ${S3COST.spritePx}px, ` +
+                       `triángulos: ${S3COST.triPx}px, líneas: ${S3COST.linePx}px, objetos: ${S3COST.objects}, física: ${physStepsLast} pasos. ` +
+                       `Estimación sin calibrar: compara con el panel SELECT del firmware.`;
           fpsFrames = 0;
           fpsClock = now;
         }
